@@ -651,3 +651,79 @@ body.show-table .tableview { display: block; }
 .tableview th { color: var(--text-muted); font-weight: 500; position: sticky; top: 92px; background: var(--page); }
 
 .empty { color: var(--text-muted); padding: 40px 0; text-align: center; }
+
+/* ---------------------------------------------------------------- mobile */
+
+/* The options toggle only exists on narrow screens; on desktop the whole row wraps. */
+.opts-toggle { display: none; }
+
+@media (max-width: 720px) {
+  header.controls {
+    padding: 8px 12px;
+    /* If every option is expanded the row is tall — keep it from eating the whole
+       viewport, scroll within the header instead. */
+    max-height: 82vh;
+    overflow-y: auto;
+  }
+
+  .controls-row { gap: 8px 10px; align-items: stretch; }
+  .brand { align-self: center; padding-bottom: 0; }
+
+  .opts-toggle {
+    display: inline-flex;
+    align-items: center;
+    margin-left: auto;
+    padding: 8px 14px;
+  }
+  .opts-toggle[aria-expanded='true'] {
+    background: var(--text-primary);
+    color: var(--surface-1);
+    border-color: var(--text-primary);
+  }
+
+  /* Collapsed: show only the essentials. Expanded (body.opts-open): show everything. */
+  .controls-row > *:not(.core):not(.opts-toggle) { display: none; }
+  body.opts-open .controls-row > .field,
+  body.opts-open .controls-row > .check,
+  body.opts-open .controls-row > .spacer { display: flex; }
+  body.opts-open .controls-row > button { display: inline-flex; }
+
+  /* Full-width stacked fields with tap-friendly, no-zoom (16px) inputs. */
+  .controls-row > .field { flex: 1 1 100%; }
+  /* Once expanded, let the small fields pair up two-per-row. */
+  body.opts-open .controls-row > .field.narrow { flex: 1 1 calc(50% - 5px); }
+  .field input,
+  .field select {
+    width: 100%;
+    min-width: 0;
+    font-size: 16px;
+    padding: 9px 10px;
+  }
+  .field.narrow input { width: 100%; }
+  .field input[type='date'] { min-width: 0; }
+
+  .controls-row > button:not(.opts-toggle),
+  #go { flex: 1 1 100%; padding: 11px; font-size: 15px; }
+  .check { flex: 1 1 100%; padding: 4px 0; }
+
+  .dow { justify-content: space-between; }
+  .dow button { flex: 1; width: auto; padding: 8px 0; font-size: 12px; }
+  .hours,
+  .nights { width: 100%; }
+  .hours select { flex: 1; font-size: 16px; padding: 9px 4px; }
+  .nights input { flex: 1; width: auto; font-size: 16px; }
+
+  .status { padding: 6px 12px 0; font-size: 12px; gap: 8px; }
+
+  main { padding: 10px 10px 48px; }
+  .board { grid-template-columns: 1fr; gap: 8px; }
+  .card { padding: 8px; }
+  .matrix-wrap { max-height: 62vh; }
+
+  /* Side panel becomes a full-screen sheet; touch has no hover so the tooltip is dead
+     weight — the tap-to-open panel carries the detail. */
+  #panel { width: 100%; border-left: none; }
+  #tooltip { display: none !important; }
+
+  .tableview th { top: 0; }
+}

@@ -1227,6 +1227,9 @@ $('panelclose').addEventListener('click', () => $('panel').classList.remove('ope
 
 function startSearch() {
   if (state.source) state.source.close();
+  // On mobile, fold the options away so the board has the screen.
+  document.body.classList.remove('opts-open');
+  $('optsbtn').setAttribute('aria-expanded', 'false');
   state.destinations.clear();
   state.meta = null;
   $('board').replaceChildren();
@@ -1482,6 +1485,13 @@ $('autoverify').addEventListener('change', (e) => {
   else stopAutoVerify();
 });
 $('tabletoggle').addEventListener('click', () => document.body.classList.toggle('show-table'));
+
+/* Mobile: the options bar is collapsed by default behind this toggle, so it stops
+   filling the screen. No effect on desktop, where the whole row just wraps. */
+$('optsbtn').addEventListener('click', () => {
+  const open = document.body.classList.toggle('opts-open');
+  $('optsbtn').setAttribute('aria-expanded', open ? 'true' : 'false');
+});
 $('themetoggle').addEventListener('click', () => {
   const root = document.documentElement;
   const current = root.getAttribute('data-theme');
