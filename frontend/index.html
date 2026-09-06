@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>SkyMatrix</title>
+<link rel="stylesheet" href="/static/styles.css" />
+</head>
+<body>
+
+<header class="controls">
+  <div class="controls-row">
+    <span class="brand">SkyMatrix</span>
+    <div class="field narrow">
+      <label for="origin">From</label>
+      <input id="origin" value="TLV" maxlength="3" autocapitalize="characters" />
+    </div>
+    <div class="field">
+      <label for="datemode">Dates mean</label>
+      <select id="datemode">
+        <option value="anchors" title="The two dates are approximate. The board covers a window either side of each, so you see whether shifting a day or two is cheaper.">Roughly these dates (± a few days)</option>
+        <option value="range" title="The two dates bound a period. The Nights box says what to look for inside it, e.g. a 3-4 night break sometime in that window.">Any trip inside this period</option>
+      </select>
+    </div>
+    <div class="field">
+      <label for="depart" id="departlabel">Depart around</label>
+      <input id="depart" type="date" />
+    </div>
+    <div class="field">
+      <label for="ret" id="retlabel">Return around</label>
+      <input id="ret" type="date" />
+    </div>
+    <div class="field narrow">
+      <label for="adults">Adults</label>
+      <input id="adults" type="number" min="1" max="9" value="2" />
+    </div>
+    <div class="field narrow">
+      <label for="children">Children</label>
+      <input id="children" type="number" min="0" max="8" value="0" />
+    </div>
+    <div class="field narrow">
+      <label for="dests">Places</label>
+      <input id="dests" type="number" min="1" max="60" value="20" />
+    </div>
+    <div class="field narrow">
+      <label for="currency">Currency</label>
+      <select id="currency">
+        <option value="ils">ILS</option>
+        <option value="eur">EUR</option>
+        <option value="usd">USD</option>
+        <option value="gbp">GBP</option>
+      </select>
+    </div>
+    <div class="field narrow">
+      <label for="maxprice">Max total</label>
+      <input id="maxprice" type="number" min="0" step="100" placeholder="any" />
+    </div>
+    <div class="field">
+      <label for="destfilter">Only destinations</label>
+      <input id="destfilter" type="search" placeholder="city, code or country" autocomplete="off"
+             title="Set before Search to restrict the search itself (e.g. IT = Italy only); type after a search to narrow what is shown" />
+    </div>
+    <div class="field">
+      <label>Depart on</label>
+      <div class="dow" id="dowdep"></div>
+    </div>
+    <div class="field">
+      <label>Return on</label>
+      <div class="dow" id="dowret"></div>
+    </div>
+    <div class="field narrow">
+      <label for="nmin">Nights</label>
+      <span class="nights">
+        <input id="nmin" type="number" min="0" max="60" placeholder="min" />
+        <input id="nmax" type="number" min="0" max="60" placeholder="max" />
+      </span>
+    </div>
+    <div class="field">
+      <label for="dephfrom">Depart between</label>
+      <span class="hours">
+        <select id="dephfrom"></select><select id="dephto"></select>
+      </span>
+    </div>
+    <div class="field">
+      <label for="rethfrom">Return between</label>
+      <span class="hours">
+        <select id="rethfrom"></select><select id="rethto"></select>
+      </span>
+    </div>
+    <button id="clearconstraints" title="Clear day, night and time constraints">Clear</button>
+    <label class="check"><input type="checkbox" id="nonstop" /> Nonstop only</label>
+    <label class="check"><input type="checkbox" id="perperson" /> Per person</label>
+    <label class="check" title="After the board loads, re-price its cheapest cells live on Google Flights"><input type="checkbox" id="autoverify" checked /> Auto cross-check</label>
+    <button id="go" class="primary">Search</button>
+    <span class="spacer"></span>
+    <button id="tabletoggle" title="Accessible table of every priced cell">Table view</button>
+    <button id="themetoggle" title="Toggle light and dark">Theme</button>
+  </div>
+</header>
+
+<div class="status">
+  <span id="progress">Set your dates and search. Starts at &plusmn;7 days on each leg; scroll a grid past its edge, or use the &plusmn; button, for more.</span>
+  <span class="legend" id="legend" hidden>
+    <span>cheap</span>
+    <span class="swatches">
+      <i style="background:var(--q0)"></i><i style="background:var(--q1)"></i><i style="background:var(--q2)"></i><i style="background:var(--q3)"></i><i style="background:var(--q4)"></i><i style="background:var(--q5)"></i><i style="background:var(--q6)"></i>
+    </span>
+    <span>expensive</span>
+    <span class="muted"><span class="legend-best"></span> cheapest</span>
+    <span class="muted"><span class="nodata"></span> no price</span>
+    <span class="muted"><span class="legend-wedge"></span> has stops</span>
+  </span>
+  <span id="stalenote" class="hint" hidden></span>
+  <span id="datehint" class="growing"></span>
+  <span id="constraintnote" class="growing" hidden></span>
+  <span id="filtercount" class="growing" hidden></span>
+  <span id="growing" class="growing" hidden></span>
+  <span id="note" class="hint" hidden></span>
+  <span id="errors" class="err"></span>
+</div>
+
+<main>
+  <div class="board" id="board"></div>
+  <div class="tableview" id="tableview"></div>
+  <p class="empty" id="empty" hidden></p>
+
+  <p class="note" id="footnote" hidden>
+    Board prices come from <b>Kiwi.com</b> and are <b>real totals for your actual passenger
+    mix</b>, not single-adult fares scaled up, so the <em>numbers</em> are directly
+    comparable across destinations. <b>Colour is scaled per matrix</b> — green is the
+    cheapest date pair <em>for that destination</em> and red its dearest — so a green cell
+    on one card can cost more than a red cell on another. Compare destinations by the
+    headline price and the cheapest-first order, not by colour; the yellow ring marks each
+    matrix's own cheapest, and the thick yellow ring plus card border the cheapest anywhere.
+    Click any cell to cross-check it live on <b>Google Flights</b>; verified
+    cells get a solid border and a LIVE tag, or use <b>Fill live</b> to re-price a whole grid
+    (about a minute). Kiwi includes self-transfer combinations, which can be cheap but mean
+    separate tickets. A hatched cell means <b>no price for that date pair</b>, not an
+    expensive one. Switch the board source with <code>FM_BOARD_PROVIDER=travelpayouts</code>
+    (that source gives single-adult estimates, which measured ~30% optimistic for a family).
+  </p>
+</main>
+
+<div id="tooltip" role="tooltip"></div>
+
+<aside id="panel" aria-live="polite">
+  <button class="close" id="panelclose" aria-label="Close">&times;</button>
+  <div id="panelbody"></div>
+</aside>
+
+<script src="/static/app.js"></script>
+</body>
+</html>

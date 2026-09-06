@@ -1,0 +1,10 @@
+data/cache.sqlite
+data/cache.sqlite-wal
+data/cache.sqlite-shm
+data/airports.json
+data/ca-merged.pem
+.env
+wheels/
+shots/
+__pycache__/
+*.pyc

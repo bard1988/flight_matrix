@@ -1,0 +1,1524 @@
+/* SkyMatrix board.
+
+   One card per destination, each a departure-date x return-date matrix. The colour scale
+   is computed PER MATRIX: every card runs its own cheapest cell (green) to its own
+   dearest (red), so the colours show which dates suit that destination. Cross-destination
+   comparison comes from the headline price, the cheapest-first ordering, and the yellow
+   ring marking the cheapest cell on the whole board. */
+
+const RAMP_STEPS = 7;
+
+const state = {
+  meta: null,
+  destinations: new Map(), // IATA -> payload
+  perPerson: false,
+  source: null,
+  searchId: null,
+  globalBest: null,
+  filter: '',              // destination filter, applied to the already-loaded board
+  // Day-of-week / trip-length constraints, applied as a view over loaded cells.
+  constraints: { dep: new Set(), ret: new Set(), min: null, max: null },
+};
+
+const $ = (id) => document.getElementById(id);
+
+/* ------------------------------------------------------------------ helpers */
+
+function isoToday(offsetDays) {
+  const d = new Date();
+  d.setDate(d.getDate() + offsetDays);
+  return d.toISOString().slice(0, 10);
+}
+
+function fmtMoney(value, currency) {
+  if (value == null) return '';
+  const symbol = { ils: '₪', eur: '€', usd: '$', gbp: '£' }[currency] || '';
+  return symbol + Math.round(value).toLocaleString();
+}
+
+function fmtCompact(value) {
+  if (value == null) return '';
+  const n = Math.round(value);
+  if (n >= 10000) return Math.round(n / 1000) + 'k';
+  if (n >= 1000) return (n / 1000).toFixed(1).replace(/\.0$/, '') + 'k';
+  return String(n);
+}
+
+function shortDate(iso) {
+  const d = new Date(iso + 'T00:00:00');
+  return d.toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
+}
+
+function weekday(iso) {
+  return new Date(iso + 'T00:00:00').toLocaleDateString(undefined, { weekday: 'short' });
+}
+
+function isWeekend(iso) {
+  const day = new Date(iso + 'T00:00:00').getDay();
+  return day === 5 || day === 6; // Fri/Sat, the Israeli weekend
+}
+
+/** Price shown in a cell: a verified live total wins over the cached estimate. */
+function cellValue(cell) {
+  const total = cell.total != null ? cell.total : cell.estimate;
+  if (!state.perPerson) return total;
+  const pax = (state.meta?.adults || 1) + (state.meta?.children || 0);
+  return total / Math.max(pax, 1);
+}
+
+/* Ink is no longer chosen by a single flip index: the ramp is diverging, so BOTH ends are
+   saturated and each step carries its own readable ink as a CSS variable. */
+
+/* ------------------------------------------------------------- colour scale */
+
+/** Break points for a rank (quantile) scale over one destination's cells.
+ *
+ * The scale is PER MATRIX: each card's own cheapest cell is green and its own dearest is
+ * red, so the colours answer "which dates are good for this destination". The trade-off
+ * is that colour no longer compares across cards - a green cell on an expensive
+ * destination can cost more than a red cell on a cheap one. Cross-destination comparison
+ * comes from the card headline price, the cheapest-first ordering, and the yellow ring on
+ * the board-wide cheapest cell.
+ *
+ * Ranking rather than a linear price ramp: fares bunch tightly and one outlier drags a
+ * linear scale into two shades (measured: 73% of cells in two of seven steps). Absolute
+ * prices stay legible because every cell is labelled. */
+function scaleDomain(cells) {
+  const values = [];
+  for (const cell of cells || []) {
+    const v = cellValue(cell);
+    if (v != null) values.push(v);
+  }
+  if (!values.length) return null;
+  values.sort((a, b) => a - b);
+  // Upper bound of each ramp step, cheapest step first.
+  const breaks = [];
+  for (let i = 1; i < RAMP_STEPS; i += 1) {
+    breaks.push(values[Math.floor((values.length * i) / RAMP_STEPS)]);
+  }
+  return { breaks, lo: values[0], hi: values[values.length - 1] };
+}
+
+/** Ramp index 0 = cheapest (green) .. 6 = dearest (red), or null for "no scale".
+ *
+ * Returns null rather than a colour when there is nothing to scale against - if a
+ * constraint excludes every cell, painting them all "dearest" is actively misleading:
+ * it says "everything here is expensive" when it means "nothing matched". */
+function rampIndex(value, domain) {
+  if (!domain || value == null) return null;
+  let bucket = 0;
+  while (bucket < domain.breaks.length && value >= domain.breaks[bucket]) bucket += 1;
+  return Math.min(bucket, RAMP_STEPS - 1);
+}
+
+/* ------------------------------------------------------------------ tooltip */
+
+const tooltip = $('tooltip');
+
+function showTooltip(event, html) {
+  tooltip.innerHTML = html;
+  tooltip.style.display = 'block';
+  const box = tooltip.getBoundingClientRect();
+  let x = event.clientX + 14;
+  let y = event.clientY + 14;
+  if (x + box.width > window.innerWidth - 8) x = event.clientX - box.width - 14;
+  if (y + box.height > window.innerHeight - 8) y = event.clientY - box.height - 14;
+  tooltip.style.left = x + 'px';
+  tooltip.style.top = y + 'px';
+}
+
+function hideTooltip() {
+  tooltip.style.display = 'none';
+}
+
+function tooltipFor(dest, cell) {
+  const cur = state.meta.currency;
+  const rows = [];
+  rows.push(`<b>${dest.city} (${dest.destination})</b>`);
+  rows.push(`${weekday(cell.depart)} ${shortDate(cell.depart)} &rarr; ${weekday(cell.ret)} ${shortDate(cell.ret)} &middot; ${cell.nights} nights`);
+  const who = `${state.meta.adults} adults` + (state.meta.children ? ` + ${state.meta.children} children` : '');
+  if (cell.total != null) {
+    rows.push(`<b>${fmtMoney(cell.total, cur)}</b> verified on Google Flights`);
+  } else if (cell.is_total) {
+    // Kiwi returns a real party total for the requested passenger mix, so it is not an
+    // extrapolation and must not be labelled as one.
+    rows.push(`<b>${fmtMoney(cell.estimate, cur)}</b> total for ${who} <span class="muted">via ${cell.source || 'provider'}</span>`);
+  } else {
+    rows.push(`<b>${fmtMoney(cell.estimate, cur)}</b> estimated total <span class="muted">(${fmtMoney(cell.unit_price, cur)} per ticket, scaled)</span>`);
+  }
+  if (cell.airline) rows.push(`<span class="muted">${cell.airline}</span>`);
+  if (cell.transfers != null) {
+    rows.push(`<span class="muted">${cell.transfers === 0 ? 'nonstop' : cell.transfers + ' stop' + (cell.transfers > 1 ? 's' : '')}</span>`);
+  }
+  if (cell.stale) rows.push(`<span class="muted">cached ${Math.round(cell.age_hours)}h ago</span>`);
+  rows.push(`<span class="muted">${cell.verified ? 'Click to re-check' : 'Click for the live price'}</span>`);
+  return rows.join('<br>');
+}
+
+/* --------------------------------------------------------------- constraints */
+
+const DOW = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
+const DOW_FULL = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+/** Is this cell allowed by the day-of-week and trip-length constraints?
+ *
+ * A pure view constraint over cells already loaded, so it costs nothing and applies
+ * instantly. Crucially the colour scale and the cheapest-cell markers are computed over
+ * only the allowed cells, so "cheapest Thu to Sun" is a real answer rather than the board
+ * merely hiding rows. */
+function cellAllowed(cell) {
+  const c = state.constraints;
+  if (c.dep.size && !c.dep.has(new Date(cell.depart + 'T00:00:00').getDay())) return false;
+  if (c.ret.size && !c.ret.has(new Date(cell.ret + 'T00:00:00').getDay())) return false;
+  if (c.min != null && cell.nights < c.min) return false;
+  if (c.max != null && cell.nights > c.max) return false;
+  return true;
+}
+
+function constraintsActive() {
+  const c = state.constraints;
+  return c.dep.size > 0 || c.ret.size > 0 || c.min != null || c.max != null;
+}
+
+function describeConstraints() {
+  const c = state.constraints;
+  const bits = [];
+  if (c.dep.size) bits.push(`depart ${[...c.dep].sort().map((d) => DOW_FULL[d]).join('/')}`);
+  if (c.ret.size) bits.push(`return ${[...c.ret].sort().map((d) => DOW_FULL[d]).join('/')}`);
+  if (c.min != null || c.max != null) {
+    bits.push(`${c.min ?? 0}-${c.max ?? '∞'} nights`);
+  }
+  return bits.join(', ');
+}
+
+function buildDowPicker(hostId, key) {
+  const host = $(hostId);
+  host.replaceChildren(...DOW.map((label, day) => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.textContent = label;
+    b.title = DOW_FULL[day];
+    b.onclick = () => {
+      const set = state.constraints[key];
+      if (set.has(day)) set.delete(day);
+      else set.add(day);
+      b.classList.toggle('on', set.has(day));
+      if (state.meta) render();
+    };
+    return b;
+  }));
+}
+
+/* ------------------------------------------------------------------- render */
+
+/** Does this destination match the filter box? Matches city, IATA code or country. */
+function matchesFilter(dest) {
+  const q = state.filter;
+  if (!q) return true;
+  // Codes match exactly, names by substring - mirrors the server. Substring-matching a
+  // 2-letter code against country names over-matches ("IT" is inside Lithuania).
+  const code = (dest.destination || '').toLowerCase();
+  const country = (dest.country || '').toLowerCase();
+  if ((q.length === 2 || q.length === 3) && (q === code || q === country)) return true;
+  return [dest.city, dest.country_name]
+    .filter(Boolean)
+    .some((field) => String(field).toLowerCase().includes(q));
+}
+
+function render() {
+  const board = $('board');
+
+  const visible = [...state.destinations.values()].filter(matchesFilter);
+
+  // Cheapest cell among the destinations actually on screen, so the yellow marker always
+  // points at something visible rather than at a card the filter has hidden.
+  // Everything below - colour scale, per-card best, board best, ordering - is computed
+  // over the ALLOWED cells only, so a constraint changes the answer rather than just
+  // hiding squares.
+  for (const dest of visible) {
+    dest.allowed = dest.cells.filter(cellAllowed);
+    dest.shownBest = dest.allowed.reduce(
+      (acc, c) => (acc === null || cellValue(c) < cellValue(acc) ? c : acc), null);
+  }
+
+  state.globalBest = null;
+  for (const dest of visible) {
+    for (const cell of dest.allowed) {
+      const v = cellValue(cell);
+      if (v == null) continue;
+      if (!state.globalBest || v < state.globalBest.value) {
+        state.globalBest = { value: v, dest: dest.destination, depart: cell.depart, ret: cell.ret };
+      }
+    }
+  }
+
+  const ordered = visible.sort((a, b) => {
+    const av = a.shownBest ? cellValue(a.shownBest) : Infinity;
+    const bv = b.shownBest ? cellValue(b.shownBest) : Infinity;
+    return av - bv;
+  });
+
+  const active = constraintsActive();
+  $('constraintnote').hidden = !active;
+  if (active) {
+    const kept = ordered.reduce((n, d) => n + d.allowed.length, 0);
+    const all = ordered.reduce((n, d) => n + d.cells.length, 0);
+    let text = `${describeConstraints()} — ${kept} of ${all} cells`;
+    // Explain an impossible constraint rather than showing a silently empty board. The
+    // usual cause is treating the two date fields as a range: anchors far apart mean every
+    // cell is a long trip, so a short-nights filter can never match.
+    if (!kept && all) {
+      const lengths = ordered.flatMap((d) => d.cells.map((c) => c.nights));
+      const lo = Math.min(...lengths);
+      const hi = Math.max(...lengths);
+      const c = state.constraints;
+      if ((c.min != null && c.min > hi) || (c.max != null && c.max < lo)) {
+        text += ` · this window only contains ${lo}-${hi} night trips. ` +
+                `Your dates are ${Math.round((new Date(state.meta.return_dates[Math.floor(state.meta.return_dates.length / 2)]) - new Date(state.meta.depart_dates[Math.floor(state.meta.depart_dates.length / 2)])) / 86400000)} days apart — ` +
+                `move "Return around" closer to "Depart around" to look for short trips.`;
+      } else {
+        text += ' · nothing matches; try fewer days or a wider nights range.';
+      }
+    }
+    $('constraintnote').textContent = text;
+    $('constraintnote').classList.toggle('warn', !kept && all > 0);
+  } else {
+    $('constraintnote').textContent = '';
+    $('constraintnote').classList.remove('warn');
+  }
+
+  const total = state.destinations.size;
+  $('filtercount').hidden = !state.filter;
+  $('filtercount').textContent = state.filter
+    ? `showing ${ordered.length} of ${total}${ordered.length ? '' : ' — nothing matches'}`
+    : '';
+
+  // Each card gets its own colour scale, computed from just its own cells.
+  board.replaceChildren(...ordered.map((dest) => renderCard(dest, scaleDomain(dest.allowed))));
+  renderTable(ordered);
+  $('footnote').hidden = ordered.length === 0;
+  $('legend').hidden = ordered.length === 0;
+}
+
+// How much to trust the headline price. The board is built from a price calendar, which is
+// a precomputed index that goes stale per date pair - TLV-CTA quoted 783 for a pair that a
+// real search prices at 1,919, while the pair a week earlier was accurate to 8%. The backend
+// re-prices the cheapest cell until the cheapest one is a price it fetched itself, so say
+// which of the two happened rather than presenting both as equally solid.
+function headlineChip(dest) {
+  const drift = dest.headline_drift;
+  if (dest.headline_checked === false) {
+    return `<span class="drift" title="The cheapest cell here is still a price-calendar figure that we could not confirm within this search's check budget. Click it to price it live before you rely on it.">unconfirmed</span>`;
+  }
+  if (drift == null || Math.abs(drift) < 20) return '';
+  const was = fmtMoney(dest.headline_was, state.meta.currency);
+  const now = fmtMoney(dest.best ? dest.best.estimate : 0, state.meta.currency);
+  const dir = drift > 0 ? 'under' : 'over';
+  return `<span class="drift" title="The price calendar quoted ${was} for this card's cheapest trip; a real search returned ${now}. The headline shown is the real one. Other cells on this card come from the same calendar, so treat them as indicative until clicked.">calendar ${dir}stated by ~${Math.abs(Math.round(drift))}%</span>`;
+}
+
+function renderCard(dest, domain) {
+  const meta = state.meta;
+  const card = document.createElement('section');
+  card.className = 'card';
+  if (state.globalBest && state.globalBest.dest === dest.destination) card.classList.add('is-winner');
+
+  const head = document.createElement('div');
+  head.className = 'card-head';
+  const best = dest.shownBest ? cellValue(dest.shownBest) : null;
+  // Say plainly whether the headline number is a live price or still an estimate:
+  // verifying a cell often makes it worse, so a card can bounce back up the board as its
+  // best falls through to the next unverified estimate.
+  const bestTag = dest.shownBest && dest.shownBest.verified
+    ? '<span class="tag live">live</span>'
+    : dest.shownBest && dest.shownBest.is_total
+      ? `<span class="tag real">${(dest.shownBest.source || 'real')}</span>`
+      : '<span class="tag">est</span>';
+  head.innerHTML =
+    `<h2>${dest.city}</h2>` +
+    `<span class="code">${dest.destination}${dest.country ? ' · ' + dest.country : ''}</span>` +
+    `<span class="cov">${dest.coverage.populated}/${dest.coverage.valid} cells</span>` +
+    headlineChip(dest) +
+    `<span class="best">${best != null ? fmtMoney(best, meta.currency) : ''} ${bestTag}</span>`;
+
+  // Bulk live fill: ~1 minute for a whole grid, and it replaces every estimate with a
+  // real price for the actual passenger mix. This is the answer to sparse cached data.
+  const fillBtn = document.createElement('button');
+  fillBtn.className = 'fillbtn';
+  const state_ = fillState.get(dest.destination);
+  if (state_ && state_.running) {
+    fillBtn.textContent = `${state_.progress}/${state_.total} ✕`;
+    fillBtn.title = 'Click to stop filling';
+    fillBtn.onclick = () => stopFill(dest.destination);
+  } else {
+    fillBtn.textContent = 'Fill live';
+    fillBtn.title = 'Price every cell live for your real passenger mix (about a minute)';
+    fillBtn.onclick = () => startFill(dest);
+  }
+  // Jump to this matrix's cheapest cell. On a wide window the winner is usually scrolled
+  // out of view, and hunting for a yellow ring in a 57x57 grid is exactly the chore this
+  // board exists to remove.
+  const locate = document.createElement('button');
+  locate.className = 'fillbtn locate';
+  locate.textContent = '◎';
+  locate.title = 'Scroll to this destination’s cheapest date pair';
+  locate.onclick = () => locateBest(card, dest);
+  head.appendChild(locate);
+
+  head.appendChild(fillBtn);
+
+  // Scrolling only works once the grid overflows its card, which a fresh 15x15 does not.
+  // So widening also gets an explicit control; after one widening, scrolling takes over.
+  const meta2 = state.meta;
+  const canGrow = (meta2.window_days || 7) < (meta2.max_window_days || 28);
+  if (canGrow) {
+    const grow = document.createElement('button');
+    grow.className = 'fillbtn';
+    grow.textContent = `± ${(meta2.window_days || 7) + (meta2.window_step || 7)}d`;
+    grow.title = 'Widen the date window for every destination (or scroll a grid past its edge)';
+    grow.onclick = extendWindow;
+    head.appendChild(grow);
+  }
+  card.appendChild(head);
+
+  const byKey = new Map(dest.cells.map((c) => [c.depart + '|' + c.ret, c]));
+
+  // Always the departure x return matrix, in both date modes. In range mode that means a
+  // thin diagonal band of priced cells inside a large grid - the empty cells are simply
+  // trip lengths that were not asked for, and showing the real calendar shape is worth
+  // more than compacting it.
+  const table = document.createElement('table');
+  table.className = 'matrix';
+
+  const thead = document.createElement('thead');
+  const headRow = document.createElement('tr');
+  // Keep this short: it is the widest thing in the first column and a long label pushes
+  // the grid past the card, clipping the last date columns.
+  headRow.innerHTML = '<th class="corner" title="rows are return dates, columns are departure dates">ret ↓ dep →</th>';
+  meta.depart_dates.forEach((depart, colIndex) => {
+    const th = document.createElement('th');
+    th.className = 'col' + (isWeekend(depart) ? ' weekend' : '');
+    th.dataset.c = String(colIndex);
+    th.innerHTML = `${weekday(depart)}<br>${shortDate(depart)}`;
+    headRow.appendChild(th);
+  });
+  thead.appendChild(headRow);
+  table.appendChild(thead);
+
+  const tbody = document.createElement('tbody');
+  meta.return_dates.forEach((ret, rowIndex) => {
+    const tr = document.createElement('tr');
+    const th = document.createElement('th');
+    th.className = 'row' + (isWeekend(ret) ? ' weekend' : '');
+    th.dataset.r = String(rowIndex);
+    th.innerHTML = `${weekday(ret)} ${shortDate(ret)}`;
+    tr.appendChild(th);
+
+    meta.depart_dates.forEach((depart, colIndex) => {
+      const td = document.createElement('td');
+      if (ret < depart) {
+        td.className = 'void';                       // return before departure
+        tr.appendChild(td);
+        return;
+      }
+      const cell = byKey.get(depart + '|' + ret);
+      if (!cell) {
+        // In range mode most blanks are simply trip lengths outside what was asked for,
+        // not gaps in the data, so say which it is.
+        const nights = Math.round((new Date(ret) - new Date(depart)) / 86400000);
+        const outsideAsk = meta.date_mode === 'range' && meta.nights_span
+          && !meta.nights_span.includes(nights);
+        td.className = outsideAsk ? 'notasked' : 'nodata';
+        td.title = outsideAsk
+          ? `${nights} nights - outside the ${meta.nights_span[0]}-${meta.nights_span[meta.nights_span.length - 1]} you asked for. Click to price it anyway.`
+          : 'No cached fare for this date pair. Click to fetch it live.';
+        td.dataset.depart = depart;
+        td.dataset.ret = ret;
+        td.dataset.dest = dest.destination;
+        td.dataset.c = String(colIndex);
+        td.dataset.r = String(rowIndex);
+        td.addEventListener('click', () => {
+          pinCross(table, rowIndex, colIndex);
+          verifyCell(dest, { depart, ret });
+        });
+        tr.appendChild(td);
+        return;
+      }
+
+      const value = cellValue(cell);
+      const idx = rampIndex(value, domain);
+      // Excluded cells stay visible but recede, so you can still see what you ruled out
+      // and how much it would have cost.
+      td.className =
+        'priced ' + (idx === null ? 'unscaled' : `q${idx}`) +
+        (cellAllowed(cell) ? '' : ' excluded') +
+        (cell.verified ? ' verified' : '') +
+        // A constant trip length runs along a diagonal, so mark the whole-week ones
+        // as a faint guide for reading trip length off the grid.
+        (cell.nights > 0 && cell.nights % 7 === 0 ? ' week-diag' : '');
+
+      const isCardBest = dest.shownBest && cell.depart === dest.shownBest.depart && cell.ret === dest.shownBest.ret;
+      const isBoardBest =
+        state.globalBest &&
+        state.globalBest.dest === dest.destination &&
+        state.globalBest.depart === cell.depart &&
+        state.globalBest.ret === cell.ret;
+      if (isBoardBest) td.classList.add('best-board');
+      else if (isCardBest) td.classList.add('best-here');
+
+      const wrap = document.createElement('span');
+      wrap.className = 'cellwrap';
+      wrap.textContent = fmtCompact(value);
+      // A numeric stop count collides with the price at this cell width and reads as part
+      // of the number ("5.6k1"), so mark stops with a corner wedge and keep the count in
+      // the tooltip.
+      if (cell.transfers != null && cell.transfers > 0) {
+        const wedge = document.createElement('span');
+        wedge.className = 'stopdot' + (cell.transfers > 1 ? ' many' : '');
+        wrap.appendChild(wedge);
+      }
+      if (cell.stale) {
+        const dot = document.createElement('span');
+        dot.className = 'staledot';
+        wrap.appendChild(dot);
+      }
+      td.appendChild(wrap);
+
+      td.dataset.c = String(colIndex);
+      td.dataset.r = String(rowIndex);
+      td.addEventListener('mousemove', (e) => showTooltip(e, tooltipFor(dest, cell)));
+      td.addEventListener('mouseleave', hideTooltip);
+      td.addEventListener('click', () => {
+        pinCross(table, rowIndex, colIndex);
+        verifyCell(dest, cell);
+      });
+      tr.appendChild(td);
+    });
+    tbody.appendChild(tr);
+  });
+  table.appendChild(tbody);
+
+  // Cross-hair: hovering a cell lights its departure column and return row so it is
+  // obvious which date is the outbound and which the return.
+  table.addEventListener('mouseover', (e) => {
+    const td = e.target.closest('td[data-c]');
+    if (td) highlightCross(table, Number(td.dataset.r), Number(td.dataset.c), false);
+  });
+  table.addEventListener('mouseleave', () => restorePinned(table));
+
+  return finishCard(card, dest, table);
+}
+
+/** Wrap a grid in its scroll viewport and restore where the user had scrolled to. */
+function finishCard(card, dest, table) {
+  const wrap = document.createElement('div');
+  wrap.className = 'matrix-wrap';
+  wrap.appendChild(table);
+  // Scrolling to any edge asks for a wider window. Restore the scroll offset after the
+  // re-render so growing the grid does not yank the view back to the corner.
+  wrap.addEventListener('scroll', () => rememberScroll(dest.destination, wrap));
+  wrap.addEventListener('wheel', (e) => onWheel(e, wrap), { passive: true });
+  card.appendChild(wrap);
+
+  const saved = scrollOffsets.get(dest.destination);
+  if (saved) {
+    requestAnimationFrame(() => {
+      wrap.scrollLeft = saved.x;
+      wrap.scrollTop = saved.y;
+    });
+  }
+  return card;
+}
+
+/** The accessible relief for the light end of the ramp: every priced cell as text. */
+function renderTable(ordered) {
+  const host = $('tableview');
+  if (!ordered.length) {
+    host.replaceChildren();
+    return;
+  }
+  const cur = state.meta.currency;
+  const rows = [];
+  for (const dest of ordered) {
+    for (const cell of dest.cells) {
+      rows.push({ dest, cell, value: cellValue(cell) });
+    }
+  }
+  rows.sort((a, b) => a.value - b.value);
+  const body = rows
+    .slice(0, 800)
+    .map(
+      (r) =>
+        `<tr><td>${r.dest.city} (${r.dest.destination})</td><td>${weekday(r.cell.depart)} ${shortDate(r.cell.depart)}</td>` +
+        `<td>${weekday(r.cell.ret)} ${shortDate(r.cell.ret)}</td><td>${r.cell.nights}</td>` +
+        `<td>${fmtMoney(r.value, cur)}</td><td>${r.cell.verified ? 'live' : 'estimate'}</td>` +
+        `<td>${r.cell.transfers == null ? '' : r.cell.transfers === 0 ? 'nonstop' : r.cell.transfers}</td></tr>`
+    )
+    .join('');
+  host.innerHTML =
+    '<table><thead><tr><th>Destination</th><th>Depart</th><th>Return</th><th>Nights</th>' +
+    '<th>Total</th><th>Source</th><th>Stops</th></tr></thead><tbody>' + body + '</tbody></table>';
+}
+
+/* ------------------------------------------------------------------- verify */
+
+/** Render the flight-times block from the board source, appended to whatever is showing. */
+function renderTimes(details) {
+  if (!details || details.error) {
+    return details && details.error
+      ? `<p class="muted">Times unavailable: ${details.error}</p>`
+      : '';
+  }
+  // 'Sat 31 Jul 19:25' -> {day: 'Sat 31 Jul', time: '19:25'} so legs can show bare times
+  // and only repeat a date when the leg actually crosses into another day.
+  const split = (s) => {
+    const m = /^(.*)\s(\d{2}:\d{2})$/.exec(s || '');
+    return m ? { day: m[1], time: m[2] } : { day: '', time: s || '' };
+  };
+
+  const way = (label, s) => {
+    if (!s) return '';
+    const startDay = split(s.departs).day;
+    const legs = s.legs.map((l, i) => {
+      const d = split(l.departs);
+      const a = split(l.arrives);
+      // Only spell out a date when the leg leaves or lands on a different day.
+      const dep = d.day && d.day !== startDay ? `${d.day} ${d.time}` : d.time;
+      const arr = a.day && a.day !== d.day ? `${a.day} ${a.time}` : a.time;
+      const num = s.legs.length > 1 ? `<span class="legno">${i + 1}</span>` : '';
+      return `<div class="leg">${num}<span class="route">${l.from || '?'} → ${l.to || '?'}</span>` +
+        `<span class="muted">${dep}${arr ? ' → ' + arr : ''}` +
+        `${l.carrier ? ' · ' + l.carrier : ''}${l.code ? ' ' + l.code : ''}</span></div>`;
+    }).join('');
+    return `<div class="segments"><b>${label}</b>` +
+      `<div class="sector-summary">${s.departs || ''} → ${split(s.arrives).time || ''}` +
+      `<span class="muted">${s.duration ? ' · ' + s.duration : ''}` +
+      `${s.stops ? ' · ' + s.stops + ' stop' + (s.stops > 1 ? 's' : '') : ' · nonstop'}</span></div>` +
+      legs + '</div>';
+  };
+  // Name the source and its price: the cross-check's cheapest is often a DIFFERENT
+  // itinerary from the board's, so two unlabelled "departs" times read as a contradiction.
+  const head = `<div class="segments-head">Flight times · ${details.price != null
+    ? fmtMoney(details.price, state.meta.currency) + ' via Kiwi' : 'Kiwi'}</div>`;
+  return head + way('Outbound', details.outbound) + way('Return', details.inbound);
+}
+
+/** Times come from the board source, so they work at any horizon. */
+function fetchTimes(dest, cell) {
+  const meta = state.meta;
+  return fetch('/api/details', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      origin: meta.origin, destination: dest.destination,
+      depart_date: cell.depart, return_date: cell.ret,
+      adults: meta.adults, children: meta.children,
+      currency: meta.currency, nonstop_only: meta.nonstop_only,
+    }),
+  }).then((r) => r.json()).catch((e) => ({ error: String(e) }));
+}
+
+async function verifyCell(dest, cell) {
+  hideTooltip();
+  const meta = state.meta;
+  // Kick the times request off immediately and in parallel: it comes from the board source
+  // and succeeds even where the Google cross-check has no data at all.
+  const timesPromise = fetchTimes(dest, cell);
+  let timesHtml = '';
+  timesPromise.then((details) => {
+    timesHtml = renderTimes(details);
+    const slot = document.getElementById('paneltimes');
+    if (slot) slot.innerHTML = timesHtml;
+  });
+  // Whichever request finishes second must not wipe out the other's output, so every
+  // panel render re-injects whatever the times request has produced so far.
+  const restoreTimes = () => {
+    const slot = document.getElementById('paneltimes');
+    if (slot && timesHtml) slot.innerHTML = timesHtml;
+  };
+  openPanel(
+    `<h3>${dest.city} (${dest.destination})</h3>` +
+      `<div class="muted">${weekday(cell.depart)} ${shortDate(cell.depart)} &rarr; ${weekday(cell.ret)} ${shortDate(cell.ret)}</div>` +
+      `<p>Checking Google Flights for ${meta.adults} adults${meta.children ? ' + ' + meta.children + ' children' : ''}…</p><div id="paneltimes"></div>`
+  );
+
+  let data;
+  try {
+    const res = await fetch('/api/verify', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        origin: meta.origin,
+        destination: dest.destination,
+        depart_date: cell.depart,
+        return_date: cell.ret,
+        adults: meta.adults,
+        children: meta.children,
+        currency: meta.currency,
+        nonstop_only: meta.nonstop_only,
+      }),
+    });
+    data = await res.json();
+  } catch (err) {
+    openPanel(`<h3>${dest.city}</h3><p class="err">Verification request failed: ${err}</p>`);
+    return;
+  }
+
+  const cur = meta.currency;
+  const who = `${meta.adults} adults` + (meta.children ? ` + ${meta.children} children` : '');
+  const estimate = cell.estimate != null ? fmtMoney(cell.estimate, cur) : 'n/a';
+  if (data.error || data.total == null) {
+    // Google could not price it, but the board did - so show the board's own price and
+    // its booking link rather than only a dead Google link.
+    const boardPrice = cell.estimate != null
+      ? `<div class="big">${fmtMoney(cell.estimate, cur)}</div>` +
+        `<div class="muted">from ${cell.source || 'the board'}${cell.is_total ? `, total for ${who}` : ', estimated'}</div>`
+      : '';
+    const links = [];
+    if (cell.link) {
+      links.push(`<a href="${cell.link}" target="_blank" rel="noopener">Book via ${cell.source === 'kiwi' ? 'Kiwi.com' : 'provider'}</a>`);
+    }
+    if (data.link) {
+      links.push(`<a href="${data.link}" target="_blank" rel="noopener">Try Google Flights</a>`);
+    }
+    openPanel(
+      `<h3>${dest.city} (${dest.destination})</h3>` +
+        `<div class="muted">${weekday(cell.depart)} ${shortDate(cell.depart)} &rarr; ${weekday(cell.ret)} ${shortDate(cell.ret)}</div>` +
+        boardPrice +
+        `<p class="muted">Could not cross-check this one: ${data.error || 'no live price available'}</p>` +
+        '<div id="paneltimes"></div>' +
+      (links.length ? `<p>${links.join('<br>')}</p>` : '')
+    );
+    restoreTimes();
+    return;
+  }
+
+  const delta = cell.estimate ? ((data.total - cell.estimate) / cell.estimate) * 100 : null;
+  openPanel(
+    `<h3>${dest.city} (${dest.destination})</h3>` +
+      `<div class="muted">${weekday(cell.depart)} ${shortDate(cell.depart)} &rarr; ${weekday(cell.ret)} ${shortDate(cell.ret)} &middot; ${cell.nights || ''} nights</div>` +
+      `<div class="big">${fmtMoney(data.total, cur)}</div>` +
+      `<div class="muted">live total for ${meta.adults} adults${meta.children ? ' + ' + meta.children + ' children' : ''}</div>` +
+      '<dl>' +
+      `<dt>Estimate was</dt><dd>${estimate}${delta != null ? ` (${delta >= 0 ? '+' : ''}${delta.toFixed(0)}%)` : ''}</dd>` +
+      (data.departs ? `<dt>Outbound departs</dt><dd>${data.departs}</dd>` : '') +
+      (data.arrives ? `<dt>Outbound arrives</dt><dd>${data.arrives}</dd>` : '') +
+      (data.airline ? `<dt>Airline</dt><dd>${data.airline}</dd>` : '') +
+      (data.duration ? `<dt>Duration</dt><dd>${data.duration}</dd>` : '') +
+      (data.stops_out != null ? `<dt>Stops</dt><dd>${data.stops_out === 0 ? 'nonstop' : data.stops_out}</dd>` : '') +
+      (data.cached ? '<dt>Source</dt><dd>previously verified</dd>' : '') +
+      '</dl>' +
+      // Filled in by the parallel times request from the board source, which covers both
+      // legs and works at horizons the Google cross-check cannot reach.
+      '<div id="paneltimes"></div>' +
+      (cell.link ? `<p><a href="${cell.link}" target="_blank" rel="noopener">Book via Kiwi.com</a></p>` : '') +
+      (data.link ? `<p><a href="${data.link}" target="_blank" rel="noopener">Open on Google Flights</a></p>` : '')
+  );
+  restoreTimes();
+
+  // Fold the verified total back into the board so the colour scale reflects reality.
+  const stored = state.destinations.get(dest.destination);
+  if (stored) {
+    let target = stored.cells.find((c) => c.depart === cell.depart && c.ret === cell.ret);
+    if (!target) {
+      target = { depart: cell.depart, ret: cell.ret, nights: cell.nights || 0, estimate: null, unit_price: null, currency: cur };
+      stored.cells.push(target);
+    }
+    target.total = data.total;
+    target.verified = true;
+    target.airline = data.airline;
+    if (data.stops_out != null) target.transfers = data.stops_out;
+    // `best` arrives as its own object, not a reference into `cells`, so recompute it
+    // from scratch. A verified price is often WORSE than the estimate it replaces, so
+    // this must be able to move `best` up as well as down.
+    stored.best = stored.cells.reduce(
+      (acc, c) => (acc === null || cellValue(c) < cellValue(acc) ? c : acc),
+      null
+    );
+    render();
+  }
+}
+
+/** Departure date x trip length, for range mode. */
+function renderNightsGrid(dest, domain, byKey, meta) {
+  const nights = meta.nights_span && meta.nights_span.length
+    ? meta.nights_span
+    : [...new Set(dest.cells.map((c) => c.nights))].sort((a, b) => a - b);
+
+  const table = document.createElement('table');
+  table.className = 'matrix';
+
+  const thead = document.createElement('thead');
+  const headRow = document.createElement('tr');
+  headRow.innerHTML = '<th class="corner" title="rows are departure dates, columns are trip lengths">depart ↓ nights →</th>';
+  nights.forEach((n, colIndex) => {
+    const th = document.createElement('th');
+    th.className = 'col';
+    th.dataset.c = String(colIndex);
+    th.innerHTML = `${n}<br>${n === 1 ? 'night' : 'nights'}`;
+    headRow.appendChild(th);
+  });
+  thead.appendChild(headRow);
+  table.appendChild(thead);
+
+  const tbody = document.createElement('tbody');
+  meta.depart_dates.forEach((depart, rowIndex) => {
+    // Only show a departure date that actually has a price for one of these lengths.
+    const row = nights.map((n) => {
+      const ret = addDays(depart, n);
+      return byKey.get(depart + '|' + ret) || null;
+    });
+    if (!row.some(Boolean)) return;
+
+    const tr = document.createElement('tr');
+    const th = document.createElement('th');
+    th.className = 'row' + (isWeekend(depart) ? ' weekend' : '');
+    th.dataset.r = String(rowIndex);
+    th.innerHTML = `${weekday(depart)} ${shortDate(depart)}`;
+    tr.appendChild(th);
+
+    row.forEach((cell, colIndex) => {
+      const td = document.createElement('td');
+      td.dataset.c = String(colIndex);
+      td.dataset.r = String(rowIndex);
+      if (!cell) {
+        td.className = 'nodata';
+        td.title = 'No price for this departure and trip length.';
+        tr.appendChild(td);
+        return;
+      }
+      const value = cellValue(cell);
+      const idx = rampIndex(value, domain);
+      td.className =
+        'priced ' + (idx === null ? 'unscaled' : `q${idx}`) +
+        (cellAllowed(cell) ? '' : ' excluded') +
+        (cell.verified ? ' verified' : '');
+
+      const isCardBest = dest.shownBest && cell.depart === dest.shownBest.depart && cell.ret === dest.shownBest.ret;
+      const isBoardBest = state.globalBest &&
+        state.globalBest.dest === dest.destination &&
+        state.globalBest.depart === cell.depart && state.globalBest.ret === cell.ret;
+      if (isBoardBest) td.classList.add('best-board');
+      else if (isCardBest) td.classList.add('best-here');
+
+      const wrap = document.createElement('span');
+      wrap.className = 'cellwrap';
+      wrap.textContent = fmtCompact(value);
+      if (cell.transfers != null && cell.transfers > 0) {
+        const wedge = document.createElement('span');
+        wedge.className = 'stopdot' + (cell.transfers > 1 ? ' many' : '');
+        wrap.appendChild(wedge);
+      }
+      td.appendChild(wrap);
+
+      td.addEventListener('mousemove', (e) => showTooltip(e, tooltipFor(dest, cell)));
+      td.addEventListener('mouseleave', hideTooltip);
+      td.addEventListener('click', () => {
+        pinCross(table, rowIndex, colIndex);
+        verifyCell(dest, cell);
+      });
+      tr.appendChild(td);
+    });
+    tbody.appendChild(tr);
+  });
+  table.appendChild(tbody);
+
+  table.addEventListener('mouseover', (e) => {
+    const td = e.target.closest('td[data-c]');
+    if (td) highlightCross(table, Number(td.dataset.r), Number(td.dataset.c), false);
+  });
+  table.addEventListener('mouseleave', () => restorePinned(table));
+  return table;
+}
+
+function addDays(iso, n) {
+  const d = new Date(iso + 'T00:00:00');
+  d.setDate(d.getDate() + n);
+  return d.toISOString().slice(0, 10);
+}
+
+/* ---------------------------------------------------------------- cross-hair */
+
+const pinned = new WeakMap(); // table -> {r, c}
+
+/** Light the departure column and return row that a cell sits on. */
+function highlightCross(table, r, c, pin) {
+  clearCross(table);
+  if (Number.isNaN(r) || Number.isNaN(c)) return;
+  for (const el of table.querySelectorAll(`[data-c="${c}"]`)) el.classList.add('cross-col');
+  for (const el of table.querySelectorAll(`[data-r="${r}"]`)) el.classList.add('cross-row');
+  const cell = table.querySelector(`td[data-r="${r}"][data-c="${c}"]`);
+  if (cell) cell.classList.add('cross-at');
+  if (pin) pinned.set(table, { r, c });
+}
+
+function clearCross(table) {
+  for (const el of table.querySelectorAll('.cross-col, .cross-row, .cross-at')) {
+    el.classList.remove('cross-col', 'cross-row', 'cross-at');
+  }
+}
+
+/** Clicking a cell pins its cross-hair, so it survives the mouse leaving the grid. */
+function pinCross(table, r, c) {
+  highlightCross(table, r, c, true);
+}
+
+/** On mouse-out fall back to the pinned cell, if any. */
+function restorePinned(table) {
+  const p = pinned.get(table);
+  if (p) highlightCross(table, p.r, p.c, true);
+  else clearCross(table);
+}
+
+/* --------------------------------------------------------------- locate best */
+
+/** Scroll a card's grid so its cheapest cell is centred, and flash it. */
+function locateBest(card, dest) {
+  const wrap = card.querySelector('.matrix-wrap');
+  const target = card.querySelector('td.best-board') || card.querySelector('td.best-here');
+  if (!wrap || !target) return;
+
+  // Centre it manually rather than scrollIntoView, which would also scroll the page and
+  // move every other card out from under the pointer.
+  wrap.scrollTo({
+    left: Math.max(0, target.offsetLeft - wrap.clientWidth / 2 + target.offsetWidth / 2),
+    top: Math.max(0, target.offsetTop - wrap.clientHeight / 2 + target.offsetHeight / 2),
+    behavior: 'smooth',
+  });
+  rememberScroll(dest.destination, wrap);
+
+  target.classList.remove('flash');
+  void target.offsetWidth;          // restart the animation if it is already running
+  target.classList.add('flash');
+  setTimeout(() => target.classList.remove('flash'), 1600);
+
+  const best = dest.best;
+  if (best) {
+    $('growing').hidden = false;
+    $('growing').textContent =
+      `${dest.city}: cheapest is ${fmtMoney(cellValue(best), state.meta.currency)} on ` +
+      `${weekday(best.depart)} ${shortDate(best.depart)} → ${weekday(best.ret)} ${shortDate(best.ret)} (${best.nights}n)`;
+    clearTimeout(locateBest._timer);
+    locateBest._timer = setTimeout(() => { $('growing').hidden = true; }, 6000);
+  }
+}
+
+/* ------------------------------------------------------- scroll to widen dates */
+
+const scrollOffsets = new Map(); // IATA -> {x, y}
+const EDGE_PX = 4;               // how close to an edge counts as "at the edge"
+const OVERSCROLL_TRIGGER = 160;  // px of continued scrolling past the edge before widening
+let extending = false;
+let overscroll = 0;
+let overscrollTimer = null;
+
+/** Keep the last scroll position so a re-render does not jump back to the corner. */
+function rememberScroll(dest, wrap) {
+  scrollOffsets.set(dest, { x: wrap.scrollLeft, y: wrap.scrollTop });
+}
+
+/** Widen only on *deliberate* overscroll: the grid always overflows now, so merely
+ *  reaching an edge is normal browsing and must not trigger a fetch. The user has to keep
+ *  pushing past the edge, which is the familiar "pull for more" gesture. */
+function onWheel(event, wrap) {
+  if (extending || !state.meta) return;
+  const atRight = wrap.scrollLeft + wrap.clientWidth >= wrap.scrollWidth - EDGE_PX;
+  const atLeft = wrap.scrollLeft <= EDGE_PX;
+  const atBottom = wrap.scrollTop + wrap.clientHeight >= wrap.scrollHeight - EDGE_PX;
+  const atTop = wrap.scrollTop <= EDGE_PX;
+
+  const pushingX = (event.deltaX > 0 && atRight) || (event.deltaX < 0 && atLeft);
+  const pushingY = (event.deltaY > 0 && atBottom) || (event.deltaY < 0 && atTop);
+  if (!pushingX && !pushingY) {
+    overscroll = 0;
+    return;
+  }
+
+  overscroll += Math.abs(event.deltaX) + Math.abs(event.deltaY);
+  clearTimeout(overscrollTimer);
+  overscrollTimer = setTimeout(() => { overscroll = 0; }, 700);
+
+  const meta = state.meta;
+  const remaining = Math.max(0, OVERSCROLL_TRIGGER - overscroll);
+  if (remaining > 0) {
+    if ((meta.window_days || 7) < (meta.max_window_days || 28)) {
+      $('growing').hidden = false;
+      $('growing').textContent = 'keep scrolling for more dates…';
+    }
+    return;
+  }
+  overscroll = 0;
+  $('growing').hidden = true;
+  extendWindow();
+}
+
+function extendWindow() {
+  const meta = state.meta;
+  const current = meta.window_days || 7;
+  const next = Math.min(current + (meta.window_step || 7), meta.max_window_days || 28);
+  if (extending || next <= current) return;
+  extending = true;
+
+  const codes = [...state.destinations.keys()];
+  $('growing').hidden = false;
+  $('growing').textContent = `widening to ±${next} days…`;
+
+  fetch('/api/extend', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      origin: meta.origin,
+      depart_date: meta.depart_dates[Math.floor(meta.depart_dates.length / 2)],
+      return_date: meta.return_dates[Math.floor(meta.return_dates.length / 2)],
+      destinations: codes,
+      window_days: next,
+      adults: meta.adults,
+      children: meta.children,
+      currency: meta.currency,
+      nonstop_only: meta.nonstop_only,
+    }),
+  })
+    .then((r) => r.json())
+    .then((data) => {
+      const source = new EventSource(`/api/extend/${data.extend_id}/stream`);
+      let done = 0;
+      let pending = codes.length;
+      source.onmessage = (event) => {
+        const msg = JSON.parse(event.data);
+        if (msg.type === 'axes') {
+          meta.depart_dates = msg.depart_dates;
+          meta.return_dates = msg.return_dates;
+          meta.window_days = msg.window_days;
+          syncDateMode();
+          pending = msg.pending;
+          render();
+        } else if (msg.type === 'destination') {
+          state.destinations.set(msg.destination, msg);
+          done += 1;
+          $('growing').textContent = `widening to ±${next} days… ${done}/${pending}`;
+          render();
+        } else if (msg.type === 'destination_error') {
+          done += 1;
+        }
+      };
+      const finish = () => {
+        source.close();
+        extending = false;
+        $('growing').hidden = true;
+        render();
+      };
+      source.addEventListener('end', finish);
+      source.onerror = finish;
+    })
+    .catch(() => {
+      extending = false;
+      $('growing').hidden = true;
+    });
+}
+
+/* ---------------------------------------------------------------- bulk fill */
+
+const fillState = new Map(); // IATA -> {running, progress, total, source, id}
+
+/** Apply one live-priced cell into the board model. */
+function applyCell(dest, msg) {
+  const stored = state.destinations.get(dest.destination);
+  if (!stored) return;
+  let cell = stored.cells.find((c) => c.depart === msg.depart_date && c.ret === msg.return_date);
+  if (!cell) {
+    const nights = Math.round(
+      (new Date(msg.return_date) - new Date(msg.depart_date)) / 86400000
+    );
+    cell = {
+      depart: msg.depart_date, ret: msg.return_date, nights,
+      estimate: null, unit_price: null, currency: state.meta.currency,
+    };
+    stored.cells.push(cell);
+  }
+  cell.total = msg.total;
+  cell.verified = true;
+  if (msg.airline) cell.airline = msg.airline;
+  if (msg.stops != null) cell.transfers = msg.stops;
+}
+
+function startFill(dest) {
+  const meta = state.meta;
+  const code = dest.destination;
+  if (fillState.get(code)?.running) return;
+
+  fetch('/api/fill', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      origin: meta.origin,
+      destination: code,
+      depart_date: meta.depart_dates[Math.floor(meta.depart_dates.length / 2)],
+      return_date: meta.return_dates[Math.floor(meta.return_dates.length / 2)],
+      adults: meta.adults,
+      children: meta.children,
+      currency: meta.currency,
+      nonstop_only: meta.nonstop_only,
+    }),
+  })
+    .then((r) => r.json())
+    .then((data) => {
+      const source = new EventSource(`/api/fill/${data.fill_id}/stream`);
+      fillState.set(code, { running: true, progress: 0, total: data.pending, source, id: data.fill_id });
+      render();
+
+      let sinceRender = 0;
+      source.onmessage = (event) => {
+        const msg = JSON.parse(event.data);
+        const st = fillState.get(code);
+        if (msg.type === 'fill_start') {
+          if (st) st.total = msg.total_cells;
+        } else if (msg.type === 'fill_cell') {
+          if (st) st.progress = msg.progress;
+          if (msg.ok) applyCell(dest, msg);
+          // Repaint periodically rather than per cell; a full grid is ~200 events.
+          if (++sinceRender >= 12) {
+            sinceRender = 0;
+            recomputeBest(code);
+            render();
+          }
+        } else if (msg.type === 'fill_done') {
+          $('progress').textContent = `${dest.city}: ${msg.note}`;
+        } else if (msg.type === 'error') {
+          $('errors').textContent = msg.message;
+        }
+      };
+
+      const finish = () => {
+        source.close();
+        fillState.set(code, { running: false, progress: 0, total: 0 });
+        recomputeBest(code);
+        render();
+      };
+      source.addEventListener('end', finish);
+      source.onerror = finish;
+    })
+    .catch((err) => {
+      $('errors').textContent = `Fill failed: ${err}`;
+    });
+}
+
+/* ------------------------------------------------- auto-upgrade Kiwi -> Google */
+
+const AUTO_VERIFY_CELLS = 40;      // total cells to upgrade automatically
+const AUTO_VERIFY_PER_DEST = 6;    // per destination, so no single city eats the budget
+let autoSource = null;
+
+/** After the fast Kiwi board lands, quietly re-price its cheapest cells on Google Flights.
+ *  Cheapest-first because that is where a booking decision actually turns, and where a
+ *  headline fare is least likely to survive contact with five passengers. */
+function startAutoVerify() {
+  if (!$('autoverify').checked || !state.meta || autoSource) return;
+
+  // Take each destination's own cheapest cells and interleave them, rather than a flat
+  // cheapest-N across the board. A single cheap destination would otherwise monopolise the
+  // whole budget - measured: all 40 slots went to one city, which then turned out to be a
+  // route Google cannot price at all, so nothing got cross-checked.
+  const perDest = [];
+  for (const dest of state.destinations.values()) {
+    const own = dest.cells
+      .filter((c) => !c.verified && cellValue(c) != null)
+      .sort((a, b) => cellValue(a) - cellValue(b))
+      .slice(0, AUTO_VERIFY_PER_DEST)
+      .map((c) => ({ destination: dest.destination, depart_date: c.depart, return_date: c.ret }));
+    if (own.length) perDest.push(own);
+  }
+  if (!perDest.length) return;
+
+  const cells = [];
+  for (let rank = 0; cells.length < AUTO_VERIFY_CELLS; rank += 1) {
+    let added = false;
+    for (const list of perDest) {
+      if (rank < list.length && cells.length < AUTO_VERIFY_CELLS) {
+        cells.push(list[rank]);
+        added = true;
+      }
+    }
+    if (!added) break;
+  }
+
+  const meta = state.meta;
+  fetch('/api/autoverify', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      origin: meta.origin, adults: meta.adults, children: meta.children,
+      currency: meta.currency, nonstop_only: meta.nonstop_only, cells,
+    }),
+  })
+    .then((r) => r.json())
+    .then((data) => {
+      if (!data.fill_id) return;
+      const source = new EventSource(`/api/fill/${data.fill_id}/stream`);
+      autoSource = source;
+      let since = 0;
+      source.onmessage = (event) => {
+        const msg = JSON.parse(event.data);
+        if (msg.type === 'fill_cell') {
+          if (msg.ok) {
+            const dest = state.destinations.get(msg.destination);
+            if (dest) {
+              applyCell(dest, msg);
+              recomputeBest(msg.destination);
+            }
+          }
+          $('growing').hidden = false;
+          $('growing').textContent =
+            `cross-checking cheapest fares on Google Flights… ${msg.progress}/${msg.total_cells}`;
+          if (++since >= 6) { since = 0; render(); }
+        } else if (msg.type === 'fill_done') {
+          $('growing').hidden = true;
+        }
+      };
+      const finish = () => {
+        source.close();
+        autoSource = null;
+        $('growing').hidden = true;
+        render();
+      };
+      source.addEventListener('end', finish);
+      source.onerror = finish;
+    })
+    .catch(() => { autoSource = null; });
+}
+
+function stopAutoVerify() {
+  if (autoSource) {
+    autoSource.close();
+    autoSource = null;
+  }
+  $('growing').hidden = true;
+}
+
+function stopFill(code) {
+  const st = fillState.get(code);
+  if (!st) return;
+  if (st.id) fetch(`/api/fill/${st.id}/cancel`, { method: 'POST' }).catch(() => {});
+  if (st.source) st.source.close();
+  fillState.set(code, { running: false, progress: 0, total: 0 });
+  recomputeBest(code);
+  render();
+}
+
+function recomputeBest(code) {
+  const stored = state.destinations.get(code);
+  if (!stored || !stored.cells.length) return;
+  stored.best = stored.cells.reduce(
+    (acc, c) => (acc === null || cellValue(c) < cellValue(acc) ? c : acc),
+    null
+  );
+  stored.coverage.populated = stored.cells.length;
+}
+
+/* -------------------------------------------------------------------- panel */
+
+function openPanel(html) {
+  $('panelbody').innerHTML = html;
+  $('panel').classList.add('open');
+}
+
+$('panelclose').addEventListener('click', () => $('panel').classList.remove('open'));
+
+/* ------------------------------------------------------------------- search */
+
+function startSearch() {
+  if (state.source) state.source.close();
+  state.destinations.clear();
+  state.meta = null;
+  $('board').replaceChildren();
+  $('tableview').replaceChildren();
+  $('errors').textContent = '';
+  $('empty').hidden = true;
+  stopAutoVerify();             // a new search invalidates any in-flight cross-check
+  $('growing').hidden = true;   // clear any stale rate-limit / widening notice
+  $('note').hidden = true;
+  scrollOffsets.clear();
+  state.searchSignature = searchSignature();
+  // Deliberately NOT disabled: a long search used to leave the button dead while it also
+  // looked amber/clickable, so changing a setting mid-search trapped you. Pressing Search
+  // again simply abandons the running stream and starts over (startSearch closes it above).
+  $('go').classList.remove('stale');
+  $('go').classList.add('running');
+  $('go').textContent = 'Searching…';
+  $('stalenote').hidden = true;
+  $('progress').textContent = 'Finding destinations…';
+
+  const body = {
+    origin: $('origin').value.trim().toUpperCase(),
+    depart_date: $('depart').value,
+    return_date: $('ret').value,
+    adults: Number($('adults').value),
+    children: Number($('children').value),
+    currency: $('currency').value,
+    max_destinations: Number($('dests').value),
+    nonstop_only: $('nonstop').checked,
+    max_price: $('maxprice').value ? Number($('maxprice').value) : null,
+    // Sent with the search so the destination budget is spent inside the filter, not on
+    // the cheapest destinations anywhere which are then hidden.
+    destination_filter: $('destfilter').value.trim(),
+    // In range mode the two dates bound a period and the nights box says what to look for
+    // inside it, so the nights constraint drives the search instead of filtering it after.
+    date_mode: $('datemode').value,
+    nights_min: $('nmin').value === '' ? null : Number($('nmin').value),
+    nights_max: $('nmax').value === '' ? null : Number($('nmax').value),
+    depart_hour_from: $('dephfrom').value === '' ? null : Number($('dephfrom').value),
+    depart_hour_to: $('dephto').value === '' ? null : Number($('dephto').value),
+    return_hour_from: $('rethfrom').value === '' ? null : Number($('rethfrom').value),
+    return_hour_to: $('rethto').value === '' ? null : Number($('rethto').value),
+  };
+
+  fetch('/api/search', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+    .then((r) => r.json())
+    .then((data) => {
+      if (!data.search_id) throw new Error(data.detail || 'search failed');
+      state.searchId = data.search_id;
+      consume(data.search_id);
+    })
+    .catch((err) => {
+      $('go').classList.remove('running');
+      $('go').textContent = 'Search';
+      $('errors').textContent = String(err);
+      $('progress').textContent = '';
+    });
+}
+
+function consume(searchId) {
+  const source = new EventSource(`/api/search/${searchId}/stream`);
+  state.source = source;
+  let expected = 0;
+  let seen = 0;
+
+  source.onmessage = (event) => {
+    const msg = JSON.parse(event.data);
+    if (msg.type === 'meta') {
+      state.meta = msg;
+      syncDateMode();
+      $('progress').textContent = `Searching from ${msg.origin_city} (${msg.origin})…`;
+    } else if (msg.type === 'candidates') {
+      expected = msg.count;
+      $('progress').textContent = `${expected} destinations found, filling grids…`;
+    } else if (msg.type === 'destination') {
+      state.destinations.set(msg.destination, msg);
+      seen += 1;
+      $('progress').textContent = `${seen} of ${expected} destinations…`;
+      render();
+    } else if (msg.type === 'destination_empty') {
+      seen += 1;
+    } else if (msg.type === 'destination_error') {
+      $('errors').textContent = `${msg.destination}: ${msg.message}`;
+      seen += 1;
+    } else if (msg.type === 'filter_applied') {
+      $('note').hidden = false;
+      $('note').textContent = msg.matched
+        ? `Searching only destinations matching "${msg.filter}" — ${msg.matched} of ${msg.considered} reachable destinations matched.`
+        : `Nothing reachable from here matches "${msg.filter}". Clear the filter and search again.`;
+    } else if (msg.type === 'provider_status') {
+      // Rate-limit waits stream in while they happen, so a pause never reads as a hang.
+      $('growing').hidden = false;
+      $('growing').textContent = msg.message;
+    } else if (msg.type === 'provider_fallback') {
+      // Live source unavailable (usually a rate limit). Say so plainly, because the
+      // prices on screen now mean something different.
+      $('note').textContent = msg.message;
+      $('note').hidden = false;
+    } else if (msg.type === 'error') {
+      $('errors').textContent = msg.message;
+    } else if (msg.type === 'done') {
+      $('growing').hidden = true;
+      if (msg.destinations) {
+        const cov = [...state.destinations.values()].map(
+          (d) => (100 * d.coverage.populated) / d.coverage.valid
+        );
+        const mean = cov.reduce((a, b) => a + b, 0) / (cov.length || 1);
+        $('progress').textContent =
+          `${msg.destinations} destinations, cheapest first · ${mean.toFixed(0)}% of cells priced`;
+      } else {
+        $('progress').textContent = '';
+        $('empty').hidden = false;
+        $('empty').textContent = msg.note || 'Nothing came back for this window.';
+      }
+      // The backend warns when the window is far enough out that the cache is sparse.
+      $('note').textContent = msg.note || '';
+      $('note').hidden = !msg.note;
+      // Board is up; now upgrade its cheapest cells to live Google prices in the background.
+      if (msg.destinations) startAutoVerify();
+    }
+  };
+
+  const finish = () => {
+    source.close();
+    state.source = null;
+    $('go').classList.remove('running');
+    $('go').textContent = 'Search';
+    markSearchStale();   // settings may have been changed while the search ran
+  };
+  source.addEventListener('end', finish);
+  source.onerror = finish;
+}
+
+/* --------------------------------------------------------------------- init */
+
+$('go').addEventListener('click', startSearch);
+$('perperson').addEventListener('change', (e) => {
+  state.perPerson = e.target.checked;
+  if (state.meta) render();
+});
+/* Filtering is purely a view over the board already loaded - it never refetches, so it
+   stays instant and costs no API calls. */
+buildDowPicker('dowdep', 'dep');
+buildDowPicker('dowret', 'ret');
+
+/* Hour pickers. Unlike the day and night constraints these are SEARCH parameters: the
+   price calendar returns no departure time, so there is nothing to filter client-side.
+   Changing them therefore needs a new Search, and the button says so. */
+function buildHourPicker(id, isEnd) {
+  const sel = $(id);
+  const any = document.createElement('option');
+  any.value = '';
+  any.textContent = 'any';
+  sel.appendChild(any);
+  for (let h = 0; h < 24; h += 1) {
+    const o = document.createElement('option');
+    o.value = String(h);
+    o.textContent = `${String(h).padStart(2, '0')}:00`;
+    sel.appendChild(o);
+  }
+}
+['dephfrom', 'dephto', 'rethfrom', 'rethto'].forEach((id, i) => buildHourPicker(id, i % 2 === 1));
+
+/* Which controls change what is FETCHED, so require a new Search. Everything else (the
+   weekday pickers, nights in anchors mode, the destination box after a search) is a view
+   over loaded cells and applies instantly. Changing a date used to silently leave the old
+   board on screen with no hint that it was stale. */
+const SEARCH_INPUTS = [
+  'origin', 'depart', 'ret', 'adults', 'children', 'dests', 'currency', 'maxprice',
+  'nonstop', 'datemode', 'dephfrom', 'dephto', 'rethfrom', 'rethto',
+];
+
+function searchSignature() {
+  const parts = SEARCH_INPUTS.map((id) => {
+    const el = $(id);
+    return el.type === 'checkbox' ? String(el.checked) : el.value;
+  });
+  // Nights only affect the fetch in range mode; in anchors mode they filter the view.
+  if ($('datemode').value === 'range') parts.push($('nmin').value, $('nmax').value);
+  return parts.join('|');
+}
+
+/** Highlight Search when the form no longer matches the board on screen. */
+function markSearchStale() {
+  const stale = !!state.meta && searchSignature() !== state.searchSignature;
+  $('go').classList.toggle('stale', stale);
+  $('go').title = stale ? 'Settings changed — press Search to update the board' : '';
+  $('stalenote').hidden = !stale;
+  $('stalenote').textContent = stale
+    ? 'showing the previous search — press Search to apply your changes'
+    : '';
+}
+
+for (const id of SEARCH_INPUTS.concat(['nmin', 'nmax'])) {
+  const el = $(id);
+  el.addEventListener('change', markSearchStale);
+  el.addEventListener('input', markSearchStale);
+}
+
+/* In range mode the two dates bound a period rather than anchoring a trip, so relabel
+   them and make the nights box the thing that defines what to look for. */
+function syncDateMode() {
+  const range = $('datemode').value === 'range';
+  $('departlabel').textContent = range ? 'Travel from' : 'Depart around';
+  $('retlabel').textContent = range ? 'Travel until' : 'Return around';
+  // Spell out what the dates will actually be searched as, since "around" alone does not
+  // say how far around, and the window grows as you widen.
+  const w = (state.meta && state.meta.window_days) || 7;
+  $('datehint').textContent = range
+    ? 'the two dates bound a period; Nights says what to look for inside it'
+    : `each date searched ±${w} days — a ${2 * w + 1}×${2 * w + 1} grid of date pairs`;
+  document.body.classList.toggle('range-mode', range);
+  if (range && $('nmin').value === '' && $('nmax').value === '') {
+    $('nmin').value = '3';
+    $('nmax').value = '5';
+    readNights();
+  }
+}
+$('datemode').addEventListener('change', syncDateMode);
+
+function readNights() {
+  const parse = (id) => ($(id).value === '' ? null : Number($(id).value));
+  state.constraints.min = parse('nmin');
+  state.constraints.max = parse('nmax');
+  if (state.meta) render();
+}
+$('nmin').addEventListener('input', readNights);
+$('nmax').addEventListener('input', readNights);
+
+$('clearconstraints').addEventListener('click', () => {
+  state.constraints.dep.clear();
+  state.constraints.ret.clear();
+  state.constraints.min = state.constraints.max = null;
+  $('nmin').value = '';
+  $('nmax').value = '';
+  for (const id of ['dephfrom','dephto','rethfrom','rethto']) $(id).value = '';
+  markSearchStale();
+  for (const b of document.querySelectorAll('.dow button.on')) b.classList.remove('on');
+  if (state.meta) render();
+});
+
+$('destfilter').addEventListener('input', (e) => {
+  state.filter = e.target.value.trim().toLowerCase();
+  if (state.meta) render();
+});
+
+$('autoverify').addEventListener('change', (e) => {
+  if (e.target.checked) startAutoVerify();
+  else stopAutoVerify();
+});
+$('tabletoggle').addEventListener('click', () => document.body.classList.toggle('show-table'));
+$('themetoggle').addEventListener('click', () => {
+  const root = document.documentElement;
+  const current = root.getAttribute('data-theme');
+  const next = current === 'dark' ? 'light' : current === 'light' ? 'dark' : 'dark';
+  root.setAttribute('data-theme', next);
+  if (state.meta) render();
+});
+
+/* Keep the return date at or after the departure date. Picking a later departure than the
+   current return would otherwise produce a window with no valid cells at all. */
+function syncReturnDate() {
+  const depart = $('depart').value;
+  if (!depart) return;
+  $('ret').min = depart;
+  if ($('ret').value && $('ret').value < depart) $('ret').value = depart;
+}
+
+$('depart').addEventListener('change', syncReturnDate);
+$('depart').addEventListener('input', syncReturnDate);
+
+syncDateMode();
+
+$('depart').value = isoToday(30);
+$('ret').value = isoToday(37);
+syncReturnDate();
+
+fetch('/api/health')
+  .then((r) => r.json())
+  .then((h) => {
+    if (!h.token_configured) {
+      $('errors').textContent =
+        'No Travelpayouts token configured. Add TRAVELPAYOUTS_TOKEN=... to the .env file in the project root, then restart.';
+    }
+    $('origin').value = h.defaults.origin;
+    $('currency').value = h.defaults.currency;
+    $('adults').value = h.defaults.adults;
+    $('children').value = h.defaults.children;
+    $('dests').value = h.defaults.max_destinations;
+  })
+  .catch(() => {});

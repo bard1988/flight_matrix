@@ -1,0 +1,653 @@
+/* SkyMatrix board.
+   Colour roles follow the dataviz reference palette. The fare heatmap is a SEQUENTIAL
+   one-hue green ramp encoding cheapness: dark green = cheapest, receding toward the
+   surface as price rises. Every cell also carries a visible price label, so the
+   near-surface end never carries meaning by fill alone. */
+
+.viz-root,
+:root {
+  color-scheme: light;
+  --surface-1: #fcfcfb;
+  --page: #f9f9f7;
+  --text-primary: #0b0b0b;
+  --text-secondary: #52514e;
+  --text-muted: #898781;
+  --gridline: #e1e0d9;
+  --axis: #c3c2b7;
+  --border: rgba(11, 11, 11, 0.1);
+  --good: #0ca30c;
+  --critical: #d03b3b;
+  --warning: #fab219;
+  --ink-on-fill: #0b0b0b;
+  --ink-flipped: #ffffff;
+  --cheapest: #f2b705;   /* reserved for the cheapest-cell marker, never used as a fill */
+
+  /* Diverging price ramp, q0 = cheapest (green) -> q6 = dearest (red), with the ink that
+     is readable on each step. The arms are ASYMMETRIC in lightness on purpose: with
+     symmetric arms the mirrored pairs measured a deuteranopia Delta E of 0.7-1.5, i.e.
+     cheapest and dearest were indistinguishable to a red-green colour-blind reader.
+     See data/emit_ramp_css.py and data/check_diverging_cvd.py. */
+  --q0: #0b5809;  --qi0: #ffffff;
+  --q1: #368f32;  --qi1: #0b0b0b;
+  --q2: #88c083;  --qi2: #0b0b0b;
+  --q3: #e3eae3;  --qi3: #0b0b0b;
+  --q4: #fcbcb6;  --qi4: #0b0b0b;
+  --q5: #fb968e;  --qi5: #0b0b0b;
+  --q6: #fa6963;  --qi6: #0b0b0b;
+  --hatch: rgba(11, 11, 11, 0.07);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:where(:not([data-theme='light'])) {
+    color-scheme: dark;
+    --surface-1: #1a1a19;
+    --page: #0d0d0d;
+    --text-primary: #ffffff;
+    --text-secondary: #c3c2b7;
+    --text-muted: #898781;
+    --gridline: #2c2c2a;
+    --axis: #383835;
+    --border: rgba(255, 255, 255, 0.1);
+    --ink-on-fill: #ffffff;
+    --ink-flipped: #0b0b0b;
+    --cheapest: #ffcf33;
+    --q0: #5dd656;  --qi0: #0b0b0b;
+    --q1: #49a144;  --qi1: #0b0b0b;
+    --q2: #396e35;  --qi2: #ffffff;
+    --q3: #343a34;  --qi3: #ffffff;
+    --q4: #762c29;  --qi4: #ffffff;
+    --q5: #9c2527;  --qi5: #ffffff;
+    --q6: #c11925;  --qi6: #ffffff;
+    --hatch: rgba(255, 255, 255, 0.08);
+  }
+}
+
+:root[data-theme='dark'] {
+  color-scheme: dark;
+  --surface-1: #1a1a19;
+  --page: #0d0d0d;
+  --text-primary: #ffffff;
+  --text-secondary: #c3c2b7;
+  --text-muted: #898781;
+  --gridline: #2c2c2a;
+  --axis: #383835;
+  --border: rgba(255, 255, 255, 0.1);
+  --ink-on-fill: #ffffff;
+  --ink-flipped: #0b0b0b;
+  --cheapest: #ffcf33;
+  --q0: #5dd656;  --qi0: #0b0b0b;
+  --q1: #49a144;  --qi1: #0b0b0b;
+  --q2: #396e35;  --qi2: #ffffff;
+  --q3: #343a34;  --qi3: #ffffff;
+  --q4: #762c29;  --qi4: #ffffff;
+  --q5: #9c2527;  --qi5: #ffffff;
+  --q6: #c11925;  --qi6: #ffffff;
+  --hatch: rgba(255, 255, 255, 0.08);
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--page);
+  color: var(--text-primary);
+  font: 14px/1.45 system-ui, -apple-system, 'Segoe UI', sans-serif;
+}
+
+a { color: inherit; }
+
+/* ---------------------------------------------------------------- controls */
+
+header.controls {
+  position: sticky;
+  top: 0;
+  z-index: 30;
+  background: var(--surface-1);
+  border-bottom: 1px solid var(--border);
+  padding: 10px 16px;
+}
+
+.controls-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 10px 14px;
+}
+
+.brand {
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  padding-bottom: 5px;
+  margin-right: 4px;
+  white-space: nowrap;
+}
+
+.field { display: flex; flex-direction: column; gap: 3px; }
+
+.field > label {
+  font-size: 11px;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.field input,
+.field select {
+  font: inherit;
+  color: var(--text-primary);
+  background: var(--page);
+  border: 1px solid var(--axis);
+  border-radius: 6px;
+  padding: 5px 8px;
+  min-width: 72px;
+}
+
+.field input[type='date'] { min-width: 140px; }
+.field.narrow input { width: 64px; min-width: 0; }
+
+/* Day-of-week pickers: seven toggles, empty meaning "any day". */
+.dow { display: flex; gap: 2px; }
+
+.dow button {
+  width: 20px;
+  padding: 4px 0;
+  font-size: 10px;
+  border-radius: 4px;
+  color: var(--text-muted);
+}
+
+.dow button.on {
+  background: var(--text-primary);
+  color: var(--surface-1);
+  border-color: var(--text-primary);
+  font-weight: 700;
+}
+
+.hours { display: flex; gap: 3px; }
+.hours select { min-width: 0; width: 62px; padding: 5px 2px; }
+
+/* Time windows only take effect on a new search, so the button says so. */
+button.primary.running { opacity: .75; }
+
+button.primary.stale {
+  background: var(--cheapest);
+  border-color: var(--cheapest);
+  color: #0b0b0b;
+}
+
+.nights { display: flex; gap: 3px; }
+.nights input { width: 46px; min-width: 0; }
+
+/* Cells ruled out by a constraint stay visible but recede, so you can see what you
+   excluded and what it would have cost. */
+table.matrix td.excluded { opacity: 0.22; }
+table.matrix td.excluded:hover { opacity: 0.7; }
+
+.check {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding-bottom: 6px;
+  color: var(--text-secondary);
+}
+
+button {
+  font: inherit;
+  border-radius: 6px;
+  border: 1px solid var(--axis);
+  background: var(--page);
+  color: var(--text-primary);
+  padding: 6px 12px;
+  cursor: pointer;
+}
+
+button:hover { border-color: var(--text-muted); }
+button[disabled] { opacity: 0.5; cursor: default; }
+
+button.primary {
+  background: var(--text-primary);
+  color: var(--surface-1);
+  border-color: var(--text-primary);
+}
+
+.spacer { flex: 1 1 auto; }
+
+.status {
+  padding: 6px 16px 0;
+  color: var(--text-secondary);
+  font-size: 13px;
+  display: flex;
+  gap: 14px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.status .err { color: var(--critical); }
+
+/* Coverage / horizon warning from the backend. Amber because it is advisory, and it
+   ships with words rather than relying on the colour to carry the meaning. */
+.status .hint {
+  color: var(--text-secondary);
+  border-left: 3px solid var(--warning);
+  padding-left: 8px;
+}
+
+/* ---------------------------------------------------------------- legend */
+
+.legend {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.legend .swatches { display: flex; }
+
+.legend .swatches i {
+  width: 22px;
+  height: 10px;
+  display: block;
+  border: 1px solid var(--border);
+  border-left: none;
+}
+
+.legend .swatches i:first-child { border-left: 1px solid var(--border); }
+
+.legend .legend-best {
+  width: 12px;
+  height: 10px;
+  display: inline-block;
+  background: var(--q0);
+  box-shadow: 0 0 0 2px var(--cheapest);
+  margin: 0 3px;
+  vertical-align: -1px;
+}
+
+.legend .legend-wedge {
+  position: relative;
+  width: 14px;
+  height: 12px;
+  display: inline-block;
+  border: 1px solid var(--border);
+  vertical-align: -2px;
+}
+
+.legend .legend-wedge::after {
+  content: '';
+  position: absolute;
+  top: 0; right: 0;
+  width: 0; height: 0;
+  border-top: 5px solid var(--text-secondary);
+  border-left: 5px solid transparent;
+}
+
+.legend .nodata {
+  width: 14px;
+  height: 12px;
+  display: inline-block;
+  border: 1px solid var(--border);
+  background-image: repeating-linear-gradient(
+    45deg, transparent, transparent 3px, var(--hatch) 3px, var(--hatch) 5px);
+  vertical-align: -2px;
+}
+
+/* ---------------------------------------------------------------- board */
+
+main { padding: 14px 16px 60px; }
+
+.board {
+  display: grid;
+  /* Cards no longer have to fit the whole grid, because the grid scrolls inside them.
+     So they can be narrow enough to get several boards side by side. */
+  grid-template-columns: repeat(auto-fill, minmax(420px, 1fr));
+  gap: 10px;
+  align-items: start;
+}
+
+.card {
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 7px 9px 8px;
+}
+
+/* The grid is its own scroll viewport in both axes, sized independently of the grid, so
+   a card stays compact and several fit on screen no matter how wide the date window gets.
+   Scrolling past an edge asks the backend for a wider window. Axes stay pinned. */
+.matrix-wrap {
+  overflow: auto;
+  /* Show about a dozen return dates and scroll the rest, so a card stays compact and the
+     vertical axis is scrollable even at the starting +-7 window. */
+  max-height: min(46vh, 268px);
+  position: relative;
+  scrollbar-width: thin;
+  scrollbar-gutter: stable both-edges;
+  overscroll-behavior: contain;   /* don't scroll the page when the grid hits its end */
+}
+
+/* Keep the scrollbars visible rather than overlay-hidden, so it is obvious the grid
+   scrolls and how far through it you are. */
+.matrix-wrap::-webkit-scrollbar { width: 9px; height: 9px; }
+.matrix-wrap::-webkit-scrollbar-track { background: var(--page); border-radius: 5px; }
+.matrix-wrap::-webkit-scrollbar-thumb {
+  background: var(--axis);
+  border-radius: 5px;
+  border: 2px solid var(--page);
+}
+.matrix-wrap::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
+.matrix-wrap::-webkit-scrollbar-corner { background: var(--page); }
+
+table.matrix thead th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: var(--surface-1);
+}
+
+table.matrix th.row {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  background: var(--surface-1);
+}
+
+table.matrix th.corner {
+  position: sticky;
+  left: 0;
+  top: 0;
+  z-index: 3;
+  background: var(--surface-1);
+}
+
+.growing {
+  font-size: 10px;
+  color: var(--text-muted);
+  padding: 2px 0 0 2px;
+}
+
+.card.is-winner { border-color: var(--cheapest); box-shadow: 0 0 0 1px var(--cheapest); }
+
+.card-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.card-head h2 { font-size: 15px; margin: 0; font-weight: 600; }
+.card-head .code { color: var(--text-muted); font-size: 12px; }
+.card-head .best { margin-left: auto; font-weight: 600; font-variant-numeric: tabular-nums; }
+.card-head .cov { color: var(--text-muted); font-size: 11px; }
+
+.card-head .drift {
+  font-size: 10px;
+  color: #0b0b0b;
+  background: var(--warning);
+  border-radius: 3px;
+  padding: 1px 5px;
+  white-space: nowrap;
+}
+
+.card-head .tag {
+  font-size: 9px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 0 3px;
+  vertical-align: 1px;
+}
+
+.card-head .tag.live { color: var(--good); border-color: var(--good); }
+.card-head .tag.real { color: var(--text-secondary); border-color: var(--text-muted); }
+.card-head .toggle { border: none; background: none; color: var(--text-muted); padding: 0 4px; }
+
+/* Pulse the cheapest cell after jumping to it, so the eye lands on the right square. */
+@keyframes locate-flash {
+  0%, 100% { box-shadow: 0 0 0 1px var(--surface-1), 0 0 0 4px var(--cheapest); }
+  50%      { box-shadow: 0 0 0 1px var(--surface-1), 0 0 0 9px var(--cheapest); }
+}
+
+table.matrix td.flash { animation: locate-flash 0.4s ease-in-out 4; }
+
+.card-head .locate {
+  font-size: 12px;
+  line-height: 1;
+  padding: 3px 7px;
+}
+
+.card-head .fillbtn {
+  font-size: 10px;
+  padding: 2px 7px;
+  border-radius: 4px;
+  margin-left: 6px;
+  white-space: nowrap;
+}
+
+/* ---------------------------------------------------------------- matrix */
+
+table.matrix {
+  border-collapse: separate;
+  border-spacing: 2px; /* 2px surface gap between adjacent fills */
+  font-variant-numeric: tabular-nums;
+}
+
+table.matrix th {
+  font-weight: 500;
+  font-size: 9px;
+  line-height: 1.15;
+  color: var(--text-muted);
+  padding: 0 2px;
+  white-space: nowrap;
+}
+
+table.matrix th.col { text-align: center; }
+table.matrix th.row { text-align: right; padding-right: 5px; }
+table.matrix th.weekend { color: var(--text-secondary); font-weight: 600; }
+table.matrix th.corner { text-align: right; font-size: 9px; }
+
+table.matrix td {
+  width: 26px;
+  height: 17px;
+  padding: 0;
+  text-align: center;
+  font-size: 9px;
+  line-height: 15px;
+  border-radius: 2px;
+  color: var(--ink-on-fill);
+  border: 1px solid transparent;
+}
+
+td.void { background: none; }
+
+td.nodata {
+  background-color: var(--surface-1);
+  background-image: repeating-linear-gradient(
+    45deg, transparent, transparent 3px, var(--hatch) 3px, var(--hatch) 5px);
+  border-color: var(--border);
+  cursor: pointer;
+  color: var(--text-muted);
+}
+
+/* A trip length that was never requested. Left plain rather than hatched, so it reads as
+   "not asked for" instead of "we looked and found nothing". */
+td.notasked {
+  background: none;
+  border-color: transparent;
+  cursor: pointer;
+}
+
+td.priced { cursor: pointer; }
+
+/* Each ramp step carries its own readable ink (black or white, whichever measured higher
+   contrast on that fill), applied per cell. This replaces the old single flip index, which
+   could not work for a diverging ramp where BOTH ends are dark. */
+table.matrix td.q0 { background: var(--q0); color: var(--qi0); }
+table.matrix td.q1 { background: var(--q1); color: var(--qi1); }
+table.matrix td.q2 { background: var(--q2); color: var(--qi2); }
+table.matrix td.q3 { background: var(--q3); color: var(--qi3); }
+table.matrix td.q4 { background: var(--q4); color: var(--qi4); }
+table.matrix td.q5 { background: var(--q5); color: var(--qi5); }
+table.matrix td.q6 { background: var(--q6); color: var(--qi6); }
+
+/* No scale available (a constraint excluded every cell). Neutral, never "dearest". */
+table.matrix td.unscaled {
+  background: var(--gridline);
+  color: var(--text-secondary);
+}
+
+/* 7- and 14-night trips, a faint diagonal guide for reading trip length off the grid. */
+td.week-diag { border-left-color: var(--axis); border-left-style: dotted; }
+
+/* Cheapest cells get a yellow ring. Yellow is reserved: it never appears in the ramp, so
+   the marker can never be mistaken for a price level. The board-wide cheapest gets a
+   thicker ring than each destination's own cheapest. */
+td.best-here {
+  box-shadow: 0 0 0 1px var(--surface-1), 0 0 0 3px var(--cheapest);
+  font-weight: 600;
+}
+
+td.best-board {
+  box-shadow: 0 0 0 1px var(--surface-1), 0 0 0 4px var(--cheapest),
+              0 0 0 5px var(--text-primary);
+  font-weight: 700;
+}
+td.verified { border-color: var(--text-primary); font-weight: 600; }
+td:hover { outline: 2px solid var(--text-primary); outline-offset: 1px; }
+
+/* Cross-hair. Deliberately faint on the cells (the price colours must stay readable) and
+   emphatic on the two date headers, since "which date is the outbound" is the question. */
+table.matrix td.cross-col,
+table.matrix td.cross-row {
+  box-shadow: inset 0 0 0 999px rgba(127, 127, 127, 0.16);
+}
+
+table.matrix th.cross-col,
+table.matrix th.cross-row {
+  color: var(--text-primary);
+  font-weight: 700;
+  background: var(--gridline);
+}
+
+table.matrix td.cross-at {
+  outline: 2px solid var(--text-primary);
+  outline-offset: 1px;
+  box-shadow: none;
+}
+
+.cellwrap { position: relative; display: block; height: 100%; }
+
+/* Corner wedge = this itinerary has stops. One notch for 1 stop, a bigger one for 2+.
+   The exact count is in the tooltip; a digit here collides with the price. */
+.stopdot {
+  position: absolute;
+  top: 0; right: 0;
+  width: 0; height: 0;
+  border-top: 4px solid currentColor;
+  border-left: 4px solid transparent;
+  opacity: 0.55;
+}
+
+.stopdot.many { border-top-width: 6px; border-left-width: 6px; opacity: 0.8; }
+
+.staledot {
+  position: absolute;
+  bottom: 1px; left: 1px;
+  width: 3px; height: 3px;
+  border-radius: 50%;
+  background: var(--warning);
+}
+
+/* ---------------------------------------------------------------- tooltip */
+
+#tooltip {
+  position: fixed;
+  z-index: 60;
+  pointer-events: none;
+  background: var(--surface-1);
+  color: var(--text-primary);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px 10px;
+  font-size: 12px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.18);
+  max-width: 260px;
+  display: none;
+}
+
+#tooltip b { font-variant-numeric: tabular-nums; }
+#tooltip .muted { color: var(--text-muted); }
+
+/* ---------------------------------------------------------------- panel */
+
+#panel {
+  position: fixed;
+  top: 0; right: 0; bottom: 0;
+  width: 340px;
+  background: var(--surface-1);
+  border-left: 1px solid var(--border);
+  padding: 16px;
+  overflow-y: auto;
+  transform: translateX(100%);
+  transition: transform 0.16s ease;
+  z-index: 50;
+}
+
+#panel.open { transform: none; }
+#panel h3 { margin: 0 0 4px; font-size: 16px; }
+#panel dl { display: grid; grid-template-columns: auto 1fr; gap: 4px 10px; margin: 12px 0; }
+#panel dt { color: var(--text-muted); }
+#panel dd { margin: 0; font-variant-numeric: tabular-nums; }
+.segments { font-size: 12px; margin: 8px 0; }
+.segments-head { font-size: 11px; text-transform: uppercase; letter-spacing: .03em;
+  color: var(--text-muted); margin-top: 14px; border-top: 1px solid var(--border); padding-top: 8px; }
+.segments div { padding: 2px 0; font-variant-numeric: tabular-nums; }
+
+/* The sector summary is the headline; individual legs are indented beneath it and
+   numbered once there is more than one, so a connection reads as 1 then 2. */
+.segments .sector-summary { font-weight: 600; }
+
+.segments .leg {
+  display: flex;
+  gap: 6px;
+  align-items: baseline;
+  padding-left: 14px;
+  border-left: 2px solid var(--gridline);
+  margin-left: 3px;
+}
+
+.segments .legno {
+  flex: 0 0 auto;
+  min-width: 14px;
+  font-weight: 700;
+  color: var(--text-muted);
+}
+
+.segments .route { flex: 0 0 auto; font-weight: 600; }
+
+#panel .big { font-size: 26px; font-weight: 600; font-variant-numeric: tabular-nums; }
+#panel .close { position: absolute; top: 10px; right: 12px; border: none; background: none; font-size: 18px; }
+
+.note {
+  color: var(--text-muted);
+  font-size: 12px;
+  border-top: 1px solid var(--border);
+  margin-top: 14px;
+  padding-top: 10px;
+}
+
+/* ---------------------------------------------------------------- table view */
+
+.tableview { display: none; }
+body.show-table .board { display: none; }
+body.show-table .tableview { display: block; }
+
+.tableview table { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums; }
+.tableview th, .tableview td { border-bottom: 1px solid var(--gridline); padding: 5px 8px; text-align: left; font-size: 13px; }
+.tableview th { color: var(--text-muted); font-weight: 500; position: sticky; top: 92px; background: var(--page); }
+
+.empty { color: var(--text-muted); padding: 40px 0; text-align: center; }
