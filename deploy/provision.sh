@@ -5,10 +5,19 @@
 #
 # Re-runnable: a second run pulls the latest code, reinstalls deps and restarts.
 #
-#   export SKYMATRIX_DOMAIN=skymatrix.example.org      # required — an A record must point here
-#   export SKYMATRIX_BASIC_PASSWORD='pick-a-password'  # required — the shared login
-#   export SKYMATRIX_BASIC_USER=team                   # optional (default: team)
-#   export TRAVELPAYOUTS_TOKEN=xxxxxxxx                # optional — real data needs it
+#   # required
+#   export SKYMATRIX_BASIC_PASSWORD='pick-a-password'   # the shared login
+#
+#   # hostname — either bring your own, or let DuckDNS handle it (free)
+#   export SKYMATRIX_DOMAIN=skymatrix.example.org       # an A record must point here
+#     -- OR --
+#   export SKYMATRIX_DUCKDNS_DOMAIN=flight-matrix       # the label only, no .duckdns.org
+#   export SKYMATRIX_DUCKDNS_TOKEN=xxxxxxxx-xxxx-...    # from https://www.duckdns.org
+#
+#   # optional
+#   export SKYMATRIX_BASIC_USER=team                    # default: team
+#   export TRAVELPAYOUTS_TOKEN=xxxxxxxx                 # real data needs it
+#
 #   sudo -E bash deploy/provision.sh
 #
 # `sudo -E` matters: it keeps the exported variables.
@@ -16,12 +25,29 @@ set -euo pipefail
 
 REPO="${SKYMATRIX_REPO:-https://github.com/bard1988/flight_matrix.git}"
 APP_DIR="${SKYMATRIX_APP_DIR:-/opt/flight_matrix}"
-DOMAIN="${SKYMATRIX_DOMAIN:?export SKYMATRIX_DOMAIN=your.hostname}"
 BASIC_USER="${SKYMATRIX_BASIC_USER:-team}"
 BASIC_PASSWORD="${SKYMATRIX_BASIC_PASSWORD:?export SKYMATRIX_BASIC_PASSWORD=...}"
 TP_TOKEN="${TRAVELPAYOUTS_TOKEN:-}"
+DUCKDNS_LABEL="${SKYMATRIX_DUCKDNS_DOMAIN:-}"
+DUCKDNS_TOKEN="${SKYMATRIX_DUCKDNS_TOKEN:-}"
+
+if [ -n "$DUCKDNS_TOKEN" ]; then
+    : "${DUCKDNS_LABEL:?export SKYMATRIX_DUCKDNS_DOMAIN=your-subdomain (label only)}"
+    DOMAIN="${SKYMATRIX_DOMAIN:-${DUCKDNS_LABEL}.duckdns.org}"
+else
+    DOMAIN="${SKYMATRIX_DOMAIN:?export SKYMATRIX_DOMAIN=your.hostname  (or SKYMATRIX_DUCKDNS_DOMAIN + SKYMATRIX_DUCKDNS_TOKEN)}"
+fi
 
 [ "$(id -u)" -eq 0 ] || { echo "Run with sudo -E." >&2; exit 1; }
+
+echo "==> Swap (1 GB micro shapes OOM during pip install without it)"
+if ! swapon --show | grep -q .; then
+    fallocate -l 2G /swapfile 2>/dev/null || dd if=/dev/zero of=/swapfile bs=1M count=2048
+    chmod 600 /swapfile
+    mkswap /swapfile >/dev/null
+    swapon /swapfile
+    grep -q '^/swapfile ' /etc/fstab || echo '/swapfile none swap sw 0 0' >> /etc/fstab
+fi
 
 echo "==> Packages"
 export DEBIAN_FRONTEND=noninteractive
@@ -46,6 +72,40 @@ if command -v iptables >/dev/null 2>&1; then
     command -v netfilter-persistent >/dev/null 2>&1 && netfilter-persistent save || true
 fi
 
+if [ -n "$DUCKDNS_TOKEN" ]; then
+    echo "==> DuckDNS updater for ${DOMAIN}"
+    ( umask 077
+      cat > /usr/local/bin/duckdns-update <<EOF
+#!/bin/sh
+# blank ip= => DuckDNS uses the request's source address (this VM's public IP)
+exec curl -fsS -o /var/log/duckdns.log \\
+  "https://www.duckdns.org/update?domains=${DUCKDNS_LABEL}&token=${DUCKDNS_TOKEN}&ip="
+EOF
+    )
+    chmod 700 /usr/local/bin/duckdns-update
+    /usr/local/bin/duckdns-update || echo "  (first DuckDNS update failed — check the token)"
+    cat > /etc/systemd/system/duckdns.service <<'EOF'
+[Unit]
+Description=DuckDNS IP update
+After=network-online.target
+Wants=network-online.target
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/duckdns-update
+EOF
+    cat > /etc/systemd/system/duckdns.timer <<'EOF'
+[Unit]
+Description=Refresh DuckDNS record every 5 minutes
+[Timer]
+OnBootSec=1min
+OnUnitActiveSec=5min
+[Install]
+WantedBy=timers.target
+EOF
+    systemctl daemon-reload
+    systemctl enable --now duckdns.timer
+fi
+
 echo "==> App user and code"
 id skymatrix >/dev/null 2>&1 \
     || useradd --system --home-dir "$APP_DIR" --shell /usr/sbin/nologin skymatrix
@@ -67,9 +127,19 @@ echo "==> .env"
 if [ ! -f "$APP_DIR/.env" ]; then
     install -o skymatrix -g skymatrix -m 600 "$APP_DIR/.env.example" "$APP_DIR/.env"
 fi
-if [ -n "$TP_TOKEN" ]; then
-    sudo -u skymatrix sed -i "s|^TRAVELPAYOUTS_TOKEN=.*|TRAVELPAYOUTS_TOKEN=${TP_TOKEN}|" "$APP_DIR/.env"
-fi
+set_env() {  # set_env KEY VALUE  — replace if present, append if not
+    local key="$1" val="$2"
+    if grep -q "^${key}=" "$APP_DIR/.env"; then
+        sed -i "s|^${key}=.*|${key}=${val}|" "$APP_DIR/.env"
+    else
+        printf '%s=%s\n' "$key" "$val" >> "$APP_DIR/.env"
+    fi
+}
+[ -n "$TP_TOKEN" ] && set_env TRAVELPAYOUTS_TOKEN "$TP_TOKEN"
+# 1 GB micro: keep concurrency low so a fill does not thrash swap.
+grep -q '^FM_FILL_WORKERS=' "$APP_DIR/.env" || set_env FM_FILL_WORKERS 2
+grep -q '^FM_KIWI_WORKERS=' "$APP_DIR/.env" || set_env FM_KIWI_WORKERS 1
+chown skymatrix:skymatrix "$APP_DIR/.env"
 
 echo "==> systemd service"
 install -m 644 "$APP_DIR/deploy/skymatrix.service" /etc/systemd/system/skymatrix.service

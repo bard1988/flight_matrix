@@ -22,10 +22,19 @@ Oracle Cloud console → **Compute → Instances → Create instance**:
 | Field | Value |
 |---|---|
 | Image | Canonical Ubuntu 22.04 or 24.04 |
-| Shape | `VM.Standard.A1.Flex` (ARM, 1–2 OCPU / 6–12 GB is plenty) — *Always Free eligible*. If you get **"Out of host capacity"**, retry, change availability domain, or fall back to `VM.Standard.E2.1.Micro` (1 GB — then lower the worker counts, see below). |
+| Shape | `VM.Standard.E2.1.Micro` (AMD, 1 GB) — *Always Free*, always available. `provision.sh` adds 2 GB of swap and pins `FM_FILL_WORKERS=2` / `FM_KIWI_WORKERS=1` so it fits. |
 | SSH keys | upload your public key |
 
-Note the **public IP** once it boots.
+Then **reserve the public IP** so DNS doesn't break on a stop/start: after the
+instance is up, **Instance → Attached VNICs → the VNIC → IPv4 Addresses → edit the
+primary → "Reserve" / "No ephemeral" → assign a Reserved Public IP** (also Always
+Free). Note that IP.
+
+> Prefer more headroom and willing to gamble on capacity? `VM.Standard.A1.Flex`
+> (ARM, up to 4 OCPU / 24 GB free) is the alternative — but it frequently returns
+> "Out of host capacity", needing retries or a different availability domain. The
+> DuckDNS updater the script installs also covers an ephemeral IP if you skip the
+> reservation step.
 
 ## 2. Open the firewall — two layers
 
@@ -40,15 +49,16 @@ List** → add two **Ingress Rules**:
 **b) The instance's own iptables.** Oracle's Ubuntu images ship a locked-down
 firewall. `provision.sh` opens 80/443 and persists it — nothing to do by hand.
 
-## 3. Point a hostname at the IP
+## 3. Set up DuckDNS
 
-Caddy needs a DNS name to get a Let's Encrypt certificate.
-
-- **Have a domain?** Add an `A` record → the instance's public IP.
-- **No domain?** Free option: [DuckDNS](https://www.duckdns.org) gives you
-  `something.duckdns.org` pointed at any IP.
-
-Wait until `dig +short your.hostname` returns the instance IP before step 4.
+1. Go to [duckdns.org](https://www.duckdns.org), sign in (GitHub/Google), create a
+   subdomain — e.g. `flight-matrix` → `flight-matrix.duckdns.org`.
+2. Copy your **token** from the top of the page.
+3. Point it at the instance now: open
+   `https://www.duckdns.org/update?domains=flight-matrix&token=YOUR_TOKEN&ip=YOUR_INSTANCE_IP`
+   in a browser — it should print `OK`. (`provision.sh` then installs a systemd timer
+   that keeps it current.)
+4. Confirm: `dig +short flight-matrix.duckdns.org` returns the instance IP.
 
 ## 4. Provision
 
@@ -59,19 +69,21 @@ sudo apt-get update && sudo apt-get install -y git
 git clone https://github.com/bard1988/flight_matrix.git
 cd flight_matrix
 
-export SKYMATRIX_DOMAIN=your.hostname
+export SKYMATRIX_DUCKDNS_DOMAIN=flight-matrix              # label only, no .duckdns.org
+export SKYMATRIX_DUCKDNS_TOKEN=xxxxxxxx-xxxx-xxxx-...      # from duckdns.org
 export SKYMATRIX_BASIC_PASSWORD='choose-a-shared-password'
-export SKYMATRIX_BASIC_USER=team                    # optional
-export TRAVELPAYOUTS_TOKEN=xxxxxxxx                 # optional; real data needs it
-                                                   # free: https://app.travelpayouts.com/profile/api-token
+export SKYMATRIX_BASIC_USER=team                           # optional
+export TRAVELPAYOUTS_TOKEN=xxxxxxxx                        # free: https://app.travelpayouts.com/profile/api-token
 
 sudo -E bash deploy/provision.sh
 ```
 
-`sudo -E` preserves those variables. The script installs Python deps, registers the
-`skymatrix` systemd service, installs Caddy, and wires up TLS + the password gate.
+`sudo -E` preserves those variables. The script adds swap, installs Python deps,
+registers the `skymatrix` systemd service, installs Caddy + the DuckDNS updater, and
+wires up TLS + the password gate.
 
-When it finishes: **`https://your.hostname`**, log in with the user/password above.
+When it finishes: **`https://flight-matrix.duckdns.org`**, log in with the
+user/password above.
 
 No token? The board still loads in **demo mode** if you set `FM_DEMO=1` in
 `/opt/flight_matrix/.env` — synthetic data, good for showing the UI.
@@ -89,12 +101,9 @@ sudo -u skymatrix git -C /opt/flight_matrix pull && sudo systemctl restart skyma
 ```
 
 Config knobs (all `FM_*`, documented in `README.md`) go in `/opt/flight_matrix/.env`,
-then `sudo systemctl restart skymatrix`. On the 1 GB micro shape, start with:
-
-```
-FM_FILL_WORKERS=2
-FM_KIWI_WORKERS=1
-```
+then `sudo systemctl restart skymatrix`. `provision.sh` already sets
+`FM_FILL_WORKERS=2` and `FM_KIWI_WORKERS=1` for the 1 GB shape — raise them only if
+`free -m` shows plenty of headroom during a fill.
 
 ---
 
