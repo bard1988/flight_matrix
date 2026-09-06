@@ -659,15 +659,19 @@ body.show-table .tableview { display: block; }
 
 @media (max-width: 720px) {
   header.controls {
+    /* Not sticky on mobile: the bar is several rows tall here, so pinning it
+       just means it follows you down the page. Let it scroll away; scroll back
+       up to run another search. */
+    position: static;
     padding: 8px 12px;
-    /* If every option is expanded the row is tall — keep it from eating the whole
-       viewport, scroll within the header instead. */
-    max-height: 82vh;
-    overflow-y: auto;
   }
 
   .controls-row { gap: 8px 10px; align-items: stretch; }
-  .brand { align-self: center; padding-bottom: 0; }
+  .brand { align-self: center; padding-bottom: 0; margin-right: auto; }
+
+  /* Collapsed bar: pack the essentials two-per-row instead of one tall stack. */
+  .controls-row > .field.core { flex: 1 1 calc(50% - 5px); }
+  .controls-row > .field.core > label { font-size: 10px; }
 
   .opts-toggle {
     display: inline-flex;
