@@ -71,19 +71,22 @@ cd flight_matrix
 
 export SKYMATRIX_DUCKDNS_DOMAIN=flight-matrix              # label only, no .duckdns.org
 export SKYMATRIX_DUCKDNS_TOKEN=xxxxxxxx-xxxx-xxxx-...      # from duckdns.org
-export SKYMATRIX_BASIC_PASSWORD='choose-a-shared-password'
-export SKYMATRIX_BASIC_USER=team                           # optional
 export TRAVELPAYOUTS_TOKEN=xxxxxxxx                        # free: https://app.travelpayouts.com/profile/api-token
+
+# optional: gate the site behind a shared login (Caddy basic-auth).
+# omit both and the site is open to anyone with the URL.
+export SKYMATRIX_BASIC_PASSWORD='choose-a-shared-password'
+export SKYMATRIX_BASIC_USER=team
 
 sudo -E bash deploy/provision.sh
 ```
 
 `sudo -E` preserves those variables. The script adds swap, installs Python deps,
 registers the `skymatrix` systemd service, installs Caddy + the DuckDNS updater, and
-wires up TLS + the password gate.
+gets a Let's Encrypt certificate.
 
-When it finishes: **`https://flight-matrix.duckdns.org`**, log in with the
-user/password above.
+When it finishes: **`https://flight-matrix.duckdns.org`** (log in if you set a
+password).
 
 No token? The board still loads in **demo mode** if you set `FM_DEMO=1` in
 `/opt/flight_matrix/.env` — synthetic data, good for showing the UI.
