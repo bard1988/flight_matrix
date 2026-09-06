@@ -718,7 +718,21 @@ body.show-table .tableview { display: block; }
   main { padding: 10px 10px 48px; }
   .board { grid-template-columns: 1fr; gap: 8px; }
   .card { padding: 8px; }
-  .matrix-wrap { max-height: 62vh; }
+
+  /* The grid is no longer its own vertical scroll box — it grows to fit and the
+     PAGE scrolls. It still scrolls sideways for the departure-date axis, and a
+     vertical swipe now passes straight through to the page. */
+  .matrix-wrap {
+    max-height: none;
+    overscroll-behavior: auto;
+  }
+  /* Drop the top-pinned header (nothing scrolls under it now); keep the
+     return-date column pinned for the horizontal scroll. */
+  table.matrix thead th { position: static; }
+  table.matrix th.corner { position: sticky; left: 0; top: auto; z-index: 1; }
+
+  /* A touch of extra cell size for fingers and small screens. */
+  table.matrix td { width: 32px; height: 22px; font-size: 10px; line-height: 20px; }
 
   /* Side panel becomes a full-screen sheet; touch has no hover so the tooltip is dead
      weight — the tap-to-open panel carries the detail. */
