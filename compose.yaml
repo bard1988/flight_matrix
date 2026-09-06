@@ -1,0 +1,42 @@
+# Containerised SkyMatrix + Caddy (TLS + a shared-password gate the app itself lacks).
+#
+#   cp .env.example .env      # fill TRAVELPAYOUTS_TOKEN
+#   export SKYMATRIX_DOMAIN=skymatrix.example.org
+#   export SKYMATRIX_BASIC_USER=team
+#   export SKYMATRIX_BASIC_HASH="$(docker run --rm caddy caddy hash-password --plaintext 'choose-a-password')"
+#   docker compose up -d --build
+#
+# ONE app container only. Never scale `skymatrix` past 1 — see Dockerfile.
+
+services:
+  skymatrix:
+    build: .
+    restart: unless-stopped
+    expose:
+      - "8712"
+    volumes:
+      - ./data:/app/data
+    env_file:
+      - .env
+
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      SKYMATRIX_DOMAIN: ${SKYMATRIX_DOMAIN:?set SKYMATRIX_DOMAIN}
+      SKYMATRIX_BASIC_USER: ${SKYMATRIX_BASIC_USER:?set SKYMATRIX_BASIC_USER}
+      SKYMATRIX_BASIC_HASH: ${SKYMATRIX_BASIC_HASH:?set SKYMATRIX_BASIC_HASH}
+      SKYMATRIX_UPSTREAM: skymatrix:8712
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - skymatrix
+
+volumes:
+  caddy_data:
+  caddy_config:

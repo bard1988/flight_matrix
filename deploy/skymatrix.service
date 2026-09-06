@@ -1,0 +1,32 @@
+[Unit]
+Description=SkyMatrix flight fare board (single uvicorn process)
+Documentation=https://github.com/bard1988/flight_matrix
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=skymatrix
+Group=skymatrix
+WorkingDirectory=/opt/flight_matrix
+Environment=PYTHONUNBUFFERED=1
+# TRAVELPAYOUTS_TOKEN and any FM_* overrides live in /opt/flight_matrix/.env,
+# which run.py loads itself. Keeping it here too is harmless belt-and-braces.
+EnvironmentFile=-/opt/flight_matrix/.env
+ExecStart=/opt/flight_matrix/venv/bin/python run.py --host 127.0.0.1 --port 8712 --no-open
+Restart=on-failure
+RestartSec=5
+
+# One process only. Do NOT add uvicorn --workers and do NOT template this unit:
+# search progress is served from an in-memory registry and the Kiwi limiter is
+# process-global.
+
+# Light hardening — the app only needs to write under its own data/ dir.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ReadWritePaths=/opt/flight_matrix/data
+ProtectHome=true
+
+[Install]
+WantedBy=multi-user.target
