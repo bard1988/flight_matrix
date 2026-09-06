@@ -265,6 +265,18 @@ button.primary {
   vertical-align: -1px;
 }
 
+/* Mini of the per-card ◎ button that scrolls a grid to its cheapest date pair. */
+.legend .legend-locate {
+  display: inline-block;
+  border: 1px solid var(--axis);
+  border-radius: 4px;
+  padding: 0 4px;
+  font-size: 11px;
+  line-height: 14px;
+  color: var(--text-secondary);
+  vertical-align: -2px;
+}
+
 .legend .legend-wedge {
   position: relative;
   width: 14px;
