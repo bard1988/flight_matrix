@@ -26,7 +26,7 @@ set -euo pipefail
 REPO="${SKYMATRIX_REPO:-https://github.com/bard1988/flight_matrix.git}"
 APP_DIR="${SKYMATRIX_APP_DIR:-/opt/flight_matrix}"
 BASIC_USER="${SKYMATRIX_BASIC_USER:-team}"
-BASIC_PASSWORD="${SKYMATRIX_BASIC_PASSWORD:?export SKYMATRIX_BASIC_PASSWORD=...}"
+BASIC_PASSWORD="${SKYMATRIX_BASIC_PASSWORD:-}"   # empty => no auth gate, site is open
 TP_TOKEN="${TRAVELPAYOUTS_TOKEN:-}"
 DUCKDNS_LABEL="${SKYMATRIX_DUCKDNS_DOMAIN:-}"
 DUCKDNS_TOKEN="${SKYMATRIX_DUCKDNS_TOKEN:-}"
@@ -147,22 +147,28 @@ systemctl daemon-reload
 systemctl enable --now skymatrix
 systemctl restart skymatrix
 
-echo "==> Caddy (TLS + shared-password gate)"
-install -m 644 "$APP_DIR/deploy/Caddyfile" /etc/caddy/Caddyfile
-HASH="$(caddy hash-password --plaintext "$BASIC_PASSWORD")"
-( umask 077
-  cat > /etc/caddy/skymatrix.env <<EOF
-SKYMATRIX_DOMAIN=${DOMAIN}
-SKYMATRIX_BASIC_USER=${BASIC_USER}
-SKYMATRIX_BASIC_HASH=${HASH}
-SKYMATRIX_UPSTREAM=127.0.0.1:8712
+echo "==> Caddy (automatic HTTPS)"
+mkdir -p /etc/caddy
+if [ -n "$BASIC_PASSWORD" ]; then
+    HASH="$(caddy hash-password --plaintext "$BASIC_PASSWORD")"
+    AUTH_BLOCK="$(printf '\tbasicauth {\n\t\t%s %s\n\t}' "$BASIC_USER" "$HASH")"
+    AUTH_NOTE="  Login: ${BASIC_USER} / (the password you set)"
+else
+    AUTH_BLOCK=""
+    AUTH_NOTE="  Auth:  none — anyone with the URL can use it"
+fi
+cat > /etc/caddy/Caddyfile <<EOF
+${DOMAIN} {
+	encode zstd gzip
+${AUTH_BLOCK}
+	reverse_proxy 127.0.0.1:8712 {
+		# Server-Sent Events: stream board/fill events through without buffering.
+		flush_interval -1
+	}
+}
 EOF
-)
-mkdir -p /etc/systemd/system/caddy.service.d
-cat > /etc/systemd/system/caddy.service.d/skymatrix.conf <<'EOF'
-[Service]
-EnvironmentFile=/etc/caddy/skymatrix.env
-EOF
+# Drop the env-file drop-in from earlier script versions, if present.
+rm -f /etc/systemd/system/caddy.service.d/skymatrix.conf /etc/caddy/skymatrix.env
 systemctl daemon-reload
 systemctl restart caddy
 
@@ -171,7 +177,7 @@ cat <<EOF
 Done.
 
   URL:   https://${DOMAIN}
-  Login: ${BASIC_USER} / (the password you set)
+${AUTH_NOTE}
 
   systemctl status skymatrix caddy
   journalctl -u skymatrix -f
