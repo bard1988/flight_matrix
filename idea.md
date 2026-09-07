@@ -17,7 +17,7 @@ Things worth doing, not yet scheduled.
 | 7.1 | — passengers shown in the bar, not behind Options | S | todo |
 | 7.2 | — denser matrices on small screens | S | todo |
 | 7.3 | — cell-detail panel: the ✕ close is mispositioned (far right); reconsider full-screen panel on mobile | S | todo |
-| 10 | **Show the airport's city** wherever only the IATA code appears (panel, tooltip, table, multi-airport cities) | S | todo |
+| 10 | **Show the airport's city** wherever only the IATA code appears | S | **backend done** (2026-09-07: `describe()` resolves airport→city via `city_code`); panel-leg display todo |
 | 8 | **Design pass** — use the `design` skill / a proper design system | L | in progress |
 
 ### Notes on specific items
