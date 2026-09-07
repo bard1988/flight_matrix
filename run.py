@@ -1,4 +1,4 @@
-"""Start SkyMatrix on a free local port and open it in the browser.
+"""Start FlightMatrix on a free local port and open it in the browser.
 
     py -3 run.py                      # real data, needs TRAVELPAYOUTS_TOKEN in .env
     py -3 run.py --demo               # synthetic data, no token needed
@@ -41,7 +41,7 @@ def reachable_url(host: str, port: int) -> str:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="SkyMatrix")
+    parser = argparse.ArgumentParser(description="FlightMatrix")
     parser.add_argument("--demo", action="store_true", help="synthetic data, no API token required")
     parser.add_argument("--port", type=int, default=None)
     parser.add_argument("--no-open", action="store_true")
@@ -71,7 +71,7 @@ def main() -> int:
 
     port = args.port or free_port()
     url = reachable_url(args.host, port)
-    print(f"SkyMatrix{' [demo]' if args.demo else ''} -> {url}")
+    print(f"FlightMatrix{' [demo]' if args.demo else ''} -> {url}")
 
     if args.host not in ("127.0.0.1", "localhost"):
         # Serving beyond this machine has consequences worth stating at the point of use:

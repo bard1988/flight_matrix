@@ -1,4 +1,4 @@
-"""SkyMatrix FastAPI layer. Serves the static board and streams destinations as they fill."""
+"""FlightMatrix FastAPI layer. Serves the static board and streams destinations as they fill."""
 from __future__ import annotations
 
 import asyncio
@@ -24,7 +24,7 @@ from providers.base import ProviderError
 from providers.google_flights import GoogleFlightsProvider, google_flights_url
 from providers.travelpayouts import TravelpayoutsProvider
 
-app = FastAPI(title="SkyMatrix", docs_url="/api/docs")
+app = FastAPI(title="FlightMatrix", docs_url="/api/docs")
 
 
 def _make_provider():

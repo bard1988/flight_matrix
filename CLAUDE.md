@@ -16,7 +16,7 @@ refreshed `graphify-out/`. The `cache/` and `manifest.json` make an unchanged re
 
 ## Project
 
-flight_matrix / **SkyMatrix** — a multi-destination fare board that renders a
+flight_matrix / **FlightMatrix** — a multi-destination fare board that renders a
 departure × return date grid. Full design, data sources (Kiwi.com board, Travelpayouts /
 Aviasales fill, per-cell Google Flights verification), rate-limit mitigations, and
 deployment constraints are documented in `README.md`.

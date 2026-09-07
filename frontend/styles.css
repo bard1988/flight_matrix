@@ -1,4 +1,4 @@
-/* SkyMatrix board.
+/* FlightMatrix board.
    Colour roles follow the dataviz reference palette. The fare heatmap is a SEQUENTIAL
    one-hue green ramp encoding cheapness: dark green = cheapest, receding toward the
    surface as price rises. Every cell also carries a visible price label, so the

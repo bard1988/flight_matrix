@@ -1,6 +1,6 @@
 """Does Kiwi's price calendar actually scale with passenger count?
 
-SkyMatrix stores calendar prices with is_total=1, i.e. "this is the whole party's price".
+FlightMatrix stores calendar prices with is_total=1, i.e. "this is the whole party's price".
 If the calendar ignores passengers and returns a per-person or single-ticket "from" price,
 every board number is understated by roughly the passenger count. Test it directly by
 running the identical query at several passenger mixes.

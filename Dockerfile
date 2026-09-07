@@ -1,4 +1,4 @@
-# SkyMatrix — single-process fare board. Do NOT run more than one replica of this
+# FlightMatrix — single-process fare board. Do NOT run more than one replica of this
 # image: search progress lives in an in-memory registry (backend/app.py `_streams`)
 # and the Kiwi rate limiter is process-global.
 FROM python:3.12-slim

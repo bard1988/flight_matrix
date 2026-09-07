@@ -1,4 +1,4 @@
-# Deploying SkyMatrix on an Oracle Cloud "Always Free" VM
+# Deploying FlightMatrix on an Oracle Cloud "Always Free" VM
 
 This serves the board to a handful of people over the internet. It is **not** a public
 launch — see [Operating notes](#operating-notes) for why.
@@ -69,20 +69,20 @@ sudo apt-get update && sudo apt-get install -y git
 git clone https://github.com/bard1988/flight_matrix.git
 cd flight_matrix
 
-export SKYMATRIX_DUCKDNS_DOMAIN=flight-matrix              # label only, no .duckdns.org
-export SKYMATRIX_DUCKDNS_TOKEN=xxxxxxxx-xxxx-xxxx-...      # from duckdns.org
+export FLIGHTMATRIX_DUCKDNS_DOMAIN=flight-matrix              # label only, no .duckdns.org
+export FLIGHTMATRIX_DUCKDNS_TOKEN=xxxxxxxx-xxxx-xxxx-...      # from duckdns.org
 export TRAVELPAYOUTS_TOKEN=xxxxxxxx                        # free: https://app.travelpayouts.com/profile/api-token
 
 # optional: gate the site behind a shared login (Caddy basic-auth).
 # omit both and the site is open to anyone with the URL.
-export SKYMATRIX_BASIC_PASSWORD='choose-a-shared-password'
-export SKYMATRIX_BASIC_USER=team
+export FLIGHTMATRIX_BASIC_PASSWORD='choose-a-shared-password'
+export FLIGHTMATRIX_BASIC_USER=team
 
 sudo -E bash deploy/provision.sh
 ```
 
 `sudo -E` preserves those variables. The script adds swap, installs Python deps,
-registers the `skymatrix` systemd service, installs Caddy + the DuckDNS updater, and
+registers the `flightmatrix` systemd service, installs Caddy + the DuckDNS updater, and
 gets a Let's Encrypt certificate.
 
 When it finishes: **`https://flight-matrix.duckdns.org`** (log in if you set a
@@ -94,17 +94,17 @@ No token? The board still loads in **demo mode** if you set `FM_DEMO=1` in
 ## 5. Day-to-day
 
 ```bash
-systemctl status skymatrix caddy
-journalctl -u skymatrix -f            # app logs (rate-limit waits, errors)
+systemctl status flightmatrix caddy
+journalctl -u flightmatrix -f            # app logs (rate-limit waits, errors)
 
 # deploy a new version
 sudo -E bash /opt/flight_matrix/deploy/provision.sh   # pulls, reinstalls, restarts
 # or just:
-sudo -u skymatrix git -C /opt/flight_matrix pull && sudo systemctl restart skymatrix
+sudo -u flightmatrix git -C /opt/flight_matrix pull && sudo systemctl restart flightmatrix
 ```
 
 Config knobs (all `FM_*`, documented in `README.md`) go in `/opt/flight_matrix/.env`,
-then `sudo systemctl restart skymatrix`. `provision.sh` already sets
+then `sudo systemctl restart flightmatrix`. `provision.sh` already sets
 `FM_FILL_WORKERS=2` and `FM_KIWI_WORKERS=1` for the 1 GB shape — raise them only if
 `free -m` shows plenty of headroom during a fill.
 
@@ -113,13 +113,13 @@ then `sudo systemctl restart skymatrix`. `provision.sh` already sets
 ## Docker alternative
 
 If you'd rather containerise (same one-process rule applies — do not scale the
-`skymatrix` service):
+`flightmatrix` service):
 
 ```bash
 cp .env.example .env && $EDITOR .env          # set TRAVELPAYOUTS_TOKEN
-export SKYMATRIX_DOMAIN=your.hostname
-export SKYMATRIX_BASIC_USER=team
-export SKYMATRIX_BASIC_HASH="$(docker run --rm caddy caddy hash-password --plaintext 'choose-a-password')"
+export FLIGHTMATRIX_DOMAIN=your.hostname
+export FLIGHTMATRIX_BASIC_USER=team
+export FLIGHTMATRIX_BASIC_HASH="$(docker run --rm caddy caddy hash-password --plaintext 'choose-a-password')"
 docker compose up -d --build
 ```
 
@@ -144,7 +144,7 @@ survives `docker compose restart`.
   time. Concurrent searches queue. Fine for a few curious colleagues, not a crowd.
 - **`fast-flights` version.** `requirements.txt` pins `>=2.2` but the verification
   code targets the 3.x API. If per-cell Google cross-check errors out, bump it:
-  `sudo -u skymatrix /opt/flight_matrix/venv/bin/pip install -U fast-flights`.
+  `sudo -u flightmatrix /opt/flight_matrix/venv/bin/pip install -U fast-flights`.
 - **Cost.** Always Free ARM/micro compute + boot volume + the traffic this generates
   stay within the free allowances. No block volume needed.
 - **Backups.** The only state worth keeping is `/opt/flight_matrix/data/cache.sqlite`.

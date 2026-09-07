@@ -1,4 +1,4 @@
-/* SkyMatrix board.
+/* FlightMatrix board.
 
    One card per destination, each a departure-date x return-date matrix. The colour scale
    is computed PER MATRIX: every card runs its own cheapest cell (green) to its own
@@ -70,7 +70,7 @@ function fmtCompact(value) {
    12h, with a static fallback if it is unreachable. Rates only need to be roughly
    right — they re-label already-fetched prices, they don't drive any decision. */
 async function loadFx() {
-  const CACHE_KEY = 'skymatrix.fx';
+  const CACHE_KEY = 'flightmatrix.fx';
   const MAX_AGE = 12 * 3600 * 1000;
   try {
     const cached = JSON.parse(localStorage.getItem(CACHE_KEY) || 'null');

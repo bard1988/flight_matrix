@@ -1,21 +1,21 @@
 #!/usr/bin/env bash
 # One-shot provisioning for an Oracle Cloud "Always Free" Ubuntu VM (also works on any
-# fresh Ubuntu 22.04/24.04 box). Installs SkyMatrix as a single systemd service behind
+# fresh Ubuntu 22.04/24.04 box). Installs FlightMatrix as a single systemd service behind
 # Caddy (automatic HTTPS + a shared-password gate).
 #
 # Re-runnable: a second run pulls the latest code, reinstalls deps and restarts.
 #
 #   # required
-#   export SKYMATRIX_BASIC_PASSWORD='pick-a-password'   # the shared login
+#   export FLIGHTMATRIX_BASIC_PASSWORD='pick-a-password'   # the shared login
 #
 #   # hostname — either bring your own, or let DuckDNS handle it (free)
-#   export SKYMATRIX_DOMAIN=skymatrix.example.org       # an A record must point here
+#   export FLIGHTMATRIX_DOMAIN=flightmatrix.example.org       # an A record must point here
 #     -- OR --
-#   export SKYMATRIX_DUCKDNS_DOMAIN=flight-matrix       # the label only, no .duckdns.org
-#   export SKYMATRIX_DUCKDNS_TOKEN=xxxxxxxx-xxxx-...    # from https://www.duckdns.org
+#   export FLIGHTMATRIX_DUCKDNS_DOMAIN=flight-matrix       # the label only, no .duckdns.org
+#   export FLIGHTMATRIX_DUCKDNS_TOKEN=xxxxxxxx-xxxx-...    # from https://www.duckdns.org
 #
 #   # optional
-#   export SKYMATRIX_BASIC_USER=team                    # default: team
+#   export FLIGHTMATRIX_BASIC_USER=team                    # default: team
 #   export TRAVELPAYOUTS_TOKEN=xxxxxxxx                 # real data needs it
 #
 #   sudo -E bash deploy/provision.sh
@@ -23,19 +23,19 @@
 # `sudo -E` matters: it keeps the exported variables.
 set -euo pipefail
 
-REPO="${SKYMATRIX_REPO:-https://github.com/bard1988/flight_matrix.git}"
-APP_DIR="${SKYMATRIX_APP_DIR:-/opt/flight_matrix}"
-BASIC_USER="${SKYMATRIX_BASIC_USER:-team}"
-BASIC_PASSWORD="${SKYMATRIX_BASIC_PASSWORD:-}"   # empty => no auth gate, site is open
+REPO="${FLIGHTMATRIX_REPO:-https://github.com/bard1988/flight_matrix.git}"
+APP_DIR="${FLIGHTMATRIX_APP_DIR:-/opt/flight_matrix}"
+BASIC_USER="${FLIGHTMATRIX_BASIC_USER:-team}"
+BASIC_PASSWORD="${FLIGHTMATRIX_BASIC_PASSWORD:-}"   # empty => no auth gate, site is open
 TP_TOKEN="${TRAVELPAYOUTS_TOKEN:-}"
-DUCKDNS_LABEL="${SKYMATRIX_DUCKDNS_DOMAIN:-}"
-DUCKDNS_TOKEN="${SKYMATRIX_DUCKDNS_TOKEN:-}"
+DUCKDNS_LABEL="${FLIGHTMATRIX_DUCKDNS_DOMAIN:-}"
+DUCKDNS_TOKEN="${FLIGHTMATRIX_DUCKDNS_TOKEN:-}"
 
 if [ -n "$DUCKDNS_TOKEN" ]; then
-    : "${DUCKDNS_LABEL:?export SKYMATRIX_DUCKDNS_DOMAIN=your-subdomain (label only)}"
-    DOMAIN="${SKYMATRIX_DOMAIN:-${DUCKDNS_LABEL}.duckdns.org}"
+    : "${DUCKDNS_LABEL:?export FLIGHTMATRIX_DUCKDNS_DOMAIN=your-subdomain (label only)}"
+    DOMAIN="${FLIGHTMATRIX_DOMAIN:-${DUCKDNS_LABEL}.duckdns.org}"
 else
-    DOMAIN="${SKYMATRIX_DOMAIN:?export SKYMATRIX_DOMAIN=your.hostname  (or SKYMATRIX_DUCKDNS_DOMAIN + SKYMATRIX_DUCKDNS_TOKEN)}"
+    DOMAIN="${FLIGHTMATRIX_DOMAIN:?export FLIGHTMATRIX_DOMAIN=your.hostname  (or FLIGHTMATRIX_DUCKDNS_DOMAIN + FLIGHTMATRIX_DUCKDNS_TOKEN)}"
 fi
 
 [ "$(id -u)" -eq 0 ] || { echo "Run with sudo -E." >&2; exit 1; }
@@ -107,8 +107,8 @@ EOF
 fi
 
 echo "==> App user and code"
-id skymatrix >/dev/null 2>&1 \
-    || useradd --system --home-dir "$APP_DIR" --shell /usr/sbin/nologin skymatrix
+id flightmatrix >/dev/null 2>&1 \
+    || useradd --system --home-dir "$APP_DIR" --shell /usr/sbin/nologin flightmatrix
 if [ -d "$APP_DIR/.git" ]; then
     git config --global --add safe.directory "$APP_DIR"
     git -C "$APP_DIR" pull --ff-only
@@ -116,16 +116,16 @@ else
     git clone --depth 1 "$REPO" "$APP_DIR"
 fi
 mkdir -p "$APP_DIR/data"
-chown -R skymatrix:skymatrix "$APP_DIR"
+chown -R flightmatrix:flightmatrix "$APP_DIR"
 
 echo "==> Python environment"
-sudo -u skymatrix python3 -m venv "$APP_DIR/venv"
-sudo -u skymatrix "$APP_DIR/venv/bin/pip" install -q --upgrade pip
-sudo -u skymatrix "$APP_DIR/venv/bin/pip" install -q -r "$APP_DIR/requirements.txt"
+sudo -u flightmatrix python3 -m venv "$APP_DIR/venv"
+sudo -u flightmatrix "$APP_DIR/venv/bin/pip" install -q --upgrade pip
+sudo -u flightmatrix "$APP_DIR/venv/bin/pip" install -q -r "$APP_DIR/requirements.txt"
 
 echo "==> .env"
 if [ ! -f "$APP_DIR/.env" ]; then
-    install -o skymatrix -g skymatrix -m 600 "$APP_DIR/.env.example" "$APP_DIR/.env"
+    install -o flightmatrix -g flightmatrix -m 600 "$APP_DIR/.env.example" "$APP_DIR/.env"
 fi
 set_env() {  # set_env KEY VALUE  — replace if present, append if not
     local key="$1" val="$2"
@@ -139,13 +139,13 @@ set_env() {  # set_env KEY VALUE  — replace if present, append if not
 # 1 GB micro: keep concurrency low so a fill does not thrash swap.
 grep -q '^FM_FILL_WORKERS=' "$APP_DIR/.env" || set_env FM_FILL_WORKERS 2
 grep -q '^FM_KIWI_WORKERS=' "$APP_DIR/.env" || set_env FM_KIWI_WORKERS 1
-chown skymatrix:skymatrix "$APP_DIR/.env"
+chown flightmatrix:flightmatrix "$APP_DIR/.env"
 
 echo "==> systemd service"
-install -m 644 "$APP_DIR/deploy/skymatrix.service" /etc/systemd/system/skymatrix.service
+install -m 644 "$APP_DIR/deploy/flightmatrix.service" /etc/systemd/system/flightmatrix.service
 systemctl daemon-reload
-systemctl enable --now skymatrix
-systemctl restart skymatrix
+systemctl enable --now flightmatrix
+systemctl restart flightmatrix
 
 echo "==> Caddy (automatic HTTPS)"
 mkdir -p /etc/caddy
@@ -168,7 +168,7 @@ ${AUTH_BLOCK}
 }
 EOF
 # Drop the env-file drop-in from earlier script versions, if present.
-rm -f /etc/systemd/system/caddy.service.d/skymatrix.conf /etc/caddy/skymatrix.env
+rm -f /etc/systemd/system/caddy.service.d/flightmatrix.conf /etc/caddy/flightmatrix.env
 systemctl daemon-reload
 systemctl restart caddy
 
@@ -179,8 +179,8 @@ Done.
   URL:   https://${DOMAIN}
 ${AUTH_NOTE}
 
-  systemctl status skymatrix caddy
-  journalctl -u skymatrix -f
+  systemctl status flightmatrix caddy
+  journalctl -u flightmatrix -f
 
 If the page does not load:
   - VCN Security List / NSG must allow ingress TCP 80 and 443 from 0.0.0.0/0

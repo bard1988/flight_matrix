@@ -1,4 +1,4 @@
-# SkyMatrix
+# FlightMatrix
 
 Flexible-date, any-destination fare board. You give an approximate departure date, an
 approximate return date and your passenger mix; it shows **many destinations at once**,

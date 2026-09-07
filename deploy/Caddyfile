@@ -1,23 +1,23 @@
-# Reverse proxy for SkyMatrix: automatic HTTPS (Let's Encrypt) + a shared-password
+# Reverse proxy for FlightMatrix: automatic HTTPS (Let's Encrypt) + a shared-password
 # gate, because the app has no authentication of its own.
 #
-# {$SKYMATRIX_DOMAIN}     e.g. skymatrix.example.org  (an A record must point here)
-# {$SKYMATRIX_BASIC_USER} the username everyone shares
-# {$SKYMATRIX_BASIC_HASH} bcrypt hash from `caddy hash-password`
-# {$SKYMATRIX_UPSTREAM}   where the app listens; defaults to 127.0.0.1:8712 (systemd
-#                         path). compose.yaml sets it to skymatrix:8712.
+# {$FLIGHTMATRIX_DOMAIN}     e.g. flightmatrix.example.org  (an A record must point here)
+# {$FLIGHTMATRIX_BASIC_USER} the username everyone shares
+# {$FLIGHTMATRIX_BASIC_HASH} bcrypt hash from `caddy hash-password`
+# {$FLIGHTMATRIX_UPSTREAM}   where the app listens; defaults to 127.0.0.1:8712 (systemd
+#                         path). compose.yaml sets it to flightmatrix:8712.
 #
 # Used as-is by compose.yaml (env vars). The VM/systemd path (provision.sh) renders
 # this file with the values substituted into /etc/caddy/Caddyfile.
 
-{$SKYMATRIX_DOMAIN} {
+{$FLIGHTMATRIX_DOMAIN} {
 	encode zstd gzip
 
 	basicauth {
-		{$SKYMATRIX_BASIC_USER} {$SKYMATRIX_BASIC_HASH}
+		{$FLIGHTMATRIX_BASIC_USER} {$FLIGHTMATRIX_BASIC_HASH}
 	}
 
-	reverse_proxy {$SKYMATRIX_UPSTREAM:127.0.0.1:8712} {
+	reverse_proxy {$FLIGHTMATRIX_UPSTREAM:127.0.0.1:8712} {
 		# Server-Sent Events: stream board/fill events straight through, no buffering.
 		flush_interval -1
 	}

@@ -1,5 +1,5 @@
 @echo off
-rem Serve SkyMatrix to the corporate network from this workstation.
+rem Serve FlightMatrix to the corporate network from this workstation.
 rem
 rem   serve.cmd              start the server, reachable by colleagues
 rem   serve.cmd /firewall    one-time: open the port (needs an ELEVATED prompt)
@@ -14,7 +14,7 @@ setlocal
 cd /d "%~dp0"
 
 set PORT=8712
-set RULE=SkyMatrix %PORT%
+set RULE=FlightMatrix %PORT%
 
 if /i "%~1"=="/firewall" goto :firewall
 
@@ -25,7 +25,7 @@ if errorlevel 1 (
     echo.
 )
 
-echo Starting SkyMatrix on all interfaces, port %PORT%.
+echo Starting FlightMatrix on all interfaces, port %PORT%.
 echo Callers must be on the corporate network or VPN, and this machine must stay awake.
 echo There is no login: anyone who can reach this host can run searches.
 echo Press Ctrl+C to stop.

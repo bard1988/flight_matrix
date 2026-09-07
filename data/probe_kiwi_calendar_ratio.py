@@ -2,7 +2,7 @@
 
 On TLV-CTA the calendar came back at almost exactly half the full-search price at every
 passenger count. If that holds across routes and dates, the calendar is not a round-trip
-total and SkyMatrix is understating every board cell.
+total and FlightMatrix is understating every board cell.
 """
 from __future__ import annotations
 
