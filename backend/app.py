@@ -55,7 +55,7 @@ class SearchBody(BaseModel):
     window_days: int = Field(default=config.WINDOW_DAYS, ge=1, le=config.MAX_WINDOW_DAYS)
     destination_filter: str = Field(default="", max_length=60)
     country_codes: list[str] = Field(default_factory=list, max_length=260)
-    date_mode: str = Field(default="anchors", pattern="^(anchors|range)$")
+    date_mode: str = Field(default="range", pattern="^(anchors|range)$")
     nights_min: int | None = Field(default=None, ge=0, le=60)
     nights_max: int | None = Field(default=None, ge=0, le=60)
     # Time-of-day windows as local hours. Search parameters, not display filters.

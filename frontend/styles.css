@@ -180,8 +180,8 @@ header.controls {
 .field-xs input,
 .field-xs select { width: 68px; min-width: 0; }
 .field-sm input { width: 84px; min-width: 0; }
-.field-mode select { min-width: 236px; }
 .field-date { min-width: 138px; }
+.field-nights { min-width: 132px; }
 
 /* Adults + Children sit together as one "travellers" unit. */
 .field-group {

@@ -60,13 +60,11 @@ class SearchRequest:
     # Empty = no restriction.
     country_codes: list[str] = field(default_factory=list)
 
-    # How the two date fields are read.
-    #   "anchors" - depart_date +-window_days, return_date +-window_days (the original)
-    #   "range"   - travel anywhere between depart_date and return_date, for a trip of
-    #               nights_min..nights_max. This is the natural way to ask "a long weekend
-    #               sometime this winter", which anchors cannot express: two dates 56 days
-    #               apart can only ever describe ~56-night trips.
-    date_mode: str = "anchors"
+    # The two date fields bound a PERIOD ("travel from" .. "travel until"); the trip is
+    # nights_min..nights_max long, somewhere inside it. `date_mode` is retained for one
+    # release for request back-compat; "anchors" is no longer produced by the UI and its
+    # code paths are slated for removal.
+    date_mode: str = "range"
     nights_min: int | None = None
     nights_max: int | None = None
 
@@ -113,9 +111,11 @@ class SearchRequest:
         return self.date_mode == "range"
 
     def nights_span(self) -> list[int]:
-        """Trip lengths to search in range mode, shortest first."""
-        lo = self.nights_min if self.nights_min is not None else 2
-        hi = self.nights_max if self.nights_max is not None else lo + 2
+        """Trip lengths to search, shortest first. The two date fields bound a period, not
+        a trip, so a missing nights range falls back to a sensible band rather than being
+        derived from the dates."""
+        lo = self.nights_min if self.nights_min is not None else 5
+        hi = self.nights_max if self.nights_max is not None else max(lo + 4, 9)
         lo, hi = max(0, min(lo, hi)), max(0, max(lo, hi))
         return list(range(lo, hi + 1))
 

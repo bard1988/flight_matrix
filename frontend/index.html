@@ -16,20 +16,20 @@
       <label for="origin">From</label>
       <input id="origin" value="TLV" maxlength="3" autocapitalize="characters" />
     </div>
-    <div class="field field-mode">
-      <label for="datemode">Dates mean</label>
-      <select id="datemode">
-        <option value="anchors" title="The two dates are approximate. The board covers a window either side of each, so you see whether shifting a day or two is cheaper.">Roughly these dates (± a few days)</option>
-        <option value="range" title="The two dates bound a period. The Nights box says what to look for inside it, e.g. a 3-4 night break sometime in that window.">Any trip inside this period</option>
-      </select>
-    </div>
     <div class="field field-date">
-      <label for="depart" id="departlabel">Depart around</label>
+      <label for="depart" id="departlabel">Travel from</label>
       <input id="depart" type="date" />
     </div>
     <div class="field field-date">
-      <label for="ret" id="retlabel">Return around</label>
+      <label for="ret" id="retlabel">Travel until</label>
       <input id="ret" type="date" />
+    </div>
+    <div class="field field-nights">
+      <label for="nmin">Nights</label>
+      <span class="nights">
+        <input id="nmin" type="number" min="0" max="60" placeholder="min" />
+        <input id="nmax" type="number" min="0" max="60" placeholder="max" />
+      </span>
     </div>
     <div class="field-group" role="group" aria-label="Travellers">
       <div class="field field-xs">
@@ -56,15 +56,8 @@
 
   <div class="controls-adv" id="advfilters">
     <div class="adv-group">
-      <span class="adv-group-label">Trip length &amp; days</span>
+      <span class="adv-group-label">Preferred days</span>
       <div class="adv-fields">
-        <div class="field">
-          <label for="nmin">Nights</label>
-          <span class="nights">
-            <input id="nmin" type="number" min="0" max="60" placeholder="min" />
-            <input id="nmax" type="number" min="0" max="60" placeholder="max" />
-          </span>
-        </div>
         <div class="field">
           <label>Depart on</label>
           <div class="dow" id="dowdep"></div>
@@ -132,7 +125,7 @@
 </header>
 
 <div class="status">
-  <span id="progress">Set your dates and search. Starts at &plusmn;7 days on each leg; scroll a grid past its edge, or use the &plusmn; button, for more.</span>
+  <span id="progress">Pick a travel period and a trip length, then Search. Each destination shows every departure/return pair in that band, cheapest dates greenest.</span>
   <span class="legend" id="legend" hidden>
     <span class="legend-rule">Colour ranks the dates <b>within each destination</b> — cheapest to dearest. Compare destinations by price, not colour.</span>
     <span class="legend-key">

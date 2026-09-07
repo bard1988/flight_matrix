@@ -45,7 +45,7 @@ const REDUCE_MOTION = window.matchMedia('(prefers-reduced-motion: reduce)');
 // query key -> element id. Everything a fresh search needs to reproduce this board.
 const URL_FIELDS = {
   from: 'origin', depart: 'depart', ret: 'ret', adults: 'adults', children: 'children',
-  places: 'dests', currency: 'currency', mode: 'datemode', only: 'destfilter',
+  places: 'dests', currency: 'currency', only: 'destfilter',
   maxprice: 'maxprice', nmin: 'nmin', nmax: 'nmax',
   dephfrom: 'dephfrom', dephto: 'dephto', rethfrom: 'rethfrom', rethto: 'rethto',
 };
@@ -1501,7 +1501,7 @@ function startSearch() {
     destination_filter: $('destfilter').value.trim(),
     // In range mode the two dates bound a period and the nights box says what to look for
     // inside it, so the nights constraint drives the search instead of filtering it after.
-    date_mode: $('datemode').value,
+    date_mode: 'range',
     nights_min: $('nmin').value === '' ? null : Number($('nmin').value),
     nights_max: $('nmax').value === '' ? null : Number($('nmax').value),
     depart_hour_from: $('dephfrom').value === '' ? null : Number($('dephfrom').value),
@@ -1661,25 +1661,22 @@ function buildHourPicker(id, isEnd) {
 ['dephfrom', 'dephto', 'rethfrom', 'rethto'].forEach((id, i) => buildHourPicker(id, i % 2 === 1));
 
 /* Which controls change what is FETCHED, so require a new Search. Everything else (the
-   weekday pickers, nights in anchors mode, the destination box after a search) is a view
-   over loaded cells and applies instantly. Changing a date used to silently leave the old
-   board on screen with no hint that it was stale. */
+   weekday pickers, the destination box after a search) is a view over loaded cells and
+   applies instantly. Changing a date used to silently leave the old board on screen with
+   no hint that it was stale. */
 const SEARCH_INPUTS = [
-  'origin', 'depart', 'ret', 'adults', 'children', 'dests', 'maxprice',
-  'nonstop', 'datemode', 'dephfrom', 'dephto', 'rethfrom', 'rethto',
+  'origin', 'depart', 'ret', 'nmin', 'nmax', 'adults', 'children', 'dests', 'maxprice',
+  'nonstop', 'dephfrom', 'dephto', 'rethfrom', 'rethto',
 ];
 // 'currency' is deliberately NOT a search input: once a board is loaded, changing it
 // just re-labels the numbers via FX conversion. A fresh search still fetches in
 // whatever the dropdown shows.
 
 function searchSignature() {
-  const parts = SEARCH_INPUTS.map((id) => {
+  return SEARCH_INPUTS.map((id) => {
     const el = $(id);
     return el.type === 'checkbox' ? String(el.checked) : el.value;
-  });
-  // Nights only affect the fetch in range mode; in anchors mode they filter the view.
-  if ($('datemode').value === 'range') parts.push($('nmin').value, $('nmax').value);
-  return parts.join('|');
+  }).join('|');
 }
 
 /** Highlight Search when the form no longer matches the board on screen. */
@@ -1699,26 +1696,20 @@ for (const id of SEARCH_INPUTS.concat(['nmin', 'nmax'])) {
   el.addEventListener('input', markSearchStale);
 }
 
-/* In range mode the two dates bound a period rather than anchoring a trip, so relabel
-   them and make the nights box the thing that defines what to look for. */
+/* The two dates bound a PERIOD; Nights is the trip length to look for inside it.
+   (Kept as a named function because several places call it after the axes change.) */
 function syncDateMode() {
-  const range = $('datemode').value === 'range';
-  $('departlabel').textContent = range ? 'Travel from' : 'Depart around';
-  $('retlabel').textContent = range ? 'Travel until' : 'Return around';
-  // Spell out what the dates will actually be searched as, since "around" alone does not
-  // say how far around, and the window grows as you widen.
-  const w = (state.meta && state.meta.window_days) || 7;
-  $('datehint').textContent = range
-    ? 'the two dates bound a period; Nights says what to look for inside it'
-    : `each date searched ±${w} days — a ${2 * w + 1}×${2 * w + 1} grid of date pairs`;
-  document.body.classList.toggle('range-mode', range);
-  if (range && $('nmin').value === '' && $('nmax').value === '') {
-    $('nmin').value = '3';
-    $('nmax').value = '5';
-    readNights();
+  $('departlabel').textContent = 'Travel from';
+  $('retlabel').textContent = 'Travel until';
+  $('datehint').textContent =
+    'the two dates bound a period; Nights is the trip length to look for inside it';
+  document.body.classList.add('range-mode');
+  if ($('nmin').value === '' && $('nmax').value === '') {
+    $('nmin').value = '5';
+    $('nmax').value = '9';
   }
+  readNights();
 }
-$('datemode').addEventListener('change', syncDateMode);
 
 function readNights() {
   const parse = (id) => ($(id).value === '' ? null : Number($(id).value));
@@ -1789,8 +1780,11 @@ $('depart').addEventListener('input', syncReturnDate);
 
 loadFx();
 
+// Default period: ~3 weeks starting a month out, looking for a 5-9 night trip inside it.
 $('depart').value = isoToday(30);
-$('ret').value = isoToday(37);
+$('ret').value = isoToday(51);
+$('nmin').value = '5';
+$('nmax').value = '9';
 
 // A shared/bookmarked board carries its search in the query string; it wins over the
 // isoToday and server defaults, and auto-runs once health has loaded.
