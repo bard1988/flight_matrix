@@ -96,6 +96,17 @@
    author `display` on the same element can't override it. */
 [hidden] { display: none !important; }
 
+/* Honour a reduced-motion preference: cut the panel slide, the locate pulse, and any
+   smooth-scroll down to something instant. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
 body {
   margin: 0;
   min-height: 100vh;
@@ -667,6 +678,13 @@ td.best-board {
    (cheap) end as well as the light red (dear) end. */
 td.verified { border-color: currentColor; font-weight: 600; }
 td:hover { outline: 2px solid var(--text-primary); outline-offset: 1px; }
+/* Keyboard focus on a matrix cell: same emphatic ring as hover, plus the cross-hair
+   wash so the column/row it belongs to is obvious. */
+table.matrix td:focus-visible {
+  outline: 2px solid var(--text-primary);
+  outline-offset: 1px;
+  box-shadow: inset 0 0 0 999px rgba(127, 127, 127, 0.16);
+}
 
 /* Cross-hair. Deliberately faint on the cells (the price colours must stay readable) and
    emphatic on the two date headers, since "which date is the outbound" is the question. */

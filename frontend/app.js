@@ -38,6 +38,104 @@ const sourceName = (s) =>
 const fmtStops = (n) =>
   n == null ? '' : n === 0 ? 'nonstop' : `${n} stop${n > 1 ? 's' : ''}`;
 
+const REDUCE_MOTION = window.matchMedia('(prefers-reduced-motion: reduce)');
+
+/* ----------------------------------------------- shareable / bookmarkable board URL */
+
+// query key -> element id. Everything a fresh search needs to reproduce this board.
+const URL_FIELDS = {
+  from: 'origin', depart: 'depart', ret: 'ret', adults: 'adults', children: 'children',
+  places: 'dests', currency: 'currency', mode: 'datemode', only: 'destfilter',
+  maxprice: 'maxprice', nmin: 'nmin', nmax: 'nmax',
+  dephfrom: 'dephfrom', dephto: 'dephto', rethfrom: 'rethfrom', rethto: 'rethto',
+};
+const URL_FLAGS = { nonstop: 'nonstop', perperson: 'perperson' };
+
+/** Write the current form to the address bar so the board can be bookmarked or shared. */
+function boardToUrl() {
+  const p = new URLSearchParams();
+  for (const [key, id] of Object.entries(URL_FIELDS)) {
+    const v = String($(id).value).trim();
+    if (v !== '') p.set(key, v);
+  }
+  for (const [key, id] of Object.entries(URL_FLAGS)) if ($(id).checked) p.set(key, '1');
+  if (!$('autoverify').checked) p.set('verify', '0');
+  const qs = p.toString();
+  history.replaceState(null, '', qs ? '?' + qs : location.pathname);
+}
+
+/** Populate the form from URL params. Returns the keys it recognised. */
+function boardFromUrl(params) {
+  const seen = new Set();
+  for (const [key, id] of Object.entries(URL_FIELDS)) {
+    if (params.has(key)) { $(id).value = params.get(key); seen.add(key); }
+  }
+  for (const [key, id] of Object.entries(URL_FLAGS)) {
+    if (params.has(key)) { $(id).checked = params.get(key) === '1'; seen.add(key); }
+  }
+  if (params.has('verify')) { $('autoverify').checked = params.get('verify') !== '0'; seen.add('verify'); }
+  return seen;
+}
+
+/* -------------------------------------------------- keyboard-operable matrix cells */
+
+/** A screen-reader label for one fare cell. */
+function cellAria(dest, cell) {
+  const cur = state.meta && state.meta.currency;
+  const dates = `${weekday(cell.depart)} ${shortDate(cell.depart)} to ${weekday(cell.ret)} ${shortDate(cell.ret)}`;
+  let price;
+  if (cell.total != null) price = `${fmtMoney(cell.total, cur)}, verified`;
+  else if (cell.estimate != null) price = `${fmtMoney(cell.estimate, cur)}, estimated`;
+  else price = 'no price yet';
+  const stops = cell.transfers != null ? `, ${fmtStops(cell.transfers)}` : '';
+  const stale = cell.stale ? ', price may be out of date' : '';
+  return `${dest.city}, ${dates}. ${price}${stops}${stale}. Press Enter for the live price.`;
+}
+
+/** Make a matrix cell operable by keyboard: role, roving tab stop, Enter/Space + arrows. */
+function wireCell(td, activate, aria) {
+  td.tabIndex = -1;
+  td.setAttribute('role', 'button');
+  if (aria) td.setAttribute('aria-label', aria);
+  td.addEventListener('click', activate);
+  td.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' || e.key === ' ' || e.key === 'Spacebar') { e.preventDefault(); activate(); return; }
+    const step = { ArrowRight: [0, 1], ArrowLeft: [0, -1], ArrowUp: [-1, 0], ArrowDown: [1, 0] }[e.key];
+    if (!step) return;
+    e.preventDefault();
+    const table = td.closest('table.matrix');
+    const r = Number(td.dataset.r) + step[0];
+    const c = Number(td.dataset.c) + step[1];
+    const next = table && table.querySelector(`td[data-r="${r}"][data-c="${c}"][role="button"]`);
+    if (!next) return;
+    td.tabIndex = -1;
+    next.tabIndex = 0;
+    next.focus({ preventScroll: true });
+    ensureVisible(next);
+  });
+}
+
+/** Scroll a cell into its own viewport without moving the page. */
+function ensureVisible(el) {
+  const wrap = el.closest('.matrix-wrap');
+  if (!wrap) return;
+  const e = el.getBoundingClientRect();
+  const w = wrap.getBoundingClientRect();
+  if (e.left < w.left) wrap.scrollLeft -= w.left - e.left + 24;
+  else if (e.right > w.right) wrap.scrollLeft += e.right - w.right + 24;
+  if (e.top < w.top) wrap.scrollTop -= w.top - e.top + 24;
+  else if (e.bottom > w.bottom) wrap.scrollTop += e.bottom - w.bottom + 24;
+}
+
+/** Give one cell per grid the roving tab stop (the cheapest, else the first priced). */
+function seedGridTabstop(table) {
+  const cell = table.querySelector('td.best-board[role="button"]')
+    || table.querySelector('td.best-here[role="button"]')
+    || table.querySelector('td.priced[role="button"]')
+    || table.querySelector('td[role="button"]');
+  if (cell) cell.tabIndex = 0;
+}
+
 /* ------------------------------------------------------------------ helpers */
 
 function isoToday(offsetDays) {
@@ -355,8 +453,24 @@ function render() {
     ? `showing ${ordered.length} of ${total}${ordered.length ? '' : ' — nothing matches'}`
     : '';
 
+  // A keyboard user navigating the grid loses focus when the board is rebuilt (every
+  // streamed destination, every verify fold-back). Remember which cell had it and put it
+  // back on the equivalent cell afterwards.
+  const af = document.activeElement;
+  const keep = af && af.matches && af.matches('td[role="button"]')
+    ? { dest: af.closest('.card') && af.closest('.card').dataset.dest, r: af.dataset.r, c: af.dataset.c }
+    : null;
+
   // Each card gets its own colour scale, computed from just its own cells.
   board.replaceChildren(...ordered.map((dest) => renderCard(dest, scaleDomain(dest.allowed))));
+
+  if (keep && keep.dest) {
+    const cell = board.querySelector(
+      `.card[data-dest="${keep.dest}"] td[data-r="${keep.r}"][data-c="${keep.c}"][role="button"]`
+    );
+    if (cell) { cell.tabIndex = 0; cell.focus({ preventScroll: true }); ensureVisible(cell); }
+  }
+
   renderTable(ordered);
   $('footnote').hidden = ordered.length === 0;
   $('legend').hidden = ordered.length === 0;
@@ -383,6 +497,7 @@ function renderCard(dest, domain) {
   const meta = state.meta;
   const card = document.createElement('section');
   card.className = 'card';
+  card.dataset.dest = dest.destination;
   if (state.globalBest && state.globalBest.dest === dest.destination) card.classList.add('is-winner');
 
   const head = document.createElement('div');
@@ -423,7 +538,8 @@ function renderCard(dest, domain) {
   const locate = document.createElement('button');
   locate.className = 'fillbtn locate';
   locate.textContent = '◎';
-  locate.title = 'Scroll to this destination’s cheapest date pair';
+  locate.title = 'Jump to this destination’s cheapest date pair';
+  locate.setAttribute('aria-label', `Jump to ${dest.city}'s cheapest date pair`);
   locate.onclick = () => locateBest(card, dest);
   head.appendChild(locate);
 
@@ -460,6 +576,7 @@ function renderCard(dest, domain) {
   meta.depart_dates.forEach((depart, colIndex) => {
     const th = document.createElement('th');
     th.className = 'col' + (isWeekend(depart) ? ' weekend' : '');
+    th.scope = 'col';
     th.dataset.c = String(colIndex);
     th.innerHTML = `${weekday(depart)}<br>${shortDate(depart)}`;
     headRow.appendChild(th);
@@ -472,6 +589,7 @@ function renderCard(dest, domain) {
     const tr = document.createElement('tr');
     const th = document.createElement('th');
     th.className = 'row' + (isWeekend(ret) ? ' weekend' : '');
+    th.scope = 'row';
     th.dataset.r = String(rowIndex);
     th.innerHTML = `${weekday(ret)} ${shortDate(ret)}`;
     tr.appendChild(th);
@@ -499,10 +617,10 @@ function renderCard(dest, domain) {
         td.dataset.dest = dest.destination;
         td.dataset.c = String(colIndex);
         td.dataset.r = String(rowIndex);
-        td.addEventListener('click', () => {
+        wireCell(td, () => {
           pinCross(table, rowIndex, colIndex);
           verifyCell(dest, { depart, ret });
-        });
+        }, `${dest.city}, ${weekday(depart)} ${shortDate(depart)} to ${weekday(ret)} ${shortDate(ret)}. No price yet. Press Enter to fetch it live.`);
         tr.appendChild(td);
         return;
       }
@@ -550,10 +668,10 @@ function renderCard(dest, domain) {
       td.dataset.r = String(rowIndex);
       td.addEventListener('mousemove', (e) => showTooltip(e, tooltipFor(dest, cell)));
       td.addEventListener('mouseleave', hideTooltip);
-      td.addEventListener('click', () => {
+      wireCell(td, () => {
         pinCross(table, rowIndex, colIndex);
         verifyCell(dest, cell);
-      });
+      }, cellAria(dest, cell));
       tr.appendChild(td);
     });
     tbody.appendChild(tr);
@@ -573,6 +691,8 @@ function renderCard(dest, domain) {
 
 /** Wrap a grid in its scroll viewport and restore where the user had scrolled to. */
 function finishCard(card, dest, table) {
+  table.setAttribute('aria-label', `${dest.city} fares by date. Arrow keys to move between cells, Enter for the live price.`);
+  seedGridTabstop(table);
   const wrap = document.createElement('div');
   wrap.className = 'matrix-wrap';
   wrap.appendChild(table);
@@ -826,6 +946,7 @@ function renderNightsGrid(dest, domain, byKey, meta) {
   nights.forEach((n, colIndex) => {
     const th = document.createElement('th');
     th.className = 'col';
+    th.scope = 'col';
     th.dataset.c = String(colIndex);
     th.innerHTML = `${n}<br>${n === 1 ? 'night' : 'nights'}`;
     headRow.appendChild(th);
@@ -845,6 +966,7 @@ function renderNightsGrid(dest, domain, byKey, meta) {
     const tr = document.createElement('tr');
     const th = document.createElement('th');
     th.className = 'row' + (isWeekend(depart) ? ' weekend' : '');
+    th.scope = 'row';
     th.dataset.r = String(rowIndex);
     th.innerHTML = `${weekday(depart)} ${shortDate(depart)}`;
     tr.appendChild(th);
@@ -885,10 +1007,10 @@ function renderNightsGrid(dest, domain, byKey, meta) {
 
       td.addEventListener('mousemove', (e) => showTooltip(e, tooltipFor(dest, cell)));
       td.addEventListener('mouseleave', hideTooltip);
-      td.addEventListener('click', () => {
+      wireCell(td, () => {
         pinCross(table, rowIndex, colIndex);
         verifyCell(dest, cell);
-      });
+      }, cellAria(dest, cell));
       tr.appendChild(td);
     });
     tbody.appendChild(tr);
@@ -955,7 +1077,7 @@ function locateBest(card, dest) {
   wrap.scrollTo({
     left: Math.max(0, target.offsetLeft - wrap.clientWidth / 2 + target.offsetWidth / 2),
     top: Math.max(0, target.offsetTop - wrap.clientHeight / 2 + target.offsetHeight / 2),
-    behavior: 'smooth',
+    behavior: REDUCE_MOTION.matches ? 'auto' : 'smooth',
   });
   rememberScroll(dest.destination, wrap);
 
@@ -963,6 +1085,13 @@ function locateBest(card, dest) {
   void target.offsetWidth;          // restart the animation if it is already running
   target.classList.add('flash');
   setTimeout(() => target.classList.remove('flash'), 1600);
+
+  // Keyboard path: the locate button hands focus to the cheapest cell, so the next
+  // Enter prices it.
+  if (target.getAttribute('role') === 'button') {
+    target.tabIndex = 0;
+    target.focus({ preventScroll: true });
+  }
 
   const best = dest.best;
   if (best) {
@@ -1350,6 +1479,8 @@ function startSearch() {
     return_hour_to: $('rethto').value === '' ? null : Number($('rethto').value),
   };
 
+  boardToUrl();   // this board is now bookmarkable / shareable
+
   fetch('/api/search', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -1625,11 +1756,15 @@ function syncReturnDate() {
 $('depart').addEventListener('change', syncReturnDate);
 $('depart').addEventListener('input', syncReturnDate);
 
-syncDateMode();
 loadFx();
 
 $('depart').value = isoToday(30);
 $('ret').value = isoToday(37);
+
+// A shared/bookmarked board carries its search in the query string; it wins over the
+// isoToday and server defaults, and auto-runs once health has loaded.
+const urlBoard = boardFromUrl(new URLSearchParams(location.search));
+syncDateMode();
 syncReturnDate();
 
 fetch('/api/health')
@@ -1639,10 +1774,11 @@ fetch('/api/health')
       $('errors').textContent =
         'No Travelpayouts token configured. Add TRAVELPAYOUTS_TOKEN=... to the .env file in the project root, then restart.';
     }
-    $('origin').value = h.defaults.origin;
-    $('currency').value = h.defaults.currency;
-    $('adults').value = h.defaults.adults;
-    $('children').value = h.defaults.children;
-    $('dests').value = h.defaults.max_destinations;
+    if (!urlBoard.has('from')) $('origin').value = h.defaults.origin;
+    if (!urlBoard.has('currency')) $('currency').value = h.defaults.currency;
+    if (!urlBoard.has('adults')) $('adults').value = h.defaults.adults;
+    if (!urlBoard.has('children')) $('children').value = h.defaults.children;
+    if (!urlBoard.has('places')) $('dests').value = h.defaults.max_destinations;
   })
-  .catch(() => {});
+  .catch(() => {})
+  .finally(() => { if (urlBoard.size) startSearch(); });

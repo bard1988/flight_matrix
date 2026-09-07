@@ -242,7 +242,7 @@ Controls should feel **refined and restrained** — quiet, considered, a little 
 - **Mobile:** full-width, 16px text, `9px 10px` padding.
 
 ### Navigation
-There is no nav. The single control surface is the sticky header's wrapping `controls-row`; on mobile an **Options** toggle (`aria-expanded`) collapses it to the essentials, expanding on tap with the toggle itself going solid-`ink` when open.
+There is no nav. The control surface is the sticky header: a `controls-primary` row that always shows the whole task path (From · dates · travellers · Search) and a **Filters** disclosure (`aria-expanded`, chevron rotates, goes solid-`ink` when open) holding everything else in three labelled groups, closed by default at every width. A board's full search is serialised to the query string, so a board is bookmarkable and shareable and re-runs on load.
 
 ### Signature Component — the Fare Matrix
 - **Cell:** 26×17px (32×22 on mobile), 2px radius, 9px tabular-nums, centred, 1px transparent border, per-step background + ink (`.q0`…`.q6`).
@@ -250,6 +250,7 @@ There is no nav. The single control surface is the sticky header's wrapping `con
 - **Cross-hair:** hovering a cell washes its column and row with an inset `rgba(127,127,127,0.16)` and turns both date headers `ink`/700 on a `gridline` ground — faint on the data, emphatic on the dates, because "which date is outbound" is the question. Click to pin.
 - **Corner wedge** (`.stopdot`): triangular, `currentColor`, `opacity 0.55` (0.8 and larger for 2+ stops). **Stale dot** (`.staledot`): 3px `advisory-amber` circle, bottom-left.
 - **Locate flash:** `@keyframes locate-flash` pulses the marker ring 0.4s × 4 after jump-to-cheapest.
+- **Keyboard / SR:** interactive cells are `role="button"` with a full `aria-label` (destination, dates, price, stops) and a roving `tabindex` — one tab stop per grid (the cheapest cell), arrow keys move between cells, Enter/Space prices one. `th` cells carry `scope`; the ◎ locate button hands focus to the cheapest cell.
 
 ### Detail Panel (`#panel`)
 - 340px, fixed right, full-height. Slides in on `transform: translateX(100%)` → `none` over `0.16s ease`. 1px `hairline` left border, no shadow. Mobile: 100% width, no border — a full sheet.
@@ -285,4 +286,4 @@ Below the header: 13px, `ink-secondary`, `flex-wrap`, 14px gap. Error text in `e
 - **Don't** hide the matrix scrollbars or make them overlay-only; their visibility tells the user there is more grid.
 - **Don't** style an estimate to look as certain as a verified price, or a `nodata` cell to look expensive.
 - **Don't** add gradients, hero imagery, urgency messaging, or decorative colour — this is an instrument, not a booking funnel.
-- **Don't** animate beyond the sanctioned set (panel slide `0.16s`, locate pulse); there is no `prefers-reduced-motion` handling yet, so keep motion small and purposeful.
+- **Don't** animate beyond the sanctioned set (panel slide `0.16s`, chevron rotate, locate pulse, smooth locate-scroll). A global `@media (prefers-reduced-motion: reduce)` block damps all of it; keep new motion inside that guard.

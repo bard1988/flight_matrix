@@ -93,6 +93,9 @@ Capabilities (all present in the current build):
 - Currency is a **display** setting — converts every shown number via a free keyless FX
   source, no re-search; per-matrix ranking is unaffected.
 - Table view (every priced cell, sortable, cheapest first). Stop button during a search.
+- A board's full search is serialised to the URL query string — a board is bookmarkable and
+  shareable, and re-runs on load. The fare grid is keyboard-operable (roving tabindex, arrow
+  keys, Enter to price a cell).
   Booking deep links carry passenger counts and the nonstop flag, not just dates.
 - Auto cross-check toggle (on by default) re-prices cheapest cells in the background.
 

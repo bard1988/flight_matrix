@@ -163,7 +163,7 @@
       "Don't hide the matrix scrollbars or make them overlay-only; their visibility tells the user there is more grid.",
       "Don't style an estimate to look as certain as a verified price, or a nodata cell to look expensive.",
       "Don't add gradients, hero imagery, urgency messaging, or decorative colour — this is an instrument, not a booking funnel.",
-      "Don't animate beyond the sanctioned set (panel slide 0.16s, locate pulse); there is no prefers-reduced-motion handling yet, so keep motion small and purposeful."
+      "Don't animate beyond the sanctioned set (panel slide 0.16s, locate pulse); a global @media (prefers-reduced-motion: reduce) block damps it all; keep new motion inside that guard."
     ]
   }
 }
