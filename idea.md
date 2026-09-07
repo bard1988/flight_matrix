@@ -9,7 +9,7 @@ Things worth doing, not yet scheduled.
 | # | Feature | Size | Status |
 |---|---|---|---|
 | 1 | **Filter by airline** — bundled airline-name DB, refreshed periodically (and/or from what searches return) | M | todo |
-| 9 | **Filter by region** — its own field: a collapsible continent → subregion → country tree | M–L | todo — see spec |
+| 9 | **Filter by region** — collapsible continent → subregion → country tree | M–L | **backend done** (2026-09-07); tree UI todo |
 | 11 | **Kids' ages** — per-child age (infant/child buckets), not just a count; changes the price. Must propagate to providers + `party_key` cache key + child-factor scaling | M–L | todo |
 | 6 | **Cabin class** selector (economy / premium / business) — thread through provider → API → UI | M | todo |
 | 4 | **One search model: period + trip length** — drop the "Dates mean" dropdown and anchors mode entirely | M | todo — see spec, decided |
@@ -88,7 +88,20 @@ date-field change to that pass.
   else a raw IATA code surfaces — the flight-details panel legs, the tooltip, the table
   view, and codes that resolve to an airport (not a city) in `airports.describe()`.
 
-### #9 — Filter by region (spec)
+### #9 — Filter by region
+
+**Backend done (2026-09-07):** `data/build_countries.py` → `data/countries.json`
+(250 countries: name + continent + subregion, from mledoze/countries + travel
+overrides). `airports.py` `country_name()` now worldwide, plus `region_of()` and
+`taxonomy()`. `GET /api/regions` serves the tree. `SearchBody.country_codes` →
+`board.build` filters candidates at discovery (composes with `destination_filter`,
+no cache impact), emits a `region_filtered` event. **Still todo: the tree UI**
+(collapsible continent → subregion → country, tri-state checkboxes, post-search
+counts, its own field in the control bar) — coordinate with the design pass.
+
+Original spec below.
+
+---
 
 **Its own field**, separate from the `Only destinations` text box. The two complement:
 - **Region tree** = structured geography, primarily a *search-time restriction* — the
