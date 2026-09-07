@@ -173,7 +173,7 @@ A seven-step green → amber → red ramp from **`#12603d` (deep green, cheapest
 ### Named Rules
 **The One Family Rule.** A single `system-ui` stack does all the work. Weight (400/600/700) and size carry hierarchy. Do not introduce a display serif, a monospace, or a second sans — the neutrality is the point.
 
-**The Tabular Numbers Rule.** Any number a user might compare, sort, or watch update uses `font-variant-numeric: tabular-nums` so digits stay column-aligned. This is already on the matrix, every headline price, the panel, and both table views.
+**The Tabular Numbers Rule.** Any number a user might compare, sort, or watch update uses `font-variant-numeric: tabular-nums` so digits stay column-aligned. This is already on the matrix, every headline price, the panel, and the table view.
 
 ## Layout
 
@@ -260,7 +260,10 @@ There is no nav. The control surface is the sticky header: a `controls-primary` 
 `position: fixed`, `paper-raised`, 1px `hairline`, 8px radius, `8px 10px` padding, 12px text, `pointer-events: none`, `max-width: 260px`, the one ambient shadow. Desktop only.
 
 ### Status bar
-Below the header: 13px, `ink-secondary`, `flex-wrap`, 14px gap. Error text in `error-red`; advisory hints (`.hint`) as a 3px `advisory-amber` left border with the message in normal text; small contextual counts (`.growing`) at 10px `ink-muted`.
+Below the header: 13px `ink-secondary`, one line per message stacked (`flex-direction: column`). Lead line is the streaming progress; then the legend (rule + key); then contextual `.growing` counts (11px `ink-muted`, tabular). Error text in `error-red`; advisory hints (`.hint`) lead with a 6px `advisory-amber` dot, message in normal text. Prose lines cap at ~74ch.
+
+### Table view (`.tableview`, toggled by `body.show-table`)
+Replaces the board entirely. Plain `<table>`, `border-collapse`, hairline row rules, 4px 10px cell padding, 13px, `tabular-nums`. Zebra is a ~3.5% ink wash on even rows (`color-mix`), hover ~9%. Numeric columns (Nights, Total) right-aligned. **Every heading sorts** — click toggles direction, `aria-sort` + a ↑/↓ marker show the active column; same column again flips. `Source` renders as a borderless `est` / `live` micro-label (`live` in `verified-green`). Header sticks below the app header on desktop; on mobile the table keeps a 600px min-width and scrolls sideways (sticky header drops there).
 
 ## Do's and Don'ts
 

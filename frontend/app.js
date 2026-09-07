@@ -471,6 +471,7 @@ function render() {
     if (cell) { cell.tabIndex = 0; cell.focus({ preventScroll: true }); ensureVisible(cell); }
   }
 
+  state.lastOrdered = ordered;
   renderTable(ordered);
   $('footnote').hidden = ordered.length === 0;
   $('legend').hidden = ordered.length === 0;
@@ -514,7 +515,7 @@ function renderCard(dest, domain) {
   head.innerHTML =
     `<h2>${dest.city}</h2>` +
     `<span class="code">${dest.destination}${dest.country ? ' · ' + dest.country : ''}</span>` +
-    `<span class="cov">${dest.coverage.populated}/${dest.coverage.valid} cells</span>` +
+    `<span class="cov" title="${dest.coverage.populated} of ${dest.coverage.valid} date pairs priced">${dest.coverage.populated}/${dest.coverage.valid}</span>` +
     headlineChip(dest) +
     `<span class="best">${best != null ? fmtMoney(best, meta.currency) : ''} ${bestTag}</span>`;
 
@@ -712,35 +713,65 @@ function finishCard(card, dest, table) {
   return card;
 }
 
-/** The accessible relief for the light end of the ramp: every priced cell as text. */
+/** The accessible relief for the light end of the ramp: every priced cell as text,
+    sortable by any column. */
+const tableSort = { key: 'total', dir: 1 };   // price, ascending
+
 function renderTable(ordered) {
   const host = $('tableview');
-  if (!ordered.length) {
+  if (!ordered || !ordered.length) {
     host.replaceChildren();
     return;
   }
   const cur = state.meta.currency;
+  const cols = [
+    { key: 'dest', label: 'Destination', cell: (r) => `${r.dest.city} (${r.dest.destination})`,
+      cmp: (a, b) => a.dest.city.localeCompare(b.dest.city) },
+    { key: 'depart', label: 'Depart', cell: (r) => `${weekday(r.cell.depart)} ${shortDate(r.cell.depart)}`,
+      cmp: (a, b) => a.cell.depart.localeCompare(b.cell.depart) },
+    { key: 'return', label: 'Return', cell: (r) => `${weekday(r.cell.ret)} ${shortDate(r.cell.ret)}`,
+      cmp: (a, b) => a.cell.ret.localeCompare(b.cell.ret) },
+    { key: 'nights', label: 'Nights', num: true, cell: (r) => r.cell.nights,
+      cmp: (a, b) => a.cell.nights - b.cell.nights },
+    { key: 'total', label: 'Total', num: true, cell: (r) => fmtMoney(r.value, cur),
+      cmp: (a, b) => a.value - b.value },
+    { key: 'source', label: 'Source',
+      cell: (r) => `<span class="tag${r.cell.verified ? ' live' : ''}">${r.cell.verified ? 'live' : 'est'}</span>`,
+      cmp: (a, b) => (a.cell.verified ? 1 : 0) - (b.cell.verified ? 1 : 0) },
+    { key: 'stops', label: 'Stops', cell: (r) => fmtStops(r.cell.transfers),
+      cmp: (a, b) => (a.cell.transfers == null ? 9 : a.cell.transfers) - (b.cell.transfers == null ? 9 : b.cell.transfers) },
+  ];
+
   const rows = [];
   for (const dest of ordered) {
-    for (const cell of dest.cells) {
-      rows.push({ dest, cell, value: cellValue(cell) });
-    }
+    for (const cell of dest.cells) rows.push({ dest, cell, value: cellValue(cell) });
   }
-  rows.sort((a, b) => a.value - b.value);
-  const body = rows
-    .slice(0, 800)
-    .map(
-      (r) =>
-        `<tr><td>${r.dest.city} (${r.dest.destination})</td><td>${weekday(r.cell.depart)} ${shortDate(r.cell.depart)}</td>` +
-        `<td>${weekday(r.cell.ret)} ${shortDate(r.cell.ret)}</td><td>${r.cell.nights}</td>` +
-        `<td>${fmtMoney(r.value, cur)}</td><td>${r.cell.verified ? 'live' : 'estimate'}</td>` +
-        `<td>${fmtStops(r.cell.transfers)}</td></tr>`
-    )
+  const active = cols.find((c) => c.key === tableSort.key) || cols[4];
+  rows.sort((a, b) => active.cmp(a, b) * tableSort.dir || a.value - b.value);
+
+  const head = cols.map((c) => {
+    const on = c.key === tableSort.key;
+    const aria = on ? ` aria-sort="${tableSort.dir === 1 ? 'ascending' : 'descending'}"` : '';
+    return `<th data-sort="${c.key}"${c.num ? ' class="num"' : ''}${aria}>${c.label}</th>`;
+  }).join('');
+  const body = rows.slice(0, 800)
+    .map((r) => '<tr>' + cols.map((c) => `<td${c.num ? ' class="num"' : ''}>${c.cell(r)}</td>`).join('') + '</tr>')
     .join('');
+
   host.innerHTML =
-    '<table><thead><tr><th>Destination</th><th>Depart</th><th>Return</th><th>Nights</th>' +
-    '<th>Total</th><th>Source</th><th>Stops</th></tr></thead><tbody>' + body + '</tbody></table>';
+    `<table><caption class="sr-only">Every priced date pair, ${rows.length} rows${rows.length > 800 ? ' (showing 800)' : ''}. Click a column heading to sort.</caption>` +
+    `<thead><tr>${head}</tr></thead><tbody>${body}</tbody></table>`;
 }
+
+/* Click a heading to sort; same column again flips direction. */
+$('tableview').addEventListener('click', (e) => {
+  const th = e.target.closest('th[data-sort]');
+  if (!th || !state.lastOrdered) return;
+  const key = th.dataset.sort;
+  tableSort.dir = tableSort.key === key ? -tableSort.dir : 1;
+  tableSort.key = key;
+  renderTable(state.lastOrdered);
+});
 
 /* ------------------------------------------------------------------- verify */
 

@@ -525,8 +525,9 @@ table.matrix th.corner {
 
 .card-head {
   display: flex;
-  align-items: baseline;
-  gap: 8px;
+  flex-wrap: wrap;   /* wrap a control onto a second line rather than clip it on a narrow card */
+  align-items: center;
+  gap: 5px 8px;
   margin-bottom: 8px;
 }
 
@@ -832,11 +833,55 @@ table.matrix td.cross-at {
 body.show-table .board { display: none; }
 body.show-table .tableview { display: block; }
 
-.tableview table { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums; }
-.tableview th, .tableview td { border-bottom: 1px solid var(--gridline); padding: 5px 8px; text-align: left; font-size: 13px; }
-.tableview th { color: var(--text-muted); font-weight: 500; position: sticky; top: 72px; background: var(--page); }
+.tableview table {
+  border-collapse: collapse;
+  width: 100%;
+  font-variant-numeric: tabular-nums;
+}
+.tableview th,
+.tableview td {
+  border-bottom: 1px solid var(--gridline);
+  padding: 4px 10px;
+  text-align: left;
+  font-size: 13px;
+  white-space: nowrap;
+}
+.tableview th {
+  color: var(--text-muted);
+  font-weight: 600;
+  position: sticky;
+  top: 72px;
+  background: var(--page);
+  cursor: pointer;
+  user-select: none;
+}
+.tableview th:hover { color: var(--text-secondary); }
+.tableview th[aria-sort] { color: var(--text-primary); }
+.tableview th[aria-sort='ascending']::after { content: ' \2191'; }   /* ↑ */
+.tableview th[aria-sort='descending']::after { content: ' \2193'; }  /* ↓ */
+.tableview th.num, .tableview td.num { text-align: right; }
+.tableview tbody tr:nth-child(even) td { background: color-mix(in oklab, var(--text-primary) 3.5%, transparent); }
+.tableview tbody tr:hover td { background: color-mix(in oklab, var(--text-primary) 9%, transparent); }
+.tableview td .tag {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--text-muted);
+}
+.tableview td .tag.live { color: var(--good); }
 
 .empty { color: var(--text-muted); padding: 40px 0; text-align: center; }
+
+.sr-only {
+  position: absolute;
+  width: 1px; height: 1px;
+  padding: 0; margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
 
 /* ---------------------------------------------------------------- mobile */
 
@@ -914,8 +959,6 @@ body.show-table .tableview { display: block; }
   }
   .board { grid-template-columns: 1fr; gap: 8px; }
   .card { padding: 8px; }
-  /* Let the packed card header wrap on a narrow card instead of clipping its buttons. */
-  .card-head { flex-wrap: wrap; align-items: center; row-gap: 5px; }
 
   /* The grid is no longer its own vertical scroll box — it grows to fit and the
      PAGE scrolls. It still scrolls sideways for the departure-date axis, and a
@@ -939,7 +982,11 @@ body.show-table .tableview { display: block; }
   #panelbody a { display: block; text-align: center; margin-top: 8px; }
   #tooltip { display: none !important; }
 
-  .tableview th { top: 0; }
+  /* The 7-column table can't fit a phone; scroll it sideways rather than crush every
+     column to one letter. A scrolled table drops its sticky header. */
+  body.show-table .tableview { overflow-x: auto; }
+  .tableview table { min-width: 600px; }
+  .tableview th { position: static; }
 
   /* Touch: give the small card-head buttons a real hit area without changing how they
      look, and enlarge the sheet's close control. */
