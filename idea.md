@@ -8,7 +8,6 @@ Things worth doing, not yet scheduled.
 
 | # | Feature | Size | Status |
 |---|---|---|---|
-| 13 | **Stop hitting Kiwi's rate limit** — the datacenter IP is the root cause (Lever 2) | M | todo — priority |
 | 1 | **Filter by airline** — bundled airline-name DB, refreshed periodically (and/or from what searches return) | M | todo |
 | 9 | **Filter by region** — its own field: a collapsible continent → subregion → country tree | M–L | todo — see spec |
 | 11 | **Kids' ages** — per-child age (infant/child buckets), not just a count; changes the price. Must propagate to providers + `party_key` cache key + child-factor scaling | M–L | todo |
@@ -30,17 +29,20 @@ Things worth doing, not yet scheduled.
   be client-side on already-fetched cells (each cell carries `airline`); the search-time
   filter (spend the destination budget inside the filter) is the harder half.
 
-- **#13 Kiwi rate limit.** Root cause is the Oracle datacenter IP — Kiwi 403-blocks it
-  far more aggressively than a residential one. Fixes: (a) `FM_KIWI_PROXY`
-  residential/mobile proxy for Kiwi calls only, (b) whole app behind a Cloudflare Tunnel
-  from a home box, (c) lean on the Google price-graph board (Lever 1). Pacing/backoff
-  tweaks alone won't fix it.
-  **Built (2026-09-07):** `FM_KIWI_PROXY` + `FM_KIWI_PROXY_BUDGET_MB` — `KiwiProvider`
-  routes only its calls through the proxy, counts wire bytes into
-  `data/kiwi_proxy_usage.json`, and drops back to a direct connection once the budget is
-  spent or the proxy fails (incl. HTTP 407). Dormant until a proxy URL is set;
-  `/api/health.kiwi_proxy` shows usage. Still need to **prove residential actually
-  unblocks Kiwi** with a free trial (Luna / NodeMaven, ~1 GB) before deciding to pay.
+- **#13 Kiwi rate limit — mostly handled by #14 (below).** Root cause is the Oracle
+  datacenter IP; Kiwi 403-blocks it far more than a residential one. The free answer is
+  #14 (fast graceful failover to Travelpayouts + live cross-check). Two dormant tools
+  remain if we ever want real Kiwi coverage back:
+  - **Google price-graph board (Lever 1)** — spiked 2026-09-07: Google prices real party
+    totals ✓, but the batched calendar call needs the `SNlM0e` XSRF token Google
+    withholds from anonymous clients → fragile reverse-engineering. Point-query-only
+    board is ~15-20 min for 20 destinations. Parked.
+  - **`FM_KIWI_PROXY` + `FM_KIWI_PROXY_BUDGET_MB`** (built, dormant) — routes only
+    Kiwi's calls through a proxy, counts wire bytes to `data/kiwi_proxy_usage.json`,
+    drops to direct when the budget is spent or the proxy fails (HTTP 407 etc.).
+    `/api/health.kiwi_proxy` shows usage. No free residential proxy that beats Fastly
+    exists without a home connection; a $5 one-time IPRoyal top-up is the cheap option
+    if #14 isn't good enough.
 - **#11 kids' ages.** `children` is a bare count today. Providers price by age bucket
   (infant on lap / infant in seat / child). Needs: per-child ages in the UI →
   `SearchRequest` → each provider (Kiwi `infants`, Google `infants_in_seat` /
