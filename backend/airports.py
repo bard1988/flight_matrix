@@ -76,32 +76,50 @@ def load() -> dict[str, dict[str, str]]:
         return _index
 
 
-# The airport feed carries ISO country codes only, so "greece" would match nothing while
-# "GR" worked. This covers the countries reachable from the Mediterranean/Europe region
-# this tool is aimed at; anything missing still matches by code.
-COUNTRY_NAMES = {
-    "AL": "Albania", "AM": "Armenia", "AT": "Austria", "AZ": "Azerbaijan", "BA": "Bosnia",
-    "BE": "Belgium", "BG": "Bulgaria", "BY": "Belarus", "CH": "Switzerland", "CY": "Cyprus",
-    "CZ": "Czechia Czech Republic", "DE": "Germany", "DK": "Denmark", "EE": "Estonia",
-    "EG": "Egypt", "ES": "Spain", "FI": "Finland", "FR": "France", "GB": "United Kingdom",
-    "GE": "Georgia", "GR": "Greece", "HR": "Croatia", "HU": "Hungary", "IE": "Ireland",
-    "IL": "Israel", "IS": "Iceland", "IT": "Italy", "JO": "Jordan", "KZ": "Kazakhstan",
-    "LT": "Lithuania", "LU": "Luxembourg", "LV": "Latvia", "MA": "Morocco", "MD": "Moldova",
-    "ME": "Montenegro", "MK": "North Macedonia", "MT": "Malta", "NL": "Netherlands",
-    "NO": "Norway", "PL": "Poland", "PT": "Portugal", "RO": "Romania", "RS": "Serbia",
-    "RU": "Russia", "SE": "Sweden", "SI": "Slovenia", "SK": "Slovakia", "TR": "Turkey",
-    "UA": "Ukraine", "UZ": "Uzbekistan", "XK": "Kosovo",
-    "AE": "United Arab Emirates", "SA": "Saudi Arabia", "QA": "Qatar", "BH": "Bahrain",
-    "IN": "India", "TH": "Thailand", "US": "United States", "CA": "Canada",
-    "ZA": "South Africa", "KE": "Kenya", "TZ": "Tanzania", "MU": "Mauritius",
-    "SC": "Seychelles", "MV": "Maldives", "LK": "Sri Lanka", "VN": "Vietnam",
-    "JP": "Japan", "CN": "China", "SG": "Singapore", "AU": "Australia", "BR": "Brazil",
-    "AR": "Argentina", "MX": "Mexico", "CL": "Chile", "PE": "Peru", "CO": "Colombia",
-}
+# Full ISO 3166-1 alpha-2 -> {name, continent, subregion}, derived from mledoze/countries
+# with travel-taxonomy overrides. Regenerate with `py -3 data/build_countries.py`.
+_COUNTRIES_FILE = DATA_DIR / "countries.json"
+_countries: dict[str, dict[str, str]] | None = None
+
+
+def _country_table() -> dict[str, dict[str, str]]:
+    global _countries
+    if _countries is None:
+        try:
+            _countries = json.loads(_COUNTRIES_FILE.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            _countries = {}
+    return _countries
 
 
 def country_name(code: str) -> str:
-    return COUNTRY_NAMES.get((code or "").upper(), "")
+    return _country_table().get((code or "").upper(), {}).get("name", "")
+
+
+def region_of(code: str) -> tuple[str, str]:
+    """(continent, subregion) for an ISO alpha-2 country code, or ('', '') if unknown."""
+    entry = _country_table().get((code or "").upper())
+    return (entry["continent"], entry["subregion"]) if entry else ("", "")
+
+
+def taxonomy() -> list[dict[str, Any]]:
+    """The region tree: continents -> subregions -> countries, for /api/regions."""
+    tree: dict[str, dict[str, list[dict[str, str]]]] = {}
+    for code, e in _country_table().items():
+        cont, sub = e["continent"], e["subregion"]
+        if cont in ("", "Antarctic"):
+            continue
+        tree.setdefault(cont, {}).setdefault(sub, []).append({"code": code, "name": e["name"]})
+    return [
+        {
+            "continent": cont,
+            "subregions": [
+                {"name": sub, "countries": sorted(cs, key=lambda c: c["name"])}
+                for sub, cs in sorted(subs.items())
+            ],
+        }
+        for cont, subs in sorted(tree.items())
+    ]
 
 
 def describe(code: str) -> dict[str, str]:

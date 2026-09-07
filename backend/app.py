@@ -54,6 +54,7 @@ class SearchBody(BaseModel):
     max_price: float | None = None
     window_days: int = Field(default=config.WINDOW_DAYS, ge=1, le=config.MAX_WINDOW_DAYS)
     destination_filter: str = Field(default="", max_length=60)
+    country_codes: list[str] = Field(default_factory=list, max_length=260)
     date_mode: str = Field(default="anchors", pattern="^(anchors|range)$")
     nights_min: int | None = Field(default=None, ge=0, le=60)
     nights_max: int | None = Field(default=None, ge=0, le=60)
@@ -81,6 +82,7 @@ class SearchBody(BaseModel):
             max_price=self.max_price,
             window_days=self.window_days,
             destination_filter=self.destination_filter,
+            country_codes=[c.strip().upper() for c in self.country_codes if c and c.strip()],
             date_mode=self.date_mode,
             nights_min=self.nights_min,
             nights_max=self.nights_max,
@@ -480,6 +482,12 @@ def cell_details(body: VerifyBody) -> dict[str, Any]:
 @app.get("/api/airport/{code}")
 def airport(code: str) -> dict[str, str]:
     return {"code": code.upper(), **airports.describe(code)}
+
+
+@app.get("/api/regions")
+def regions() -> dict[str, Any]:
+    """The region tree for the destination filter: continent -> subregion -> countries."""
+    return {"tree": airports.taxonomy()}
 
 
 @app.middleware("http")

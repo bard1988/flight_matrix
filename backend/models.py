@@ -55,6 +55,11 @@ class SearchRequest:
     # than on the cheapest destinations anywhere and then hidden.
     destination_filter: str = ""
 
+    # Restrict to these ISO alpha-2 country codes (from the region tree). Like
+    # destination_filter, applied at discovery so the budget is spent inside the selection.
+    # Empty = no restriction.
+    country_codes: list[str] = field(default_factory=list)
+
     # How the two date fields are read.
     #   "anchors" - depart_date +-window_days, return_date +-window_days (the original)
     #   "range"   - travel anywhere between depart_date and return_date, for a trip of

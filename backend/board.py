@@ -295,6 +295,20 @@ def build(
             yield emit({"type": "error", "message": str(exc2)})
             return
 
+    # Region tree: restrict to the selected countries, at discovery so the budget is spent
+    # inside the selection (like destination_filter). Both filters compose.
+    if request.country_codes:
+        allowed = {c.upper() for c in request.country_codes}
+        kept = [(code, price) for code, price in candidates
+                if (_describe(provider, code).get("country") or "").upper() in allowed]
+        yield emit({
+            "type": "region_filtered",
+            "countries": len(allowed),
+            "matched": len(kept),
+            "considered": len(candidates),
+        })
+        candidates = kept
+
     # Restrict the search itself, not just the view. Filtering here means the destination
     # budget is spent inside the filter: "IT" searches the cheapest Italian cities, rather
     # than finding the cheapest cities anywhere and then hiding the non-Italian ones.
@@ -337,6 +351,9 @@ def build(
                     f'"{request.destination_filter}". Try a country code (IT), a country '
                     "name (Italy), a city, or clear the box."
                     if request.destination_filter else
+                    "Nothing reachable from here is in the regions you picked. Widen the "
+                    "region selection or clear it."
+                    if request.country_codes else
                     "Nothing came back for this origin and window. Try a different origin, "
                     "drop the nonstop filter, or move the dates."
                 ),
