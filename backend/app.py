@@ -22,6 +22,7 @@ import filler
 from models import SearchRequest
 from providers.base import ProviderError
 from providers.google_flights import GoogleFlightsProvider, google_flights_url
+from providers.kiwi import proxy_status as kiwi_proxy_status
 from providers.travelpayouts import TravelpayoutsProvider
 
 app = FastAPI(title="FlightMatrix", docs_url="/api/docs")
@@ -108,6 +109,7 @@ def health() -> dict[str, Any]:
         "demo": os.environ.get("FM_DEMO") == "1",
         "window_days": config.WINDOW_DAYS,
         "child_factor": config.CHILD_FACTOR,
+        "kiwi_proxy": kiwi_proxy_status(),
         "defaults": {
             "origin": config.DEFAULT_ORIGIN,
             "currency": config.DEFAULT_CURRENCY,

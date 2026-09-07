@@ -30,12 +30,17 @@ Things worth doing, not yet scheduled.
   be client-side on already-fetched cells (each cell carries `airline`); the search-time
   filter (spend the destination budget inside the filter) is the harder half.
 
-- **#13 Kiwi rate limit.** This is Lever 2 below, promoted to a scheduled item. The
-  root cause is the Oracle datacenter IP — Kiwi 403-blocks it far more aggressively
-  than a residential one. Real fixes: (a) `FM_KIWI_PROXY` residential/mobile proxy for
-  Kiwi calls only, (b) run the whole app behind a Cloudflare Tunnel from a home/office
-  box, (c) lean on the Google price-graph board (Lever 1) as primary and use Kiwi only
-  to cross-check cheapest cells. Pacing/backoff/cache tweaks alone won't fix it.
+- **#13 Kiwi rate limit.** Root cause is the Oracle datacenter IP — Kiwi 403-blocks it
+  far more aggressively than a residential one. Fixes: (a) `FM_KIWI_PROXY`
+  residential/mobile proxy for Kiwi calls only, (b) whole app behind a Cloudflare Tunnel
+  from a home box, (c) lean on the Google price-graph board (Lever 1). Pacing/backoff
+  tweaks alone won't fix it.
+  **Built (2026-09-07):** `FM_KIWI_PROXY` + `FM_KIWI_PROXY_BUDGET_MB` — `KiwiProvider`
+  routes only its calls through the proxy, counts wire bytes into
+  `data/kiwi_proxy_usage.json`, and drops back to a direct connection once the budget is
+  spent or the proxy fails (incl. HTTP 407). Dormant until a proxy URL is set;
+  `/api/health.kiwi_proxy` shows usage. Still need to **prove residential actually
+  unblocks Kiwi** with a free trial (Luna / NodeMaven, ~1 GB) before deciding to pay.
 - **#11 kids' ages.** `children` is a bare count today. Providers price by age bucket
   (infant on lap / infant in seat / child). Needs: per-child ages in the UI →
   `SearchRequest` → each provider (Kiwi `infants`, Google `infants_in_seat` /

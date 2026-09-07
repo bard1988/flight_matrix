@@ -45,6 +45,51 @@ _slug_lock = threading.Lock()
 _slug_cache: dict[str, str] | None = None
 
 
+# --- proxy bandwidth guard ---------------------------------------------------------
+# A metered proxy (typically a free-trial residential pool) carries Kiwi's calls until
+# its byte budget is spent, then the provider falls back to a direct connection - the
+# same behaviour as no proxy at all. Usage is cumulative and persisted, so a restart
+# mid-trial does not reset the count.
+_PROXY_USAGE_FILE = config.DATA_DIR / "kiwi_proxy_usage.json"
+_proxy_lock = threading.Lock()
+
+
+def _proxy_bytes_used() -> int:
+    try:
+        return int(json.loads(_PROXY_USAGE_FILE.read_text(encoding="utf-8")).get("bytes", 0))
+    except (OSError, json.JSONDecodeError, ValueError, TypeError):
+        return 0
+
+
+def _proxy_budget_bytes() -> int:
+    return int(config.KIWI_PROXY_BUDGET_MB * 1024 * 1024)
+
+
+def _add_proxy_bytes(n: int) -> int:
+    """Add to the running total, persist it, and return the new total."""
+    with _proxy_lock:
+        total = _proxy_bytes_used() + max(0, int(n))
+        try:
+            config.DATA_DIR.mkdir(parents=True, exist_ok=True)
+            _PROXY_USAGE_FILE.write_text(json.dumps({"bytes": total}), encoding="utf-8")
+        except OSError:
+            pass
+        return total
+
+
+def proxy_status() -> dict[str, Any]:
+    """For /api/health: whether a Kiwi proxy is configured and how much budget is left."""
+    if not config.KIWI_PROXY:
+        return {"configured": False}
+    used = _proxy_bytes_used()
+    return {
+        "configured": True,
+        "active": used < _proxy_budget_bytes(),
+        "used_mb": round(used / 1024 / 1024, 1),
+        "budget_mb": round(config.KIWI_PROXY_BUDGET_MB, 1),
+    }
+
+
 def _slugs() -> dict[str, str]:
     global _slug_cache
     with _slug_lock:
@@ -200,13 +245,44 @@ class KiwiProvider:
     name = "kiwi"
 
     def __init__(self, timeout: float = 60.0, on_status: Any = None) -> None:
-        self._client = httpx.Client(timeout=timeout, verify=config.CA_BUNDLE,
-                                    headers=_HEADERS, follow_redirects=True)
+        self._timeout = timeout
         self._lock = threading.Lock()
+        self.on_status = on_status
+        # Use the proxy only if one is configured AND its budget is not already spent.
+        self._proxy: str | None = (
+            config.KIWI_PROXY
+            if config.KIWI_PROXY and _proxy_bytes_used() < _proxy_budget_bytes()
+            else None
+        )
+        self._client = self._new_client()
         self._next_allowed = 0.0
         self._blocked_until = 0.0
-        self.on_status = on_status
         self.strategy = "kiwi-calendar"
+        if self._proxy:
+            self._note(
+                f"Kiwi calls routed through the proxy "
+                f"({_proxy_bytes_used() // (1024 * 1024)} of "
+                f"{int(config.KIWI_PROXY_BUDGET_MB)} MB used)."
+            )
+        elif config.KIWI_PROXY:
+            self._note("Kiwi proxy budget already spent - using a direct connection.")
+
+    def _new_client(self) -> httpx.Client:
+        return httpx.Client(timeout=self._timeout, verify=config.CA_BUNDLE,
+                            headers=_HEADERS, follow_redirects=True, proxy=self._proxy)
+
+    def _drop_proxy(self, why: str) -> None:
+        """Swap to a direct connection - the byte budget is spent, or the proxy failed."""
+        with self._lock:
+            if not self._proxy:
+                return
+            self._proxy = None
+            old, self._client = self._client, self._new_client()
+        try:
+            old.close()
+        except Exception:
+            pass
+        self._note(f"Kiwi proxy {why} - direct connection now; rate-limit waits may return.")
 
     # ------------------------------------------------------------------ transport
 
@@ -251,9 +327,31 @@ class KiwiProvider:
             try:
                 response = self._client.post(ENDPOINT, content=body)
             except httpx.HTTPError as exc:
+                # A flaky proxy: abandon it and retry this attempt directly rather than
+                # spending the wait budget on a transport we can just drop.
+                if self._proxy and isinstance(
+                    exc, (httpx.ProxyError, httpx.ConnectError, httpx.ConnectTimeout)
+                ):
+                    self._drop_proxy(f"connection failed ({type(exc).__name__})")
+                    continue
                 last = exc
                 time.sleep(1.5)
                 continue
+
+            if self._proxy:
+                # Count what went over the proxy (request body + wire response + headers
+                # overhead) and step down to direct once the budget is spent. num_bytes_
+                # downloaded is the compressed wire size; over-counting here is safe.
+                spent = _add_proxy_bytes(
+                    len(body)
+                    + (getattr(response, "num_bytes_downloaded", 0) or len(response.content))
+                    + 2048
+                )
+                if spent >= _proxy_budget_bytes():
+                    self._drop_proxy("byte budget spent")
+                elif response.status_code == 407:  # Proxy Authentication Required
+                    self._drop_proxy("rejected our credentials (trial expired?)")
+                    continue
 
             if response.status_code in (403, 429):
                 backoff = min(config.KIWI_BACKOFF_BASE * (2 ** attempt), config.KIWI_BACKOFF_MAX)

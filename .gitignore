@@ -3,6 +3,7 @@ data/cache.sqlite-wal
 data/cache.sqlite-shm
 data/airports.json
 data/ca-merged.pem
+data/kiwi_proxy_usage.json
 .env
 wheels/
 shots/

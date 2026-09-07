@@ -109,6 +109,15 @@ KIWI_WORKERS = int(os.environ.get("FM_KIWI_WORKERS", "2"))
 # Minimum seconds between Kiwi calls. It IP-blocks bursts and a block lasts minutes.
 KIWI_MIN_INTERVAL = float(os.environ.get("FM_KIWI_MIN_INTERVAL", "0.8"))
 
+# Route ONLY Kiwi's calls through a proxy, to get off the datacenter IP Kiwi rate-limits
+# hardest (Google and Travelpayouts stay direct). Format: http://user:pass@host:port.
+# The budget guards a metered / free-trial proxy: once that many MB have gone through it
+# the provider drops back to a direct connection - identical to running with no proxy,
+# the existing 403 backoff just does the work again. Usage is cumulative and persisted to
+# data/kiwi_proxy_usage.json; delete that file to reset (e.g. on a fresh trial).
+KIWI_PROXY = os.environ.get("FM_KIWI_PROXY", "").strip() or None
+KIWI_PROXY_BUDGET_MB = float(os.environ.get("FM_KIWI_PROXY_BUDGET_MB", "950"))
+
 # A Kiwi 403 clears on its own, so wait it out rather than dropping to worse data.
 # Waiting a couple of minutes beats falling back to scaled estimates.
 KIWI_WAIT_BUDGET = float(os.environ.get("FM_KIWI_WAIT_BUDGET", "180"))
