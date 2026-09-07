@@ -113,9 +113,9 @@ on Google Flights), *anchors mode* vs *range mode*, *EST* / `KIWI` / *LIVE*.
 
 ## Brand Commitments
 
-- **Name is undecided.** "SkyMatrix" is used throughout `README.md` and the code; the live
-  DNS says **flightmatrix**; the repo is `flight_matrix`. Future work must not assume one
-  until the user picks.
+- **Name: FlightMatrix** (confirmed 2026-09-07), matching the live DNS and the
+  `flight_matrix` repo. The earlier working name "SkyMatrix" has been renamed out across
+  docs, code, and deploy config; any surface that shows the wordmark uses **FlightMatrix**.
 - **Voice** (established in the README, treated as the working voice, not formally locked):
   plain, precise, measurement-led, and candid about the product's limits — it states error
   bars and horizon ceilings rather than implying false precision.
