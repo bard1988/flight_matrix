@@ -10,7 +10,6 @@ Things worth doing, not yet scheduled.
 |---|---|---|---|
 | 1 | **Filter by airline** — bundled airline-name DB, refreshed periodically (and/or from what searches return) | M | todo |
 | 6 | **Cabin class** selector (economy / premium / business) — thread through provider → API → UI | M | todo |
-| 5 | **Colour scale** to a plain green → orange → red diverging ramp | S | todo — see note |
 | 4 | Make **"any trip inside this period" (range mode) the default**; nights box controls trip length; drop anchors mode | L | todo — destructive, decide first |
 | 7 | **Mobile: more compact** | M | todo |
 | 7.1 | — passengers shown in the bar, not behind Options | S | todo |
@@ -19,11 +18,6 @@ Things worth doing, not yet scheduled.
 
 ### Notes on specific items
 
-- **#5 colour scale.** The current ramp is a *deliberately asymmetric* diverging ramp
-  (`data/emit_ramp_css.py`, `data/check_diverging_cvd.py`) because a naive green→orange→red
-  is the classic red-green colour-blind failure — deuteranopia can't separate the ends.
-  If we go green→orange→red anyway, regenerate via the ramp scripts and re-run the CVD
-  check; keep the per-cell price labels (they already carry the meaning without colour).
 - **#4 drop anchors mode.** `date_mode` (`anchors|range`) is threaded through `models.py`,
   `board.py`, `app.py` and the frontend. Removing a mode is a real refactor and changes
   the default UX — confirm before starting.
@@ -133,6 +127,17 @@ correctly no-ops on the VM; a proxy integration should not resurrect it.
 ---
 
 ## Done features
+
+### #5 — Green → orange → red colour ramp (2026-09-07)
+
+Replaced the neutral-midpoint diverging ramp with a plain traffic-light scale
+(q0 green → q3 orange → q6 red). Green/orange/red is the classic red-green
+colour-blind failure, so the ramp's **WCAG luminance is strictly monotonic**
+cheap→dear — it still reads as light→dark with hue removed — and every cell still
+prints its price. Per-step ink recomputed for contrast. Light + both dark blocks in
+`frontend/styles.css`; derivation + CVD check in `data/make_ramp_traffic.py`
+(supersedes `make_ramp_diverging.py` / `emit_ramp_css.py`). Middle mirrored pair
+(q2 vs q4) is deutan ΔE ~6-7 — weak on hue alone, covered by luminance + labels.
 
 ### #2 — Currency without re-search (2026-09-07)
 

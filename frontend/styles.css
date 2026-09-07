@@ -22,18 +22,19 @@
   --ink-flipped: #ffffff;
   --cheapest: #f2b705;   /* reserved for the cheapest-cell marker, never used as a fill */
 
-  /* Diverging price ramp, q0 = cheapest (green) -> q6 = dearest (red), with the ink that
-     is readable on each step. The arms are ASYMMETRIC in lightness on purpose: with
-     symmetric arms the mirrored pairs measured a deuteranopia Delta E of 0.7-1.5, i.e.
-     cheapest and dearest were indistinguishable to a red-green colour-blind reader.
-     See data/emit_ramp_css.py and data/check_diverging_cvd.py. */
-  --q0: #0b5809;  --qi0: #ffffff;
-  --q1: #368f32;  --qi1: #0b0b0b;
-  --q2: #88c083;  --qi2: #0b0b0b;
-  --q3: #e3eae3;  --qi3: #0b0b0b;
-  --q4: #fcbcb6;  --qi4: #0b0b0b;
-  --q5: #fb968e;  --qi5: #0b0b0b;
-  --q6: #fa6963;  --qi6: #0b0b0b;
+  /* Price ramp: q0 = cheapest (green) -> q3 = mid (orange) -> q6 = dearest (red).
+     Hue alone fails red-green colour blindness (green/orange/red all collapse together
+     under deuteranopia), so LIGHTNESS carries the scale: WCAG relative luminance is
+     strictly monotonic cheapest -> dearest, i.e. the ramp still reads as light -> dark
+     with hue fully removed. Every cell also prints its price, which is the real backstop.
+     --qiN is the readable ink (black/white) for step N. */
+  --q0: #54b95c;  --qi0: #0b0b0b;
+  --q1: #4f9e3c;  --qi1: #0b0b0b;
+  --q2: #7f8a2f;  --qi2: #0b0b0b;
+  --q3: #b0742a;  --qi3: #0b0b0b;
+  --q4: #a95a2c;  --qi4: #ffffff;
+  --q5: #903a27;  --qi5: #ffffff;
+  --q6: #6a2a20;  --qi6: #ffffff;
   --hatch: rgba(11, 11, 11, 0.07);
 }
 
@@ -51,13 +52,14 @@
     --ink-on-fill: #ffffff;
     --ink-flipped: #0b0b0b;
     --cheapest: #ffcf33;
-    --q0: #5dd656;  --qi0: #0b0b0b;
-    --q1: #49a144;  --qi1: #0b0b0b;
-    --q2: #396e35;  --qi2: #ffffff;
-    --q3: #343a34;  --qi3: #ffffff;
-    --q4: #762c29;  --qi4: #ffffff;
-    --q5: #9c2527;  --qi5: #ffffff;
-    --q6: #c11925;  --qi6: #ffffff;
+    /* green -> orange -> red, luminance monotonic on the dark surface too */
+    --q0: #63c96a;  --qi0: #0b0b0b;
+    --q1: #69b544;  --qi1: #0b0b0b;
+    --q2: #9ba23f;  --qi2: #0b0b0b;
+    --q3: #cf8b3c;  --qi3: #0b0b0b;
+    --q4: #c56b34;  --qi4: #0b0b0b;
+    --q5: #b04a30;  --qi5: #ffffff;
+    --q6: #94382b;  --qi6: #ffffff;
     --hatch: rgba(255, 255, 255, 0.08);
   }
 }
@@ -75,13 +77,14 @@
   --ink-on-fill: #ffffff;
   --ink-flipped: #0b0b0b;
   --cheapest: #ffcf33;
-  --q0: #5dd656;  --qi0: #0b0b0b;
-  --q1: #49a144;  --qi1: #0b0b0b;
-  --q2: #396e35;  --qi2: #ffffff;
-  --q3: #343a34;  --qi3: #ffffff;
-  --q4: #762c29;  --qi4: #ffffff;
-  --q5: #9c2527;  --qi5: #ffffff;
-  --q6: #c11925;  --qi6: #ffffff;
+  /* green -> orange -> red, luminance monotonic on the dark surface too */
+  --q0: #63c96a;  --qi0: #0b0b0b;
+  --q1: #69b544;  --qi1: #0b0b0b;
+  --q2: #9ba23f;  --qi2: #0b0b0b;
+  --q3: #cf8b3c;  --qi3: #0b0b0b;
+  --q4: #c56b34;  --qi4: #0b0b0b;
+  --q5: #b04a30;  --qi5: #ffffff;
+  --q6: #94382b;  --qi6: #ffffff;
   --hatch: rgba(255, 255, 255, 0.08);
 }
 
