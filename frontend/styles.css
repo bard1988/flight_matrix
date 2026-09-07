@@ -90,6 +90,10 @@
 
 * { box-sizing: border-box; }
 
+/* The app drives several spans/buttons with the `hidden` attribute; make sure an
+   author `display` on the same element can't override it. */
+[hidden] { display: none !important; }
+
 body {
   margin: 0;
   background: var(--page);
@@ -107,22 +111,24 @@ header.controls {
   z-index: 30;
   background: var(--surface-1);
   border-bottom: 1px solid var(--border);
-  padding: 10px 16px;
 }
 
-.controls-row {
+/* The primary row carries the whole task path — from, dates, travellers, Search —
+   and nothing else. Every refinement lives in the Filters panel below. */
+.controls-primary {
   display: flex;
   flex-wrap: wrap;
   align-items: flex-end;
-  gap: 10px 14px;
+  gap: 8px 12px;
+  padding: 10px 16px;
 }
 
 .brand {
   font-size: 15px;
   font-weight: 700;
   letter-spacing: -0.01em;
-  padding-bottom: 5px;
-  margin-right: 4px;
+  padding-bottom: 6px;
+  margin-right: 6px;
   white-space: nowrap;
 }
 
@@ -130,6 +136,7 @@ header.controls {
 
 .field > label {
   font-size: 11px;
+  line-height: 1.3;
   letter-spacing: 0.02em;
   text-transform: uppercase;
   color: var(--text-muted);
@@ -146,16 +153,36 @@ header.controls {
   min-width: 72px;
 }
 
-.field input[type='date'] { min-width: 140px; }
-.field.narrow input { width: 64px; min-width: 0; }
+.field input:focus-visible,
+.field select:focus-visible {
+  outline: none;
+  border-color: var(--text-primary);
+  box-shadow: 0 0 0 1px var(--text-primary);
+}
+
+.field input[type='date'] { min-width: 138px; }
+
+/* Field widths, keyed by what they hold. */
+.field-xs input,
+.field-xs select { width: 68px; min-width: 0; }
+.field-sm input { width: 84px; min-width: 0; }
+.field-mode select { min-width: 236px; }
+.field-date { min-width: 138px; }
+
+/* Adults + Children sit together as one "travellers" unit. */
+.field-group {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+}
 
 /* Day-of-week pickers: seven toggles, empty meaning "any day". */
 .dow { display: flex; gap: 2px; }
 
 .dow button {
-  width: 20px;
-  padding: 4px 0;
-  font-size: 10px;
+  width: 24px;
+  padding: 5px 0;
+  font-size: 11px;
   border-radius: 4px;
   color: var(--text-muted);
 }
@@ -168,7 +195,7 @@ header.controls {
 }
 
 .hours { display: flex; gap: 3px; }
-.hours select { min-width: 0; width: 62px; padding: 5px 2px; }
+.hours select { min-width: 0; width: 68px; padding: 5px 4px; }
 
 /* Time windows only take effect on a new search, so the button says so. */
 button.primary.running { opacity: .75; }
@@ -180,7 +207,72 @@ button.primary.stale {
 }
 
 .nights { display: flex; gap: 3px; }
-.nights input { width: 46px; min-width: 0; }
+.nights input { width: 62px; min-width: 0; }
+
+/* -------------------------------------------------- filters (progressive disclosure) */
+
+.opts-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.opts-chevron {
+  font-size: 13px;
+  line-height: 1;
+  transition: transform 0.15s ease;
+}
+
+.opts-toggle[aria-expanded='true'] {
+  background: var(--text-primary);
+  color: var(--surface-1);
+  border-color: var(--text-primary);
+}
+
+.opts-toggle[aria-expanded='true'] .opts-chevron { transform: rotate(90deg); }
+
+/* Closed by default at every width. A search also closes it (app.js), so the board
+   gets the screen once your filters are reflected in it. */
+.controls-adv { display: none; }
+
+body.opts-open .controls-adv {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px 44px;
+  padding: 14px 16px 16px;
+  border-top: 1px solid var(--border);
+  background: var(--page);   /* a step back from the header surface */
+}
+
+.adv-group { flex: 0 1 340px; min-width: 0; }
+
+.adv-group-label {
+  display: block;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  padding-bottom: 8px;
+  margin-bottom: 10px;
+  border-bottom: 1px solid var(--gridline);
+}
+
+.adv-fields {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 10px 14px;
+}
+
+.adv-actions {
+  flex-basis: 100%;
+  display: flex;
+  align-items: flex-end;
+  padding-top: 2px;
+}
+
+.controls-adv .check { padding-bottom: 0; }
 
 /* Cells ruled out by a constraint stay visible but recede, so you can see what you
    excluded and what it would have cost. */
@@ -208,6 +300,12 @@ button {
 button:hover { border-color: var(--text-muted); }
 button[disabled] { opacity: 0.5; cursor: default; }
 
+button:focus-visible {
+  outline: none;
+  border-color: var(--text-primary);
+  box-shadow: 0 0 0 1px var(--text-primary);
+}
+
 button.primary {
   background: var(--text-primary);
   color: var(--surface-1);
@@ -217,13 +315,13 @@ button.primary {
 .spacer { flex: 1 1 auto; }
 
 .status {
-  padding: 6px 16px 0;
+  padding: 8px 16px 0;
   color: var(--text-secondary);
   font-size: 13px;
   display: flex;
-  gap: 14px;
-  align-items: center;
-  flex-wrap: wrap;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
 }
 
 .status .err { color: var(--critical); }
@@ -241,7 +339,8 @@ button.primary {
 .legend {
   display: flex;
   align-items: center;
-  gap: 8px;
+  flex-wrap: wrap;
+  gap: 4px 8px;
   font-size: 12px;
   color: var(--text-secondary);
 }
@@ -663,14 +762,11 @@ body.show-table .tableview { display: block; }
 
 .tableview table { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums; }
 .tableview th, .tableview td { border-bottom: 1px solid var(--gridline); padding: 5px 8px; text-align: left; font-size: 13px; }
-.tableview th { color: var(--text-muted); font-weight: 500; position: sticky; top: 92px; background: var(--page); }
+.tableview th { color: var(--text-muted); font-weight: 500; position: sticky; top: 72px; background: var(--page); }
 
 .empty { color: var(--text-muted); padding: 40px 0; text-align: center; }
 
 /* ---------------------------------------------------------------- mobile */
-
-/* The options toggle only exists on narrow screens; on desktop the whole row wraps. */
-.opts-toggle { display: none; }
 
 @media (max-width: 720px) {
   header.controls {
@@ -678,52 +774,58 @@ body.show-table .tableview { display: block; }
        just means it follows you down the page. Let it scroll away; scroll back
        up to run another search. */
     position: static;
+  }
+
+  .controls-primary {
+    gap: 8px 10px;
+    align-items: stretch;
     padding: 8px 12px;
   }
-
-  .controls-row { gap: 8px 10px; align-items: stretch; }
   .brand { align-self: center; padding-bottom: 0; margin-right: auto; }
+  .spacer { display: none; }
 
-  /* Collapsed bar: pack the essentials two-per-row instead of one tall stack. */
-  .controls-row > .field.core { flex: 1 1 calc(50% - 5px); }
-  .controls-row > .field.core > label { font-size: 10px; }
+  /* Primary fields stack full-width; the compact ones pair up two-per-row. */
+  .controls-primary > .field { flex: 1 1 100%; }
+  .controls-primary > .field-xs,
+  .controls-primary > .field-sm { flex: 1 1 calc(50% - 5px); }
+  .field-group { flex: 1 1 100%; gap: 8px; }
+  .field-group > .field { flex: 1 1 calc(50% - 4px); }
 
-  .opts-toggle {
-    display: inline-flex;
-    align-items: center;
-    margin-left: auto;
-    padding: 8px 14px;
-  }
-  .opts-toggle[aria-expanded='true'] {
-    background: var(--text-primary);
-    color: var(--surface-1);
-    border-color: var(--text-primary);
-  }
-
-  /* Collapsed: show only the essentials. Expanded (body.opts-open): show everything. */
-  .controls-row > *:not(.core):not(.opts-toggle) { display: none; }
-  body.opts-open .controls-row > .field,
-  body.opts-open .controls-row > .check,
-  body.opts-open .controls-row > .spacer { display: flex; }
-  body.opts-open .controls-row > button { display: inline-flex; }
-
-  /* Full-width stacked fields with tap-friendly, no-zoom (16px) inputs. */
-  .controls-row > .field { flex: 1 1 100%; }
-  /* Once expanded, let the small fields pair up two-per-row. */
-  body.opts-open .controls-row > .field.narrow { flex: 1 1 calc(50% - 5px); }
   .field input,
   .field select {
     width: 100%;
     min-width: 0;
-    font-size: 16px;
+    font-size: 16px;   /* 16px keeps iOS from zooming the viewport on focus */
     padding: 9px 10px;
   }
-  .field.narrow input { width: 100%; }
-  .field input[type='date'] { min-width: 0; }
+  .field-mode select,
+  .field-xs input,
+  .field-xs select,
+  .field-sm input,
+  .field input[type='date'] { min-width: 0; width: 100%; }
 
-  .controls-row > button:not(.opts-toggle),
-  #go { flex: 1 1 100%; padding: 11px; font-size: 15px; }
-  .check { flex: 1 1 100%; padding: 4px 0; }
+  .controls-primary > #go,
+  .controls-primary > #stop { flex: 1 1 100%; padding: 11px; font-size: 15px; }
+  .controls-primary > .opts-toggle,
+  .controls-primary > #tabletoggle,
+  .controls-primary > #themetoggle {
+    flex: 1 1 auto;
+    padding: 10px 12px;
+    font-size: 14px;
+  }
+
+  /* Filters panel: one column, groups stacked. */
+  body.opts-open .controls-adv {
+    gap: 18px;
+    padding: 14px 12px 16px;
+  }
+  .adv-group { flex-basis: 100%; }
+  .adv-fields > .field,
+  .adv-fields > .check { flex: 1 1 100%; }
+  .adv-fields > .field-xs,
+  .adv-fields > .field-sm { flex: 1 1 calc(50% - 7px); }
+
+  .check { padding: 4px 0; }
 
   .dow { justify-content: space-between; }
   .dow button { flex: 1; width: auto; padding: 8px 0; font-size: 12px; }
@@ -732,7 +834,7 @@ body.show-table .tableview { display: block; }
   .hours select { flex: 1; font-size: 16px; padding: 9px 4px; }
   .nights input { flex: 1; width: auto; font-size: 16px; }
 
-  .status { padding: 6px 12px 0; font-size: 12px; gap: 8px; }
+  .status { padding: 6px 12px 0; font-size: 12px; }
 
   main { padding: 10px 10px 48px; }
   .board { grid-template-columns: 1fr; gap: 8px; }

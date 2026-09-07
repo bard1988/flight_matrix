@@ -9,94 +9,125 @@
 <body>
 
 <header class="controls">
-  <div class="controls-row">
+  <div class="controls-primary">
     <span class="brand">FlightMatrix</span>
-    <button type="button" id="optsbtn" class="opts-toggle" aria-expanded="false">Options</button>
-    <div class="field narrow core">
+
+    <div class="field field-sm">
       <label for="origin">From</label>
       <input id="origin" value="TLV" maxlength="3" autocapitalize="characters" />
     </div>
-    <div class="field core">
+    <div class="field field-mode">
       <label for="datemode">Dates mean</label>
       <select id="datemode">
         <option value="anchors" title="The two dates are approximate. The board covers a window either side of each, so you see whether shifting a day or two is cheaper.">Roughly these dates (± a few days)</option>
         <option value="range" title="The two dates bound a period. The Nights box says what to look for inside it, e.g. a 3-4 night break sometime in that window.">Any trip inside this period</option>
       </select>
     </div>
-    <div class="field core">
+    <div class="field field-date">
       <label for="depart" id="departlabel">Depart around</label>
       <input id="depart" type="date" />
     </div>
-    <div class="field core">
+    <div class="field field-date">
       <label for="ret" id="retlabel">Return around</label>
       <input id="ret" type="date" />
     </div>
-    <div class="field narrow">
-      <label for="adults">Adults</label>
-      <input id="adults" type="number" min="1" max="9" value="2" />
+    <div class="field-group" role="group" aria-label="Travellers">
+      <div class="field field-xs">
+        <label for="adults">Adults</label>
+        <input id="adults" type="number" min="1" max="9" value="2" />
+      </div>
+      <div class="field field-xs">
+        <label for="children">Children</label>
+        <input id="children" type="number" min="0" max="8" value="0" />
+      </div>
     </div>
-    <div class="field narrow">
-      <label for="children">Children</label>
-      <input id="children" type="number" min="0" max="8" value="0" />
-    </div>
-    <div class="field narrow">
-      <label for="dests">Places</label>
-      <input id="dests" type="number" min="1" max="60" value="20" />
-    </div>
-    <div class="field narrow">
-      <label for="currency">Currency</label>
-      <select id="currency">
-        <option value="ils">ILS</option>
-        <option value="eur">EUR</option>
-        <option value="usd">USD</option>
-        <option value="gbp">GBP</option>
-      </select>
-    </div>
-    <div class="field narrow">
-      <label for="maxprice">Max total</label>
-      <input id="maxprice" type="number" min="0" step="100" placeholder="any" />
-    </div>
-    <div class="field">
-      <label for="destfilter">Only destinations</label>
-      <input id="destfilter" type="search" placeholder="city, code or country" autocomplete="off"
-             title="Set before Search to restrict the search itself (e.g. IT = Italy only); type after a search to narrow what is shown" />
-    </div>
-    <div class="field">
-      <label>Depart on</label>
-      <div class="dow" id="dowdep"></div>
-    </div>
-    <div class="field">
-      <label>Return on</label>
-      <div class="dow" id="dowret"></div>
-    </div>
-    <div class="field narrow">
-      <label for="nmin">Nights</label>
-      <span class="nights">
-        <input id="nmin" type="number" min="0" max="60" placeholder="min" />
-        <input id="nmax" type="number" min="0" max="60" placeholder="max" />
-      </span>
-    </div>
-    <div class="field">
-      <label for="dephfrom">Depart between</label>
-      <span class="hours">
-        <select id="dephfrom"></select><select id="dephto"></select>
-      </span>
-    </div>
-    <div class="field">
-      <label for="rethfrom">Return between</label>
-      <span class="hours">
-        <select id="rethfrom"></select><select id="rethto"></select>
-      </span>
-    </div>
-    <button id="clearconstraints" title="Clear day, night and time constraints">Clear</button>
-    <label class="check"><input type="checkbox" id="nonstop" /> Nonstop only</label>
-    <label class="check"><input type="checkbox" id="perperson" /> Per person</label>
-    <label class="check" title="After the board loads, re-price its cheapest cells live on Google Flights"><input type="checkbox" id="autoverify" checked /> Auto cross-check</label>
-    <button id="go" class="primary core">Search</button>
-    <button id="stop" class="core" hidden title="Stop the running search and keep what has loaded">Stop</button>
+
+    <button id="go" class="primary">Search</button>
+    <button id="stop" hidden title="Stop the running search and keep what has loaded">Stop</button>
+
     <span class="spacer"></span>
+
+    <button type="button" id="optsbtn" class="opts-toggle" aria-expanded="false" aria-controls="advfilters">
+      Filters<span class="opts-chevron" aria-hidden="true">›</span>
+    </button>
     <button id="tabletoggle" title="Accessible table of every priced cell">Table view</button>
     <button id="themetoggle" title="Toggle light and dark">Theme</button>
+  </div>
+
+  <div class="controls-adv" id="advfilters">
+    <div class="adv-group">
+      <span class="adv-group-label">Trip length &amp; days</span>
+      <div class="adv-fields">
+        <div class="field">
+          <label for="nmin">Nights</label>
+          <span class="nights">
+            <input id="nmin" type="number" min="0" max="60" placeholder="min" />
+            <input id="nmax" type="number" min="0" max="60" placeholder="max" />
+          </span>
+        </div>
+        <div class="field">
+          <label>Depart on</label>
+          <div class="dow" id="dowdep"></div>
+        </div>
+        <div class="field">
+          <label>Return on</label>
+          <div class="dow" id="dowret"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="adv-group">
+      <span class="adv-group-label">Flight times</span>
+      <div class="adv-fields">
+        <div class="field">
+          <label for="dephfrom">Depart between</label>
+          <span class="hours">
+            <select id="dephfrom"></select><select id="dephto"></select>
+          </span>
+        </div>
+        <div class="field">
+          <label for="rethfrom">Return between</label>
+          <span class="hours">
+            <select id="rethfrom"></select><select id="rethto"></select>
+          </span>
+        </div>
+        <label class="check"><input type="checkbox" id="nonstop" /> Nonstop only</label>
+      </div>
+    </div>
+
+    <div class="adv-group">
+      <span class="adv-group-label">Results</span>
+      <div class="adv-fields">
+        <div class="field field-xs">
+          <label for="dests">Places</label>
+          <input id="dests" type="number" min="1" max="60" value="20" />
+        </div>
+        <div class="field field-xs">
+          <label for="currency">Currency</label>
+          <select id="currency">
+            <option value="ils">ILS</option>
+            <option value="eur">EUR</option>
+            <option value="usd">USD</option>
+            <option value="gbp">GBP</option>
+          </select>
+        </div>
+        <div class="field field-sm">
+          <label for="maxprice">Max total</label>
+          <input id="maxprice" type="number" min="0" step="100" placeholder="any" />
+        </div>
+        <div class="field">
+          <label for="destfilter">Only destinations</label>
+          <input id="destfilter" type="search" placeholder="city, code or country" autocomplete="off"
+                 title="Set before Search to restrict the search itself (e.g. IT = Italy only); type after a search to narrow what is shown" />
+        </div>
+        <label class="check"><input type="checkbox" id="perperson" /> Per person</label>
+        <label class="check" title="After the board loads, re-price its cheapest cells live on Google Flights"><input type="checkbox" id="autoverify" checked /> Auto cross-check</label>
+      </div>
+    </div>
+
+    <div class="adv-actions">
+      <button id="clearconstraints" title="Clear day, night and time constraints">Clear</button>
+    </div>
   </div>
 </header>
 
