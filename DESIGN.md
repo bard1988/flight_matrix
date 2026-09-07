@@ -4,7 +4,7 @@ description: A flexible-date, any-destination fare board that compares many trip
 colors:
   ink: "#0b0b0b"
   ink-secondary: "#52514e"
-  ink-muted: "#898781"
+  ink-muted: "#6c6960"
   paper: "#f9f9f7"
   paper-raised: "#fcfcfb"
   gridline: "#e1e0d9"
@@ -133,7 +133,7 @@ A warm near-monochrome — cream-tinted paper, near-black ink, warm greys — wi
 - **Paper** (`#f9f9f7`): The page ground and the fill of every input and secondary button. A faint cream warmth, not a cool grey — this is the system's neutral character and is intentional.
 - **Paper Raised** (`#fcfcfb`): Cards, the sticky header, the side panel, the tooltip — one step lighter than Paper so raised surfaces separate by tone alone.
 - **Ink Secondary** (`#52514e`): Body-weight secondary text — status line, panel values, weekend header emphasis.
-- **Ink Muted** (`#898781`): Field labels, column/row headers, tags, "growing" hints — text that is present but not competing.
+- **Ink Muted** (`#6c6960`; `#97938a` in dark): Field labels, filter-group headers, tags, status hints, card metadata — present but not competing. Darkened from a paler grey so it clears WCAG AA (≥ 5:1 on both surfaces) at the small sizes it runs at.
 - **Gridline** (`#e1e0d9`): Table rules, dividers, the neutral "no scale available" cell, cross-hair header wash.
 - **Axis** (`#c3c2b7`): Input and button borders at rest, scrollbar thumbs, the dotted week-diagonal guide.
 - **Hairline** (`rgba(11, 11, 11, 0.1)`): The default 1px border on cards, panels, tags and the tooltip — a translucent ink so it sits correctly on any near-white.
@@ -163,9 +163,12 @@ A seven-step green → amber → red ramp from **`#12603d` (deep green, cheapest
 - **Display** (600, 26px): The single large price in the detail panel — the one big number on the surface.
 - **Headline** (600–700, 15–16px, −0.01em): The wordmark, destination card titles (`h2`), and the panel heading. The ceiling for type size in the chrome.
 - **Body** (400, 14px, 1.45): Default text — inputs, status line, panel prose, the footnote.
-- **Label** (400, 11px, +0.02em, UPPERCASE): Field labels above every control.
-- **Numeric / cell** (400, 9px, tabular-nums): The price printed in each fare cell, and the matrix's own date headers (9px, 500). Small by necessity; the grid holds hundreds of them.
-- **Tag** (600, 9px, +0.04em, UPPERCASE): `EST` / `KIWI` / `LIVE` status chips and the "range mode" markers.
+- **Label** (400, 11px, +0.02em, UPPERCASE): Field labels above every control; filter-group headers at 11px/600.
+- **Tag** (600, 11px, +0.03em, UPPERCASE): `EST` / `KIWI` / `LIVE` provenance chips.
+- **Numeric / cell** (400, 9px, tabular-nums): The price printed in each fare cell, and the matrix's own date-axis headers (9px, 500). This is the **one place below the 11px functional-text floor** — it's the dense data grid, sized so many cards fit on one screen, and contrast still clears WCAG AA.
+
+### Named Rules
+**The 11px Floor Rule.** Functional text (labels, tags, hints, buttons, meta) is never below 11px. The only exception is inside the fare matrix — its cell values and date-axis headers run at 9px because it is a dense data grid and 11px would break its density.
 
 ### Named Rules
 **The One Family Rule.** A single `system-ui` stack does all the work. Weight (400/600/700) and size carry hierarchy. Do not introduce a display serif, a monospace, or a second sans — the neutrality is the point.
@@ -222,7 +225,7 @@ Controls should feel **refined and restrained** — quiet, considered, a little 
 - **Small variants:** `.locate` (3×7px pad, 12px), `.fillbtn` (2×7px, 10px, 4px radius), day-of-week toggles (20px-wide squares, 4px radius; `.on` = solid `ink` fill).
 
 ### Chips / Tags
-- **`.tag`:** hollow — 1px `hairline` border, 3px radius, `0 3px` padding, 9px/600 uppercase, `ink-muted` text.
+- **`.tag`:** hollow — 1px `hairline` border, 3px radius, `0 3px` padding, 11px/600 uppercase, `ink-muted` text.
 - **`.tag.live`:** text and border to `verified-green`. **`.tag.real`:** to `ink-secondary` / `ink-muted`.
 - **`.drift`:** filled — `advisory-amber` background, `ink` text, 3px radius. A louder badge for "sources disagree".
 
@@ -272,6 +275,8 @@ Below the header: 13px, `ink-secondary`, `flex-wrap`, 14px gap. Error text in `e
 - **Do** support light and dark equally — define every colour as a token in all three roots (`:root`, `prefers-color-scheme: dark`, `[data-theme='dark']`).
 
 ### Don't:
+- **Don't** put functional text below 11px (labels, tags, hints, buttons, meta). The 9px fare matrix is the single sanctioned exception.
+- **Don't** run `ink-muted` on `gridline` — it clears AA on the two paper surfaces, not on the mid-grey.
 - **Don't** add a `box-shadow` to cards, the panel, buttons, or inputs. The tooltip is the only element that carries an ambient shadow.
 - **Don't** use `marker-yellow` (`#f2b705` / `#ffcf33`) as a fill, a ramp step, or anything other than the "cheapest" marker.
 - **Don't** introduce a second typeface — no display serif, no monospace. Weight and size carry hierarchy.

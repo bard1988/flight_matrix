@@ -13,7 +13,7 @@
   --page: #f9f9f7;
   --text-primary: #0b0b0b;
   --text-secondary: #52514e;
-  --text-muted: #898781;
+  --text-muted: #6c6960;
   --gridline: #e1e0d9;
   --axis: #c3c2b7;
   --border: rgba(11, 11, 11, 0.1);
@@ -45,7 +45,7 @@
     --page: #0d0d0d;
     --text-primary: #ffffff;
     --text-secondary: #c3c2b7;
-    --text-muted: #898781;
+    --text-muted: #97938a;
     --gridline: #2c2c2a;
     --axis: #383835;
     --border: rgba(255, 255, 255, 0.1);
@@ -71,7 +71,7 @@
   --page: #0d0d0d;
   --text-primary: #ffffff;
   --text-secondary: #c3c2b7;
-  --text-muted: #898781;
+  --text-muted: #97938a;
   --gridline: #2c2c2a;
   --axis: #383835;
   --border: rgba(255, 255, 255, 0.1);
@@ -327,6 +327,11 @@ button.primary {
   gap: 4px;
 }
 
+/* Keep the status/legend prose to a readable measure on wide screens. */
+.status > span { max-width: 74ch; }
+.status .legend { max-width: none; }
+.legend-rule { max-width: 74ch; }
+
 .status .err { color: var(--critical); }
 
 /* Coverage / horizon warning from the backend. A small amber dot marks it as advisory;
@@ -444,6 +449,10 @@ main { padding: 14px 16px 60px; }
   border: 1px solid var(--border);
   border-radius: 8px;
   padding: 7px 9px 8px;
+  /* A grid item defaults to min-width:auto, which lets the wide matrix inside force the
+     card past its track and the page into horizontal scroll. Let it shrink; the
+     .matrix-wrap then clips and scrolls as intended. */
+  min-width: 0;
 }
 
 /* The grid is its own scroll viewport in both axes, sized independently of the grid, so
@@ -495,8 +504,9 @@ table.matrix th.corner {
 }
 
 .growing {
-  font-size: 10px;
+  font-size: 11px;
   color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
   padding: 2px 0 0 2px;
 }
 
@@ -512,10 +522,10 @@ table.matrix th.corner {
 .card-head h2 { font-size: 15px; margin: 0; font-weight: 600; }
 .card-head .code { color: var(--text-muted); font-size: 12px; }
 .card-head .best { margin-left: auto; font-weight: 600; font-variant-numeric: tabular-nums; }
-.card-head .cov { color: var(--text-muted); font-size: 11px; }
+.card-head .cov { color: var(--text-muted); font-size: 11px; font-variant-numeric: tabular-nums; }
 
 .card-head .drift {
-  font-size: 10px;
+  font-size: 11px;
   color: #0b0b0b;
   background: var(--warning);
   border-radius: 3px;
@@ -524,10 +534,10 @@ table.matrix th.corner {
 }
 
 .card-head .tag {
-  font-size: 9px;
+  font-size: 11px;
   font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.03em;
   color: var(--text-muted);
   border: 1px solid var(--border);
   border-radius: 3px;
@@ -554,8 +564,8 @@ table.matrix td.flash { animation: locate-flash 0.4s ease-in-out 4; }
 }
 
 .card-head .fillbtn {
-  font-size: 10px;
-  padding: 2px 7px;
+  font-size: 11px;
+  padding: 3px 8px;
   border-radius: 4px;
   margin-left: 6px;
   white-space: nowrap;
@@ -569,10 +579,14 @@ table.matrix {
   font-variant-numeric: tabular-nums;
 }
 
+/* 9px is below the 11px functional-text floor, kept deliberately: these are the axis
+   labels of a dense data grid (like a spreadsheet's row/column headers), sized to match
+   the 9px cell values, and 11px would widen every column enough to break the "many cards
+   on one screen" density the board exists for. Contrast still clears WCAG AA. */
 table.matrix th {
   font-weight: 500;
   font-size: 9px;
-  line-height: 1.15;
+  line-height: 1.2;
   color: var(--text-muted);
   padding: 0 2px;
   white-space: nowrap;
@@ -750,7 +764,7 @@ table.matrix td.cross-at {
 }
 #panelbody a:hover { border-color: var(--text-muted); }
 #panelbody a:focus-visible { outline: none; border-color: var(--text-primary); box-shadow: 0 0 0 1px var(--text-primary); }
-#panel h3 { margin: 0 0 4px; font-size: 16px; }
+#panel h3 { margin: 0 0 4px; font-size: 15px; font-weight: 600; }
 #panel dl { display: grid; grid-template-columns: auto 1fr; gap: 4px 10px; margin: 12px 0; }
 #panel dt { color: var(--text-muted); }
 #panel dd { margin: 0; font-variant-numeric: tabular-nums; }
@@ -787,6 +801,8 @@ table.matrix td.cross-at {
 .note {
   color: var(--text-muted);
   font-size: 12px;
+  line-height: 1.5;
+  max-width: 72ch;   /* readable measure — the footnote is prose, not a full-bleed strip */
   border-top: 1px solid var(--border);
   margin-top: 14px;
   padding-top: 10px;
@@ -880,6 +896,8 @@ body.show-table .tableview { display: block; }
   }
   .board { grid-template-columns: 1fr; gap: 8px; }
   .card { padding: 8px; }
+  /* Let the packed card header wrap on a narrow card instead of clipping its buttons. */
+  .card-head { flex-wrap: wrap; align-items: center; row-gap: 5px; }
 
   /* The grid is no longer its own vertical scroll box — it grows to fit and the
      PAGE scrolls. It still scrolls sideways for the departure-date axis, and a
