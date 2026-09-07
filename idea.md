@@ -8,14 +8,18 @@ Things worth doing, not yet scheduled.
 
 | # | Feature | Size | Status |
 |---|---|---|---|
+| 13 | **Stop hitting Kiwi's rate limit** — the datacenter IP is the root cause (Lever 2) | M | todo — priority |
 | 1 | **Filter by airline** — bundled airline-name DB, refreshed periodically (and/or from what searches return) | M | todo |
 | 9 | **Filter by region** — its own field: a collapsible continent → subregion → country tree | M–L | todo — see spec |
+| 11 | **Kids' ages** — per-child age (infant/child buckets), not just a count; changes the price. Must propagate to providers + `party_key` cache key + child-factor scaling | M–L | todo |
 | 6 | **Cabin class** selector (economy / premium / business) — thread through provider → API → UI | M | todo |
 | 4 | Make **"any trip inside this period" (range mode) the default**; nights box controls trip length; drop anchors mode | L | todo — destructive, decide first |
 | 7 | **Mobile: more compact** | M | todo |
 | 7.1 | — passengers shown in the bar, not behind Options | S | todo |
 | 7.2 | — denser matrices on small screens | S | todo |
-| 8 | **Design pass** — use the `design` skill / a proper design system | L | todo |
+| 7.3 | — cell-detail panel: the ✕ close is mispositioned (far right); reconsider full-screen panel on mobile | S | todo |
+| 10 | **Show the airport's city** wherever only the IATA code appears (panel, tooltip, table, multi-airport cities) | S | todo |
+| 8 | **Design pass** — use the `design` skill / a proper design system | L | in progress |
 
 ### Notes on specific items
 
@@ -25,6 +29,21 @@ Things worth doing, not yet scheduled.
 - **#1 airline DB.** `data/airlines_seen.py` already collects airline names. Filtering can
   be client-side on already-fetched cells (each cell carries `airline`); the search-time
   filter (spend the destination budget inside the filter) is the harder half.
+
+- **#13 Kiwi rate limit.** This is Lever 2 below, promoted to a scheduled item. The
+  root cause is the Oracle datacenter IP — Kiwi 403-blocks it far more aggressively
+  than a residential one. Real fixes: (a) `FM_KIWI_PROXY` residential/mobile proxy for
+  Kiwi calls only, (b) run the whole app behind a Cloudflare Tunnel from a home/office
+  box, (c) lean on the Google price-graph board (Lever 1) as primary and use Kiwi only
+  to cross-check cheapest cells. Pacing/backoff/cache tweaks alone won't fix it.
+- **#11 kids' ages.** `children` is a bare count today. Providers price by age bucket
+  (infant on lap / infant in seat / child). Needs: per-child ages in the UI →
+  `SearchRequest` → each provider (Kiwi `infants`, Google `infants_in_seat` /
+  `infants_on_lap`, Travelpayouts) → `party_key` (it's part of the cache key, so a
+  wrong key serves a wrong-priced grid) → the `FM_CHILD_FACTOR` estimate scaling.
+- **#10 airport city.** The card head already shows the city; the gap is everywhere
+  else a raw IATA code surfaces — the flight-details panel legs, the tooltip, the table
+  view, and codes that resolve to an airport (not a city) in `airports.describe()`.
 
 ### #9 — Filter by region (spec)
 
