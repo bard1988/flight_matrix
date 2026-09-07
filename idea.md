@@ -9,6 +9,7 @@ Things worth doing, not yet scheduled.
 | # | Feature | Size | Status |
 |---|---|---|---|
 | 1 | **Filter by airline** — bundled airline-name DB, refreshed periodically (and/or from what searches return) | M | todo |
+| 9 | **Filter by region** — its own field: a collapsible continent → subregion → country tree | M–L | todo — see spec |
 | 6 | **Cabin class** selector (economy / premium / business) — thread through provider → API → UI | M | todo |
 | 4 | Make **"any trip inside this period" (range mode) the default**; nights box controls trip length; drop anchors mode | L | todo — destructive, decide first |
 | 7 | **Mobile: more compact** | M | todo |
@@ -24,6 +25,42 @@ Things worth doing, not yet scheduled.
 - **#1 airline DB.** `data/airlines_seen.py` already collects airline names. Filtering can
   be client-side on already-fetched cells (each cell carries `airline`); the search-time
   filter (spend the destination budget inside the filter) is the harder half.
+
+### #9 — Filter by region (spec)
+
+**Its own field**, separate from the `Only destinations` text box. The two complement:
+- **Region tree** = structured geography, primarily a *search-time restriction* — the
+  destination budget is spent inside the checked continents/regions/countries (e.g.
+  "only Italy" → search finds the cheapest Italian cities, not the cheapest anywhere
+  then hidden). Also acts as a post-search view filter (un/check to hide/show).
+- **`Only destinations` box** = unchanged, free-text narrowing of what's already shown
+  (city, code, country substring).
+
+**Data — use the full ISO country list, not the hand-typed 75.** `backend/airports.py`
+`COUNTRY_NAMES` is a ~75-entry manual patch (*"the Mediterranean/Europe region this
+tool is aimed at"*); the airport feed itself carries only ISO 3166-1 alpha-2 codes with
+no names. Ship a complete bundled `alpha-2 → {name, continent, subregion}` table
+(~249 rows, ~15 KB, ISO 3166 + UN M49 with travel-taxonomy overrides), have
+`country_name()` and the tree derive from it, and drop the partial dict. Codes stay the
+internal key; every label shows the full name ("Italy", not "IT").
+
+**Taxonomy (travel-oriented, not strict UN M49):**
+- Europe: Western · Northern/Scandinavia · Southern · Eastern & Balkans
+- Middle East (Western Asia + Turkey; Cyprus and Egypt are judgment calls)
+- Africa: North Africa · Sub-Saharan
+- Asia: Caucasus & Central Asia · South & Southeast Asia · East Asia
+- Americas: North America · Latin America & Caribbean
+- Oceania
+
+**UI:** collapsible "Regions ▾" disclosure in the field (collapsed by default; on
+mobile full-width when open). Tree = continent → subregion → country, tri-state
+checkboxes (checking a parent toggles children), a count per node. Post-search only
+nodes with ≥1 result are shown (~10 countries, not 249); pre-search shows
+continents + subregions only.
+
+**Wiring:** add `regions: [...]` (or `country_codes: [...]`) to the search body →
+`board.build` → filter candidates by `region_of(country)`. Frontend view-filter reuses
+the same map. Phase 1 could ship view-only; phase 2 adds the search-time restriction.
 
 ---
 
