@@ -18,7 +18,15 @@ const state = {
   filter: '',              // destination filter, applied to the already-loaded board
   // Day-of-week / trip-length constraints, applied as a view over loaded cells.
   constraints: { dep: new Set(), ret: new Set(), min: null, max: null },
+  // Currency is a display concern once the board is loaded: the board is priced in
+  // `meta.currency`, and switching the dropdown just converts the numbers with FX
+  // rates rather than re-running the whole search.
+  fx: null,                // { eur: 1, usd: 1.08, ... } — units per 1 EUR
+  displayCurrency: null,   // what the dropdown shows; defaults to meta.currency
 };
+
+// Rough offline fallback, only used if the FX fetch fails. Does not need to be exact.
+const FX_FALLBACK = { eur: 1, usd: 1.16, gbp: 0.86, ils: 3.5 };
 
 const $ = (id) => document.getElementById(id);
 
@@ -30,18 +38,64 @@ function isoToday(offsetDays) {
   return d.toISOString().slice(0, 10);
 }
 
-function fmtMoney(value, currency) {
-  if (value == null) return '';
-  const symbol = { ils: '₪', eur: '€', usd: '$', gbp: '£' }[currency] || '';
-  return symbol + Math.round(value).toLocaleString();
+/* Convert an amount between currencies using the loaded FX table. `state.fx[x]` is
+   units of x per 1 base, so from->to is value * fx[to] / fx[from]. Unknown currency or
+   no table: pass the number through unconverted. */
+function convert(value, from) {
+  const to = state.displayCurrency || from;
+  if (value == null || to === from) return value;
+  const fx = state.fx || FX_FALLBACK;
+  const rf = fx[from], rt = fx[to];
+  if (!rf || !rt) return value;
+  return value * (rt / rf);
 }
 
+function fmtMoney(value, currency) {
+  if (value == null) return '';
+  const to = state.displayCurrency || currency;
+  const symbol = { ils: '₪', eur: '€', usd: '$', gbp: '£' }[to] || '';
+  return symbol + Math.round(convert(value, currency)).toLocaleString();
+}
+
+/* Cell labels: always priced in meta.currency, shown in the display currency. */
 function fmtCompact(value) {
   if (value == null) return '';
-  const n = Math.round(value);
+  const n = Math.round(convert(value, state.meta && state.meta.currency));
   if (n >= 10000) return Math.round(n / 1000) + 'k';
   if (n >= 1000) return (n / 1000).toFixed(1).replace(/\.0$/, '') + 'k';
   return String(n);
+}
+
+/* Load FX rates once. Free, keyless, CORS-enabled source; cached in localStorage for
+   12h, with a static fallback if it is unreachable. Rates only need to be roughly
+   right — they re-label already-fetched prices, they don't drive any decision. */
+async function loadFx() {
+  const CACHE_KEY = 'skymatrix.fx';
+  const MAX_AGE = 12 * 3600 * 1000;
+  try {
+    const cached = JSON.parse(localStorage.getItem(CACHE_KEY) || 'null');
+    if (cached && Date.now() - cached.ts < MAX_AGE && cached.rates) {
+      state.fx = cached.rates;
+      return;
+    }
+  } catch (e) { /* ignore */ }
+
+  try {
+    // exchangerate-api's free open endpoint: no key, CORS '*', daily ECB-ish rates.
+    const r = await fetch('https://open.er-api.com/v6/latest/EUR');
+    const data = await r.json();
+    const src = data && data.rates ? data.rates : {};
+    const rates = { eur: 1 };
+    for (const c of ['USD', 'GBP', 'ILS']) if (src[c]) rates[c.toLowerCase()] = src[c];
+    if (rates.ils && rates.usd && rates.gbp) {
+      state.fx = rates;
+      try { localStorage.setItem(CACHE_KEY, JSON.stringify({ ts: Date.now(), rates })); } catch (e) { /* ignore */ }
+      if (state.meta) render();   // refresh with real rates if a board is already up
+      return;
+    }
+  } catch (e) { /* fall through */ }
+
+  state.fx = FX_FALLBACK;
 }
 
 function shortDate(iso) {
@@ -1322,6 +1376,8 @@ function consume(searchId) {
     const msg = JSON.parse(event.data);
     if (msg.type === 'meta') {
       state.meta = msg;
+      state.displayCurrency = msg.currency;   // board priced in this; dropdown starts here
+      $('currency').value = msg.currency;
       syncDateMode();
       $('progress').textContent = `Searching from ${msg.origin_city} (${msg.origin})…`;
     } else if (msg.type === 'candidates') {
@@ -1423,9 +1479,12 @@ function buildHourPicker(id, isEnd) {
    over loaded cells and applies instantly. Changing a date used to silently leave the old
    board on screen with no hint that it was stale. */
 const SEARCH_INPUTS = [
-  'origin', 'depart', 'ret', 'adults', 'children', 'dests', 'currency', 'maxprice',
+  'origin', 'depart', 'ret', 'adults', 'children', 'dests', 'maxprice',
   'nonstop', 'datemode', 'dephfrom', 'dephto', 'rethfrom', 'rethto',
 ];
+// 'currency' is deliberately NOT a search input: once a board is loaded, changing it
+// just re-labels the numbers via FX conversion. A fresh search still fetches in
+// whatever the dropdown shows.
 
 function searchSignature() {
   const parts = SEARCH_INPUTS.map((id) => {
@@ -1501,6 +1560,15 @@ $('destfilter').addEventListener('input', (e) => {
   if (state.meta) render();
 });
 
+/* Currency: with a board loaded, just convert the displayed numbers — no re-search.
+   With no board yet, it's simply the currency the next search will fetch in. */
+$('currency').addEventListener('change', (e) => {
+  if (!state.meta) return;
+  state.displayCurrency = e.target.value;
+  $('panel').classList.remove('open');   // its numbers are now stale
+  render();
+});
+
 $('autoverify').addEventListener('change', (e) => {
   if (e.target.checked) startAutoVerify();
   else stopAutoVerify();
@@ -1534,6 +1602,7 @@ $('depart').addEventListener('change', syncReturnDate);
 $('depart').addEventListener('input', syncReturnDate);
 
 syncDateMode();
+loadFx();
 
 $('depart').value = isoToday(30);
 $('ret').value = isoToday(37);
