@@ -30,6 +30,14 @@ const FX_FALLBACK = { eur: 1, usd: 1.16, gbp: 0.86, ils: 3.5 };
 
 const $ = (id) => document.getElementById(id);
 
+/* Board data comes from one of two aggregators; show their consumer-facing names. */
+const sourceName = (s) =>
+  s === 'kiwi' ? 'Kiwi.com' : s === 'travelpayouts' ? 'Aviasales' : s || 'the fare cache';
+
+/* One phrasing for stop counts everywhere: tooltip, table, panel. */
+const fmtStops = (n) =>
+  n == null ? '' : n === 0 ? 'nonstop' : `${n} stop${n > 1 ? 's' : ''}`;
+
 /* ------------------------------------------------------------------ helpers */
 
 function isoToday(offsetDays) {
@@ -196,13 +204,13 @@ function tooltipFor(dest, cell) {
   } else if (cell.is_total) {
     // Kiwi returns a real party total for the requested passenger mix, so it is not an
     // extrapolation and must not be labelled as one.
-    rows.push(`<b>${fmtMoney(cell.estimate, cur)}</b> total for ${who} <span class="muted">via ${cell.source || 'provider'}</span>`);
+    rows.push(`<b>${fmtMoney(cell.estimate, cur)}</b> total for ${who} <span class="muted">via ${sourceName(cell.source)}</span>`);
   } else {
-    rows.push(`<b>${fmtMoney(cell.estimate, cur)}</b> estimated total <span class="muted">(${fmtMoney(cell.unit_price, cur)} per ticket, scaled)</span>`);
+    rows.push(`<b>${fmtMoney(cell.estimate, cur)}</b> estimated total <span class="muted">(${fmtMoney(cell.unit_price, cur)} per ticket × party)</span>`);
   }
-  if (cell.airline) rows.push(`<span class="muted">${cell.airline}</span>`);
+  if (cell.airline) rows.push(`<span class="muted">Airline ${cell.airline}</span>`);
   if (cell.transfers != null) {
-    rows.push(`<span class="muted">${cell.transfers === 0 ? 'nonstop' : cell.transfers + ' stop' + (cell.transfers > 1 ? 's' : '')}</span>`);
+    rows.push(`<span class="muted">${fmtStops(cell.transfers)}</span>`);
   }
   if (cell.stale) rows.push(`<span class="muted">cached ${Math.round(cell.age_hours)}h ago</span>`);
   rows.push(`<span class="muted">${cell.verified ? 'Click to re-check' : 'Click for the live price'}</span>`);
@@ -606,7 +614,7 @@ function renderTable(ordered) {
         `<tr><td>${r.dest.city} (${r.dest.destination})</td><td>${weekday(r.cell.depart)} ${shortDate(r.cell.depart)}</td>` +
         `<td>${weekday(r.cell.ret)} ${shortDate(r.cell.ret)}</td><td>${r.cell.nights}</td>` +
         `<td>${fmtMoney(r.value, cur)}</td><td>${r.cell.verified ? 'live' : 'estimate'}</td>` +
-        `<td>${r.cell.transfers == null ? '' : r.cell.transfers === 0 ? 'nonstop' : r.cell.transfers}</td></tr>`
+        `<td>${fmtStops(r.cell.transfers)}</td></tr>`
     )
     .join('');
   host.innerHTML =
@@ -619,8 +627,9 @@ function renderTable(ordered) {
 /** Render the flight-times block from the board source, appended to whatever is showing. */
 function renderTimes(details) {
   if (!details || details.error) {
+    if (details && details.error) console.debug('flight times unavailable:', details.error);
     return details && details.error
-      ? `<p class="muted">Times unavailable: ${details.error}</p>`
+      ? "<p class=\"muted\">Flight times aren't available for this one.</p>"
       : '';
   }
   // 'Sat 31 Jul 19:25' -> {day: 'Sat 31 Jul', time: '19:25'} so legs can show bare times
@@ -647,7 +656,7 @@ function renderTimes(details) {
     return `<div class="segments"><b>${label}</b>` +
       `<div class="sector-summary">${s.departs || ''} → ${split(s.arrives).time || ''}` +
       `<span class="muted">${s.duration ? ' · ' + s.duration : ''}` +
-      `${s.stops ? ' · ' + s.stops + ' stop' + (s.stops > 1 ? 's' : '') : ' · nonstop'}</span></div>` +
+      ` · ${fmtStops(s.stops || 0)}</span></div>` +
       legs + '</div>';
   };
   // Name the source and its price: the cross-check's cheapest is often a DIFFERENT
@@ -714,7 +723,11 @@ async function verifyCell(dest, cell) {
     });
     data = await res.json();
   } catch (err) {
-    openPanel(`<h3>${dest.city}</h3><p class="err">Verification request failed: ${err}</p>`);
+    console.debug('cross-check request failed:', err);
+    openPanel(
+      `<h3>${dest.city} (${dest.destination})</h3>` +
+        `<p class="err">Couldn't reach the live cross-check. Check your connection and try again.</p>`
+    );
     return;
   }
 
@@ -722,24 +735,29 @@ async function verifyCell(dest, cell) {
   const who = `${meta.adults} adults` + (meta.children ? ` + ${meta.children} children` : '');
   const estimate = cell.estimate != null ? fmtMoney(cell.estimate, cur) : 'n/a';
   if (data.error || data.total == null) {
-    // Google could not price it, but the board did - so show the board's own price and
-    // its booking link rather than only a dead Google link.
+    // The live cross-check didn't return a price. The raw reason (route absent from
+    // Google, rate limit, missing dependency) is dev detail — log it, never show it.
+    // The board still priced this cell, so lead with that and keep the booking links live.
+    if (data.error) console.debug('cross-check unavailable:', data.error);
     const boardPrice = cell.estimate != null
       ? `<div class="big">${fmtMoney(cell.estimate, cur)}</div>` +
-        `<div class="muted">from ${cell.source || 'the board'}${cell.is_total ? `, total for ${who}` : ', estimated'}</div>`
+        `<div class="muted">${cell.is_total ? `total for ${who}` : 'estimated'}, from ${sourceName(cell.source)}</div>`
       : '';
     const links = [];
     if (cell.link) {
-      links.push(`<a href="${cell.link}" target="_blank" rel="noopener">Book via ${cell.source === 'kiwi' ? 'Kiwi.com' : 'provider'}</a>`);
+      links.push(`<a href="${cell.link}" target="_blank" rel="noopener">Book on ${cell.source === 'kiwi' ? 'Kiwi.com' : 'Aviasales'}</a>`);
     }
     if (data.link) {
-      links.push(`<a href="${data.link}" target="_blank" rel="noopener">Try Google Flights</a>`);
+      links.push(`<a href="${data.link}" target="_blank" rel="noopener">Open on Google Flights</a>`);
     }
+    const explain = cell.estimate != null
+      ? `Couldn't verify this fare live — not every route is in Google Flights. The price above is the board's ${cell.is_total ? 'total' : 'estimate'}; the booking links below are live.`
+      : `Couldn't verify this fare live, and the board has no price for this date pair. Try a nearby cell.`;
     openPanel(
       `<h3>${dest.city} (${dest.destination})</h3>` +
         `<div class="muted">${weekday(cell.depart)} ${shortDate(cell.depart)} &rarr; ${weekday(cell.ret)} ${shortDate(cell.ret)}</div>` +
         boardPrice +
-        `<p class="muted">Could not cross-check this one: ${data.error || 'no live price available'}</p>` +
+        `<p class="muted">${explain}</p>` +
         '<div id="paneltimes"></div>' +
       (links.length ? `<p>${links.join('<br>')}</p>` : '')
     );
@@ -759,13 +777,13 @@ async function verifyCell(dest, cell) {
       (data.arrives ? `<dt>Outbound arrives</dt><dd>${data.arrives}</dd>` : '') +
       (data.airline ? `<dt>Airline</dt><dd>${data.airline}</dd>` : '') +
       (data.duration ? `<dt>Duration</dt><dd>${data.duration}</dd>` : '') +
-      (data.stops_out != null ? `<dt>Stops</dt><dd>${data.stops_out === 0 ? 'nonstop' : data.stops_out}</dd>` : '') +
+      (data.stops_out != null ? `<dt>Stops</dt><dd>${fmtStops(data.stops_out)}</dd>` : '') +
       (data.cached ? '<dt>Source</dt><dd>previously verified</dd>' : '') +
       '</dl>' +
       // Filled in by the parallel times request from the board source, which covers both
       // legs and works at horizons the Google cross-check cannot reach.
       '<div id="paneltimes"></div>' +
-      (cell.link ? `<p><a href="${cell.link}" target="_blank" rel="noopener">Book via Kiwi.com</a></p>` : '') +
+      (cell.link ? `<p><a href="${cell.link}" target="_blank" rel="noopener">Book on ${cell.source === 'kiwi' ? 'Kiwi.com' : 'Aviasales'}</a></p>` : '') +
       (data.link ? `<p><a href="${data.link}" target="_blank" rel="noopener">Open on Google Flights</a></p>` : '')
   );
   restoreTimes();
@@ -1281,9 +1299,12 @@ $('panelclose').addEventListener('click', () => $('panel').classList.remove('ope
 
 function startSearch() {
   if (state.source) state.source.close();
-  // On mobile, fold the options away so the board has the screen.
-  document.body.classList.remove('opts-open');
-  $('optsbtn').setAttribute('aria-expanded', 'false');
+  // On a phone the filter panel fills the screen, so fold it away on search. On desktop
+  // it sits above the board — leave it as the user set it so filters stay easy to tune.
+  if (window.matchMedia('(max-width: 720px)').matches) {
+    document.body.classList.remove('opts-open');
+    $('optsbtn').setAttribute('aria-expanded', 'false');
+  }
   state.destinations.clear();
   state.meta = null;
   $('board').replaceChildren();
@@ -1341,10 +1362,13 @@ function startSearch() {
       consume(data.search_id);
     })
     .catch((err) => {
+      console.debug('search failed:', err);
       $('go').classList.remove('running');
       $('go').textContent = 'Search';
       $('stop').hidden = true;
-      $('errors').textContent = String(err);
+      $('errors').textContent = /failed to fetch|networkerror/i.test(String(err))
+        ? "Couldn't reach the server. Check your connection and try again."
+        : "The search couldn't start. Try again in a moment.";
       $('progress').textContent = '';
     });
 }

@@ -134,15 +134,18 @@
 <div class="status">
   <span id="progress">Set your dates and search. Starts at &plusmn;7 days on each leg; scroll a grid past its edge, or use the &plusmn; button, for more.</span>
   <span class="legend" id="legend" hidden>
-    <span>cheap</span>
-    <span class="swatches">
-      <i style="background:var(--q0)"></i><i style="background:var(--q1)"></i><i style="background:var(--q2)"></i><i style="background:var(--q3)"></i><i style="background:var(--q4)"></i><i style="background:var(--q5)"></i><i style="background:var(--q6)"></i>
+    <span class="legend-rule">Colour ranks the dates <b>within each destination</b> — cheapest to dearest. Compare destinations by price, not colour.</span>
+    <span class="legend-key">
+      <span>cheap</span>
+      <span class="swatches">
+        <i style="background:var(--q0)"></i><i style="background:var(--q1)"></i><i style="background:var(--q2)"></i><i style="background:var(--q3)"></i><i style="background:var(--q4)"></i><i style="background:var(--q5)"></i><i style="background:var(--q6)"></i>
+      </span>
+      <span>expensive</span>
+      <span class="muted"><span class="legend-best"></span> cheapest here</span>
+      <span class="muted"><span class="legend-locate">◎</span> jump to it</span>
+      <span class="muted"><span class="nodata"></span> no price</span>
+      <span class="muted"><span class="legend-wedge"></span> has stops</span>
     </span>
-    <span>expensive</span>
-    <span class="muted"><span class="legend-best"></span> cheapest</span>
-    <span class="muted"><span class="legend-locate">◎</span> jump to cheapest</span>
-    <span class="muted"><span class="nodata"></span> no price</span>
-    <span class="muted"><span class="legend-wedge"></span> has stops</span>
   </span>
   <span id="stalenote" class="hint" hidden></span>
   <span id="datehint" class="growing"></span>
@@ -159,19 +162,11 @@
   <p class="empty" id="empty" hidden></p>
 
   <p class="note" id="footnote" hidden>
-    Board prices come from <b>Kiwi.com</b> and are <b>real totals for your actual passenger
-    mix</b>, not single-adult fares scaled up, so the <em>numbers</em> are directly
-    comparable across destinations. <b>Colour is scaled per matrix</b> — green is the
-    cheapest date pair <em>for that destination</em> and red its dearest — so a green cell
-    on one card can cost more than a red cell on another. Compare destinations by the
-    headline price and the cheapest-first order, not by colour; the yellow ring marks each
-    matrix's own cheapest, and the thick yellow ring plus card border the cheapest anywhere.
-    Click any cell to cross-check it live on <b>Google Flights</b>; verified
-    cells get a solid border and a LIVE tag, or use <b>Fill live</b> to re-price a whole grid
-    (about a minute). Kiwi includes self-transfer combinations, which can be cheap but mean
-    separate tickets. A hatched cell means <b>no price for that date pair</b>, not an
-    expensive one. Switch the board source with <code>FM_BOARD_PROVIDER=travelpayouts</code>
-    (that source gives single-adult estimates, which measured ~30% optimistic for a family).
+    Prices are round-trip totals for your party, from <b>Kiwi.com</b> — comparable across
+    destinations. Cells tagged <b>EST</b> are estimates for ranking; click one to
+    cross-check it live on <b>Google Flights</b> (it then gets a solid border and a
+    <b>LIVE</b> tag), or use <b>Fill live</b> to re-price a whole grid. Some fares are
+    self-transfer combinations — cheap, but booked as separate tickets.
   </p>
 </main>
 
