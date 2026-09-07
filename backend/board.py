@@ -225,8 +225,14 @@ def build(
     request: SearchRequest,
     provider: Any = None,
     on_event: Callable[[dict[str, Any]], None] | None = None,
+    should_stop: Callable[[], bool] | None = None,
 ) -> Iterator[dict[str, Any]]:
-    """Yield board events: `meta`, then one `destination` per grid, then `done`."""
+    """Yield board events: `meta`, then one `destination` per grid, then `done`.
+
+    `should_stop` is polled between destinations; when it returns True the build ends
+    early with a `done` event carrying whatever filled so far (`stopped: True`).
+    """
+    stopped = False
     # Status messages from the provider (rate-limit waits) are queued here and drained
     # into the event stream, so a pause is visible rather than looking like a hang.
     provider = provider or make_board_provider()
@@ -337,6 +343,9 @@ def build(
     for index, (destination, _seed_price) in enumerate(candidates):
         if filled >= request.max_destinations:
             break
+        if should_stop and should_stop():
+            stopped = True
+            break
         # Reuse a recent fetch rather than re-querying. Repeat searches are the main way
         # the live provider's rate limit gets tripped, and prices barely move within hours.
         cached = None if request.has_search_filters else cache.get_matrix(
@@ -417,8 +426,12 @@ def build(
             "type": "done",
             "destinations": filled,
             "empty": empty,
+            "stopped": stopped,
             "strategy": provider.strategy,
-            "note": _coverage_note(request, filled, provider),
+            "note": (
+                f"Stopped — showing the {filled} destination(s) filled so far."
+                if stopped else _coverage_note(request, filled, provider)
+            ),
         }
     )
 

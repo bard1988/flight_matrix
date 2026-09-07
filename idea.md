@@ -4,6 +4,37 @@ Things worth doing, not yet scheduled.
 
 ---
 
+## Feature backlog
+
+| # | Feature | Size | Status |
+|---|---|---|---|
+| 3 | **Stop button** while a search is running | S | in progress |
+| 2 | Changing **currency** shouldn't re-search — convert client-side from cached FX rates | M | todo |
+| 1 | **Filter by airline** — bundled airline-name DB, refreshed periodically (and/or from what searches return) | M | todo |
+| 6 | **Cabin class** selector (economy / premium / business) — thread through provider → API → UI | M | todo |
+| 5 | **Colour scale** to a plain green → orange → red diverging ramp | S | todo — see note |
+| 4 | Make **"any trip inside this period" (range mode) the default**; nights box controls trip length; drop anchors mode | L | todo — destructive, decide first |
+| 7 | **Mobile: more compact** | M | todo |
+| 7.1 | — passengers shown in the bar, not behind Options | S | todo |
+| 7.2 | — denser matrices on small screens | S | todo |
+| 8 | **Design pass** — use the `design` skill / a proper design system | L | todo |
+
+### Notes on specific items
+
+- **#5 colour scale.** The current ramp is a *deliberately asymmetric* diverging ramp
+  (`data/emit_ramp_css.py`, `data/check_diverging_cvd.py`) because a naive green→orange→red
+  is the classic red-green colour-blind failure — deuteranopia can't separate the ends.
+  If we go green→orange→red anyway, regenerate via the ramp scripts and re-run the CVD
+  check; keep the per-cell price labels (they already carry the meaning without colour).
+- **#4 drop anchors mode.** `date_mode` (`anchors|range`) is threaded through `models.py`,
+  `board.py`, `app.py` and the frontend. Removing a mode is a real refactor and changes
+  the default UX — confirm before starting.
+- **#1 airline DB.** `data/airlines_seen.py` already collects airline names. Filtering can
+  be client-side on already-fetched cells (each cell carries `airline`); the search-time
+  filter (spend the destination budget inside the filter) is the harder half.
+
+---
+
 ## Provider research conclusion (2026-09)
 
 Adding more flight *providers* does not add price data. Kiwi, Travelpayouts/Aviasales
@@ -100,3 +131,9 @@ correctly no-ops on the VM; a proxy integration should not resurrect it.
   API. Pin it properly (`>=3,<4`) and retest Fill live.
 - SerpApi Google Travel Explore (free 250/mo) as a discovery source, to get discovery
   fully off Travelpayouts.
+
+---
+
+## Done features
+
+_(moved here as they ship)_

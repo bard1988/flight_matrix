@@ -1247,6 +1247,7 @@ function startSearch() {
   $('go').classList.remove('stale');
   $('go').classList.add('running');
   $('go').textContent = 'Searching…';
+  $('stop').hidden = false;
   $('stalenote').hidden = true;
   $('progress').textContent = 'Finding destinations…';
 
@@ -1288,9 +1289,27 @@ function startSearch() {
     .catch((err) => {
       $('go').classList.remove('running');
       $('go').textContent = 'Search';
+      $('stop').hidden = true;
       $('errors').textContent = String(err);
       $('progress').textContent = '';
     });
+}
+
+/* Stop a running search. Closes the stream immediately and tells the backend to stop
+   at the next destination boundary; whatever already rendered stays on screen. */
+function stopSearch() {
+  if (state.searchId) {
+    fetch(`/api/search/${state.searchId}/cancel`, { method: 'POST' }).catch(() => {});
+  }
+  if (state.source) { state.source.close(); state.source = null; }
+  $('go').classList.remove('running');
+  $('go').textContent = 'Search';
+  $('stop').hidden = true;
+  $('growing').hidden = true;
+  $('progress').textContent = state.destinations.size
+    ? `Stopped — ${state.destinations.size} destination${state.destinations.size > 1 ? 's' : ''} loaded`
+    : 'Search stopped';
+  markSearchStale();
 }
 
 function consume(searchId) {
@@ -1361,6 +1380,7 @@ function consume(searchId) {
     state.source = null;
     $('go').classList.remove('running');
     $('go').textContent = 'Search';
+    $('stop').hidden = true;
     markSearchStale();   // settings may have been changed while the search ran
   };
   source.addEventListener('end', finish);
@@ -1370,6 +1390,7 @@ function consume(searchId) {
 /* --------------------------------------------------------------------- init */
 
 $('go').addEventListener('click', startSearch);
+$('stop').addEventListener('click', stopSearch);
 $('perperson').addEventListener('change', (e) => {
   state.perPerson = e.target.checked;
   if (state.meta) render();

@@ -128,12 +128,15 @@ def _run_search(search_id: str, request: SearchRequest) -> None:
     if hasattr(provider, "on_status"):
         provider.on_status = lambda m: channel.put({"type": "provider_status", "message": m})
     try:
-        for event in board.build(request, provider=provider):
+        for event in board.build(
+            request, provider=provider, should_stop=lambda: search_id in _cancelled
+        ):
             collected.append(event)
             channel.put(event)
     except Exception as exc:                    # never leave the client hanging
         channel.put({"type": "error", "message": str(exc)})
     finally:
+        _cancelled.discard(search_id)
         destinations = [e for e in collected if e.get("type") == "destination"]
         destinations.sort(key=board.sort_key)
         snapshot = {
@@ -151,9 +154,18 @@ def start_search(body: SearchBody) -> dict[str, str]:
     request = body.to_request()
     search_id = uuid.uuid4().hex[:12]
     cache.create_search(search_id, body.model_dump())
+    _cancelled.discard(search_id)
     _streams[search_id] = queue.Queue()
     threading.Thread(target=_run_search, args=(search_id, request), daemon=True).start()
     return {"search_id": search_id}
+
+
+@app.post("/api/search/{search_id}/cancel")
+def cancel_search(search_id: str) -> dict[str, bool]:
+    """Stop a running search. It ends at the next destination boundary and emits a
+    `done` event with whatever filled so far."""
+    _cancelled.add(search_id)
+    return {"cancelled": True}
 
 
 @app.get("/api/search/{search_id}/stream")
