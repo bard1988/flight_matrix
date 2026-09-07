@@ -8,7 +8,6 @@ Things worth doing, not yet scheduled.
 
 | # | Feature | Size | Status |
 |---|---|---|---|
-| 3 | **Stop button** while a search is running | S | in progress |
 | 2 | Changing **currency** shouldn't re-search — convert client-side from cached FX rates | M | todo |
 | 1 | **Filter by airline** — bundled airline-name DB, refreshed periodically (and/or from what searches return) | M | todo |
 | 6 | **Cabin class** selector (economy / premium / business) — thread through provider → API → UI | M | todo |
@@ -136,4 +135,11 @@ correctly no-ops on the VM; a proxy integration should not resurrect it.
 
 ## Done features
 
-_(moved here as they ship)_
+### #3 — Stop button (2026-09-07)
+
+`Stop` button appears next to `Search` while a search runs. Clicking it closes the
+event stream immediately (whatever destinations rendered stay on screen) and POSTs
+`/api/search/{id}/cancel`; the backend polls `should_stop` before discovery and
+between destinations, then emits a `done` event with `stopped: true`. Files:
+`backend/board.py` (`build(..., should_stop=)`), `backend/app.py`
+(`/api/search/{id}/cancel`, `_cancelled`), `frontend/{index.html,app.js}`.

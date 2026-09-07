@@ -269,6 +269,12 @@ def build(
         }
     )
 
+    if should_stop and should_stop():
+        yield emit({"type": "done", "destinations": 0, "empty": 0, "stopped": True,
+                    "strategy": getattr(provider, "strategy", "unknown"),
+                    "note": "Stopped before any destination was priced."})
+        return
+
     try:
         candidates = provider.discover(request, depart_dates, return_dates)
     except ProviderError as exc:
@@ -429,7 +435,7 @@ def build(
             "stopped": stopped,
             "strategy": provider.strategy,
             "note": (
-                f"Stopped — showing the {filled} destination(s) filled so far."
+                f"Stopped - showing the {filled} destination(s) filled so far."
                 if stopped else _coverage_note(request, filled, provider)
             ),
         }
