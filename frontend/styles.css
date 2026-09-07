@@ -326,12 +326,21 @@ button.primary {
 
 .status .err { color: var(--critical); }
 
-/* Coverage / horizon warning from the backend. Amber because it is advisory, and it
-   ships with words rather than relying on the colour to carry the meaning. */
+/* Coverage / horizon warning from the backend. A small amber dot marks it as advisory;
+   the words carry the meaning, so the colour is never the only signal. */
 .status .hint {
   color: var(--text-secondary);
-  border-left: 3px solid var(--warning);
-  padding-left: 8px;
+}
+
+.status .hint::before {
+  content: '';
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-right: 6px;
+  border-radius: 50%;
+  background: var(--warning);
+  vertical-align: 1px;
 }
 
 /* ---------------------------------------------------------------- legend */
