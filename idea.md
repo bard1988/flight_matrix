@@ -189,6 +189,19 @@ correctly no-ops on the VM; a proxy integration should not resurrect it.
 
 ## Done features
 
+### #14 — Fast graceful Kiwi -> Travelpayouts failover (2026-09-07)
+
+The board already fell back to Travelpayouts if Kiwi's *discovery* call failed, but a
+rate-limited per-destination fill just errored, and Kiwi waited out the 403 for up to
+180 s per fill. Now: `FM_KIWI_WAIT_BUDGET` default 180 -> 40, and when a Kiwi
+`fill_matrix` throws `ProviderError` mid-board (`board.build`), the rest of the
+destinations switch to Travelpayouts and the failed one retries there. Destinations
+already filled from Kiwi keep real party totals; the rest are estimates whose cheapest
+cells the live Google cross-check still corrects. The `done` event carries `failovers`
+plus a note ("N have real totals, M use cached estimates"). Files: `backend/config.py`,
+`backend/board.py`. The free answer to #13 — Kiwi when the IP behaves, snappy estimate
+fallback when it doesn't, no 5-minute stalls.
+
 ### #5 — Green → orange → red colour ramp (2026-09-07)
 
 Replaced the neutral-midpoint diverging ramp with a plain traffic-light scale

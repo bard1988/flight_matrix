@@ -118,9 +118,11 @@ KIWI_MIN_INTERVAL = float(os.environ.get("FM_KIWI_MIN_INTERVAL", "0.8"))
 KIWI_PROXY = os.environ.get("FM_KIWI_PROXY", "").strip() or None
 KIWI_PROXY_BUDGET_MB = float(os.environ.get("FM_KIWI_PROXY_BUDGET_MB", "950"))
 
-# A Kiwi 403 clears on its own, so wait it out rather than dropping to worse data.
-# Waiting a couple of minutes beats falling back to scaled estimates.
-KIWI_WAIT_BUDGET = float(os.environ.get("FM_KIWI_WAIT_BUDGET", "180"))
+# A Kiwi 403 clears on its own, but with graceful per-destination fallback to the cached
+# source (see board.build) a long stall is worse than an estimate. Wait a little, then
+# hand the rest of the board to Travelpayouts and let the live cross-check fix the
+# cheapest cells. Raise this if Kiwi is usable and you want to wait it out.
+KIWI_WAIT_BUDGET = float(os.environ.get("FM_KIWI_WAIT_BUDGET", "40"))
 KIWI_BACKOFF_BASE = float(os.environ.get("FM_KIWI_BACKOFF_BASE", "8"))
 KIWI_BACKOFF_MAX = float(os.environ.get("FM_KIWI_BACKOFF_MAX", "45"))
 KIWI_MAX_ATTEMPTS = int(os.environ.get("FM_KIWI_MAX_ATTEMPTS", "8"))

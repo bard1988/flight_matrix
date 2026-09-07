@@ -346,6 +346,8 @@ def build(
 
     filled = 0
     empty = 0
+    failovers = 0        # destinations that fell back to the cached source mid-board
+    real_totals = 0      # destinations filled with genuine party totals (not estimates)
     for index, (destination, _seed_price) in enumerate(candidates):
         if filled >= request.max_destinations:
             break
@@ -378,6 +380,8 @@ def build(
             cached.city, cached.country = info["city"], info["country"]
             cached.country_name = airports.country_name(info["country"])
             filled += 1
+            if getattr(provider, "name", "") == "kiwi":
+                real_totals += 1
             checked = _check_headline(request, cached, provider)
             if checked.get("headline_checks") or checked.get("headline_dropped"):
                 cache.put_cells(request.origin, destination, request.currency,
@@ -393,8 +397,30 @@ def build(
         try:
             matrix = provider.fill_matrix(request, destination, depart_dates, return_dates)
         except ProviderError as exc:
-            yield emit({"type": "destination_error", "destination": destination, "message": str(exc)})
-            continue
+            # Kiwi is rate-limited (or otherwise down). Rather than wait it out for every
+            # remaining destination, switch the rest of the board to the cached source and
+            # retry this one there. Destinations already filled from Kiwi keep their real
+            # prices; the new ones are estimates, and the live cross-check still corrects
+            # each card's cheapest cells.
+            fb = _fallback_provider(provider)
+            if fb is None:
+                yield emit({"type": "destination_error", "destination": destination,
+                            "message": str(exc)})
+                continue
+            provider = fb
+            if not failovers:
+                yield emit({
+                    "type": "provider_fallback",
+                    "message": (f"{exc} Remaining destinations use cached estimates; "
+                                "their cheapest cells are still cross-checked live."),
+                })
+            failovers += 1
+            try:
+                matrix = provider.fill_matrix(request, destination, depart_dates, return_dates)
+            except Exception as exc2:
+                yield emit({"type": "destination_error", "destination": destination,
+                            "message": str(exc2)})
+                continue
         except Exception:                       # a single bad destination must not kill the board
             yield emit(
                 {
@@ -421,11 +447,25 @@ def build(
             continue
 
         filled += 1
+        if getattr(provider, "name", "") == "kiwi":
+            real_totals += 1
         checked = _check_headline(request, matrix, provider)
         payload = matrix.to_json(request, depart_dates, return_dates, config.CHILD_FACTOR, config.STALE_AFTER_HOURS)
         payload.update(checked)
         payload.update({"type": "destination", "index": index, "total_candidates": len(candidates)})
         yield emit(payload)
+
+    if stopped:
+        done_note = f"Stopped - showing the {filled} destination(s) filled so far."
+    elif failovers:
+        estimated = max(0, filled - real_totals)
+        done_note = (
+            f"Kiwi rate-limited part way through: {real_totals} destination(s) have real "
+            f"party totals, {estimated} use cached estimates. Click a cell, or use Fill "
+            "live, to price the estimates for real."
+        )
+    else:
+        done_note = _coverage_note(request, filled, provider)
 
     yield emit(
         {
@@ -433,11 +473,9 @@ def build(
             "destinations": filled,
             "empty": empty,
             "stopped": stopped,
+            "failovers": failovers,
             "strategy": provider.strategy,
-            "note": (
-                f"Stopped - showing the {filled} destination(s) filled so far."
-                if stopped else _coverage_note(request, filled, provider)
-            ),
+            "note": done_note,
         }
     )
 
