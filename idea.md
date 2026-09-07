@@ -8,7 +8,6 @@ Things worth doing, not yet scheduled.
 
 | # | Feature | Size | Status |
 |---|---|---|---|
-| 2 | Changing **currency** shouldn't re-search — convert client-side from cached FX rates | M | todo |
 | 1 | **Filter by airline** — bundled airline-name DB, refreshed periodically (and/or from what searches return) | M | todo |
 | 6 | **Cabin class** selector (economy / premium / business) — thread through provider → API → UI | M | todo |
 | 5 | **Colour scale** to a plain green → orange → red diverging ramp | S | todo — see note |
@@ -134,6 +133,17 @@ correctly no-ops on the VM; a proxy integration should not resurrect it.
 ---
 
 ## Done features
+
+### #2 — Currency without re-search (2026-09-07)
+
+The board is priced in `meta.currency`; the currency dropdown is now a **display**
+setting. Changing it converts every shown number (`fmtMoney`, `fmtCompact` route
+through `convert()`) using FX rates from a free keyless source
+(`open.er-api.com`, localStorage-cached 12h, static `FX_FALLBACK` if offline) and
+re-renders — no new search. `'currency'` removed from `SEARCH_INPUTS` so it no longer
+marks the board stale. Per-matrix colour ranking is unaffected (invariant under a
+linear scale). Verify/fill/details calls still use the fetch currency. Files:
+`frontend/app.js`.
 
 ### #3 — Stop button (2026-09-07)
 
