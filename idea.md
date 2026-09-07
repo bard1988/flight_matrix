@@ -12,7 +12,7 @@ Things worth doing, not yet scheduled.
 | 9 | **Filter by region** — its own field: a collapsible continent → subregion → country tree | M–L | todo — see spec |
 | 11 | **Kids' ages** — per-child age (infant/child buckets), not just a count; changes the price. Must propagate to providers + `party_key` cache key + child-factor scaling | M–L | todo |
 | 6 | **Cabin class** selector (economy / premium / business) — thread through provider → API → UI | M | todo |
-| 4 | Make **"any trip inside this period" (range mode) the default**; nights box controls trip length; drop anchors mode | L | todo — destructive, decide first |
+| 4 | **One search model: period + trip length** — drop the "Dates mean" dropdown and anchors mode entirely | M | todo — see spec, decided |
 | 7 | **Mobile: more compact** | M | todo |
 | 7.1 | — passengers shown in the bar, not behind Options | S | todo |
 | 7.2 | — denser matrices on small screens | S | todo |
@@ -22,9 +22,45 @@ Things worth doing, not yet scheduled.
 
 ### Notes on specific items
 
-- **#4 drop anchors mode.** `date_mode` (`anchors|range`) is threaded through `models.py`,
-  `board.py`, `app.py` and the frontend. Removing a mode is a real refactor and changes
-  the default UX — confirm before starting.
+### #4 — One search model (spec, decided)
+
+**Rationale.** The two things people can always state about a trip are *roughly how
+long* ("a week off", "a long weekend") and *roughly when* ("mid-November"). That is
+exactly range mode's two inputs. Anchors asks for two specific dates instead, which
+forces the user to translate "a week around mid-Nov" into "depart the 14th, return the
+21st" — an extra step that also throws away the nights figure, which was the real
+constraint. Range can express every anchors case (narrow the period, set a nights
+band); anchors cannot express range ("two dates 56 days apart can only describe
+~56-night trips"). So: **one model, nights-first.**
+
+**The good news:** the range engine is already fully built and shipping —
+`SearchRequest.range_axes()`, `nights_span()`, `date_axes()`, and the range branch of
+`KiwiProvider.fill_matrix` / Travelpayouts / demo. #4 is mostly deletion + relabeling.
+
+**Backend (`models.py`, `board.py`, `app.py`):**
+- `date_mode` defaults to `"range"` (keep the field for one release for request
+  back-compat, then remove). `is_range` / the `anchors` branches in `date_axes`,
+  `fill_matrix`, `_prune_to_nights`, `_coverage_note` go away.
+- `nights_span()` when min/max aren't given: today defaults to `2..4`. Change to derive
+  from the two date fields — `n = (travel_until - travel_from)` clamped, band `n±2` — or
+  just require the nights field in the UI so it's always sent.
+- `depart_window`/`return_window` / `window(anchor, days)` become dead code; the
+  `window_days` "± N days" widen-on-scroll becomes "extend the period" (already how
+  range widening works).
+
+**Frontend (`index.html`, `app.js`):**
+- Delete the `#datemode` `<select>` and `syncDateMode()`.
+- Relabel the two date fields: **"Travel from"** / **"Travel until"** (a period), always.
+- Make **Nights** (`nmin`/`nmax`) a first-class visible field, not tucked in the
+  advanced area — it's now the primary constraint. Default e.g. `5`–`9`.
+- `searchSignature()`: nights always counts (drop the "only in range mode" branch).
+- Default values: travel from ≈ today+30, travel until ≈ today+75, nights 5–9.
+- The "impossible constraint" warning (anchors + short-nights) is no longer possible —
+  remove it.
+
+**Sequencing:** backend is safe now (design-independent). Frontend overlaps the
+`/impeccable` design pass (it owns the control bar) — do it right after, or hand the
+date-field change to that pass.
 - **#1 airline DB.** `data/airlines_seen.py` already collects airline names. Filtering can
   be client-side on already-fetched cells (each cell carries `airline`); the search-time
   filter (spend the destination budget inside the filter) is the harder half.
