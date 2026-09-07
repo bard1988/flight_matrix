@@ -18,7 +18,9 @@ _SOURCES = {
     "cities": "https://api.travelpayouts.com/data/en/cities.json",
     "airports": "https://api.travelpayouts.com/data/en/airports.json",
 }
-_CACHE_FILE = DATA_DIR / "airports.json"
+# Bump the suffix when _build_index changes shape, so a stale cache is rebuilt rather
+# than served. v2: airport codes resolve to the city they serve.
+_CACHE_FILE = DATA_DIR / "airports.v2.json"
 
 _lock = threading.Lock()
 _index: dict[str, dict[str, str]] | None = None
@@ -26,16 +28,29 @@ _index: dict[str, dict[str, str]] | None = None
 
 def _build_index(cities: list[dict[str, Any]], airports: list[dict[str, Any]]) -> dict[str, dict[str, str]]:
     index: dict[str, dict[str, str]] = {}
-    # Airports first so that a city entry with the same code wins, since the board is
-    # keyed on city-level codes far more often than airport-level ones.
+
+    # code -> city name, so an airport code can report the city it serves rather than the
+    # terminal's own name ("Rome", not "Leonardo da Vinci-Fiumicino Airport").
+    city_names = {
+        (r.get("code") or "").upper(): r.get("name")
+        for r in cities if r.get("code") and r.get("name")
+    }
+
     for record in airports:
         code = (record.get("code") or "").upper()
         if not code:
             continue
-        index[code] = {
-            "city": record.get("name") or code,
+        served = city_names.get((record.get("city_code") or "").upper())
+        entry = {
+            "city": served or record.get("name") or code,
             "country": record.get("country_code") or "",
         }
+        # Keep the terminal name around too, for the flight-details panel's legs.
+        if served and record.get("name"):
+            entry["airport"] = record["name"]
+        index[code] = entry
+
+    # City-level codes win for the same code: the board is keyed on them far more often.
     for record in cities:
         code = (record.get("code") or "").upper()
         if not code:

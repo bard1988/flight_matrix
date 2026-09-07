@@ -2,6 +2,7 @@ data/cache.sqlite
 data/cache.sqlite-wal
 data/cache.sqlite-shm
 data/airports.json
+data/airports.v*.json
 data/ca-merged.pem
 data/kiwi_proxy_usage.json
 .env
