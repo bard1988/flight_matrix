@@ -258,6 +258,10 @@ class KiwiProvider:
         self._next_allowed = 0.0
         self._blocked_until = 0.0
         self.strategy = "kiwi-calendar"
+        # Set when the most recent fill_matrix hit a rate limit / transport error on one
+        # or more columns. board.build reads it to fail the rest of the board over to the
+        # cached source instead of grinding through every remaining destination.
+        self.rate_limited = False
         if self._proxy:
             self._note(
                 f"Kiwi calls routed through the proxy "
@@ -661,11 +665,16 @@ class KiwiProvider:
 
         matrix = DestinationMatrix(origin=request.origin.upper(), destination=destination.upper())
         lo_d, hi_d = depart_dates[0].isoformat(), depart_dates[-1].isoformat()
+        self.rate_limited = False
 
         def run(ret: date) -> list[Cell]:
             try:
                 return self._return_column(request, destination, spans[ret], ret)
             except ProviderError:
+                # A column failed - almost always the 403 rate limit (or a transport
+                # blip). Flag it so the board can fail over rather than serve a grid
+                # that is sparse only because Kiwi throttled us.
+                self.rate_limited = True
                 return []
 
         with ThreadPoolExecutor(max_workers=config.KIWI_WORKERS) as pool:

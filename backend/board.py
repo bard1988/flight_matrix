@@ -396,31 +396,8 @@ def build(
 
         try:
             matrix = provider.fill_matrix(request, destination, depart_dates, return_dates)
-        except ProviderError as exc:
-            # Kiwi is rate-limited (or otherwise down). Rather than wait it out for every
-            # remaining destination, switch the rest of the board to the cached source and
-            # retry this one there. Destinations already filled from Kiwi keep their real
-            # prices; the new ones are estimates, and the live cross-check still corrects
-            # each card's cheapest cells.
-            fb = _fallback_provider(provider)
-            if fb is None:
-                yield emit({"type": "destination_error", "destination": destination,
-                            "message": str(exc)})
-                continue
-            provider = fb
-            if not failovers:
-                yield emit({
-                    "type": "provider_fallback",
-                    "message": (f"{exc} Remaining destinations use cached estimates; "
-                                "their cheapest cells are still cross-checked live."),
-                })
-            failovers += 1
-            try:
-                matrix = provider.fill_matrix(request, destination, depart_dates, return_dates)
-            except Exception as exc2:
-                yield emit({"type": "destination_error", "destination": destination,
-                            "message": str(exc2)})
-                continue
+        except ProviderError:
+            matrix = None
         except Exception:                       # a single bad destination must not kill the board
             yield emit(
                 {
@@ -429,6 +406,43 @@ def build(
                     "message": traceback.format_exc(limit=1).strip().splitlines()[-1],
                 }
             )
+            continue
+
+        # Kiwi threw, or throttled part way through this grid (fill_matrix swallows the
+        # 403 and just returns fewer cells, setting `rate_limited`). Either way, hand the
+        # rest of the board to the cached source rather than grind through every remaining
+        # destination at Kiwi's pace. Destinations already filled from Kiwi keep their real
+        # party totals; the new ones are estimates whose cheapest cells the live
+        # cross-check still corrects.
+        if getattr(provider, "name", "") == "kiwi" and (
+            matrix is None or getattr(provider, "rate_limited", False)
+        ):
+            fb = _fallback_provider(provider)
+            if fb is None:
+                if matrix is None:
+                    yield emit({"type": "destination_error", "destination": destination,
+                                "message": "Kiwi unavailable and no cached fallback configured."})
+                    continue
+            else:
+                provider = fb
+                if not failovers:
+                    yield emit({
+                        "type": "provider_fallback",
+                        "message": ("Kiwi is rate-limiting - the rest of the board uses "
+                                    "cached estimates; each card's cheapest cells are "
+                                    "still cross-checked live."),
+                    })
+                failovers += 1
+                try:
+                    matrix = provider.fill_matrix(request, destination, depart_dates, return_dates)
+                except Exception as exc2:
+                    yield emit({"type": "destination_error", "destination": destination,
+                                "message": str(exc2)})
+                    continue
+
+        if matrix is None:
+            yield emit({"type": "destination_error", "destination": destination,
+                        "message": "no data for this destination"})
             continue
 
         if not request.has_search_filters:
