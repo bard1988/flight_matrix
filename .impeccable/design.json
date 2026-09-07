@@ -1,0 +1,168 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-09-07T00:00:00Z",
+  "title": "Design System: FlightMatrix",
+  "extensions": {
+    "colorMeta": {
+      "ink": { "role": "primary", "displayName": "Near-Black Ink", "canonical": "#0b0b0b", "darkValue": "#ffffff", "tonalRamp": ["#0b0b0b", "#232320", "#3d3c38", "#575650", "#767469", "#9d9a8d", "#c6c2b4", "#ece8dd"] },
+      "ink-secondary": { "role": "neutral", "displayName": "Warm Slate", "canonical": "#52514e", "darkValue": "#c3c2b7", "tonalRamp": ["#1a1a18", "#2e2d2a", "#42413d", "#52514e", "#6e6c67", "#928f86", "#bdb9ac", "#e6e2d7"] },
+      "ink-muted": { "role": "neutral", "displayName": "Quiet Stone", "canonical": "#898781", "darkValue": "#898781", "tonalRamp": ["#201f1d", "#35342f", "#4b4a44", "#63615a", "#898781", "#a8a69f", "#c9c7bf", "#ece9e0"] },
+      "paper": { "role": "neutral", "displayName": "Warm Paper", "canonical": "#f9f9f7", "darkValue": "#0d0d0d", "tonalRamp": ["#171613", "#2b2823", "#423e37", "#5c574d", "#7c766a", "#a39d8f", "#c9c3b4", "#f9f9f7"] },
+      "paper-raised": { "role": "neutral", "displayName": "Raised Paper", "canonical": "#fcfcfb", "darkValue": "#1a1a19", "tonalRamp": ["#1a1a19", "#2c2b28", "#434139", "#5d584e", "#7d776b", "#a49e90", "#c9c4b5", "#fcfcfb"] },
+      "gridline": { "role": "neutral", "displayName": "Gridline", "canonical": "#e1e0d9", "darkValue": "#2c2c2a", "tonalRamp": ["#1c1c1a", "#2c2c2a", "#43423d", "#5d5b53", "#7d7b70", "#a4a294", "#c6c4b8", "#e1e0d9"] },
+      "axis": { "role": "neutral", "displayName": "Axis Grey", "canonical": "#c3c2b7", "darkValue": "#383835", "tonalRamp": ["#232320", "#383835", "#4f4e48", "#67655d", "#87857a", "#a5a398", "#c3c2b7", "#e7e6dc"] },
+      "hairline": { "role": "neutral", "displayName": "Ink Hairline", "canonical": "rgba(11, 11, 11, 0.1)", "darkValue": "rgba(255, 255, 255, 0.1)", "tonalRamp": ["rgba(11,11,11,0.9)", "rgba(11,11,11,0.7)", "rgba(11,11,11,0.5)", "rgba(11,11,11,0.35)", "rgba(11,11,11,0.22)", "rgba(11,11,11,0.14)", "rgba(11,11,11,0.1)", "rgba(11,11,11,0.05)"] },
+      "marker-yellow": { "role": "tertiary", "displayName": "Reserved Marker Yellow", "canonical": "#f2b705", "darkValue": "#ffcf33", "tonalRamp": ["#3a2c01", "#5a4402", "#7c5e02", "#a37c03", "#c99a04", "#f2b705", "#f8d15f", "#fdecb8"] },
+      "verified-green": { "role": "tertiary", "displayName": "Verified Green", "canonical": "#0ca30c", "darkValue": "#0ca30c", "tonalRamp": ["#032f03", "#054605", "#075f07", "#0a7d0a", "#0c9a0c", "#0ca30c", "#5fd35f", "#b8f0b8"] },
+      "error-red": { "role": "tertiary", "displayName": "Error Red", "canonical": "#d03b3b", "darkValue": "#d03b3b", "tonalRamp": ["#3a0d0d", "#571313", "#7c1c1c", "#a32626", "#c93232", "#d03b3b", "#e38585", "#f5d0d0"] },
+      "advisory-amber": { "role": "tertiary", "displayName": "Advisory Amber", "canonical": "#fab219", "darkValue": "#fab219", "tonalRamp": ["#3d2b03", "#5d4104", "#815a05", "#a87706", "#d09507", "#fab219", "#fccf63", "#fee9b6"] },
+      "fare-0": { "role": "secondary", "displayName": "Fare Green (Cheapest)", "canonical": "#54b95c", "darkValue": "#63c96a", "tonalRamp": ["#0f2f13", "#17421c", "#1f5c27", "#2f7d38", "#3f9e49", "#54b95c", "#86d08c", "#c3e9c7"] },
+      "fare-1": { "role": "secondary", "displayName": "Fare Green-Yellow", "canonical": "#4f9e3c", "darkValue": "#69b544", "tonalRamp": ["#0f2a0b", "#173d11", "#1f5518", "#2d7322", "#3d8f2d", "#4f9e3c", "#7fc16b", "#bfe3ab"] },
+      "fare-2": { "role": "secondary", "displayName": "Fare Olive (Mid-Low)", "canonical": "#7f8a2f", "darkValue": "#9ba23f", "tonalRamp": ["#232607", "#33380c", "#474e12", "#61691a", "#727d23", "#7f8a2f", "#a9b263", "#d6dbac"] },
+      "fare-3": { "role": "secondary", "displayName": "Fare Orange (Mid)", "canonical": "#b0742a", "darkValue": "#cf8b3c", "tonalRamp": ["#2e1c09", "#43290d", "#5c3a12", "#7d4f19", "#9e6522", "#b0742a", "#cfa06a", "#e9d3b4"] },
+      "fare-4": { "role": "secondary", "displayName": "Fare Burnt Orange", "canonical": "#a95a2c", "darkValue": "#c56b34", "tonalRamp": ["#2c150a", "#40200e", "#582c13", "#78401b", "#985026", "#a95a2c", "#c98a63", "#e6c9b3"] },
+      "fare-5": { "role": "secondary", "displayName": "Fare Rust", "canonical": "#903a27", "darkValue": "#b04a30", "tonalRamp": ["#260d08", "#38130c", "#4e1c12", "#6c281b", "#853321", "#903a27", "#b56f5e", "#dcb4ab"] },
+      "fare-6": { "role": "secondary", "displayName": "Fare Deep Red (Dearest)", "canonical": "#6a2a20", "darkValue": "#94382b", "tonalRamp": ["#1f0c09", "#2e120d", "#431a13", "#59231b", "#6a2a20", "#894437", "#b1786c", "#dab7af"] }
+    },
+    "typographyMeta": {
+      "display": { "displayName": "Display", "purpose": "The single large price in the detail panel. The one big number on the surface." },
+      "headline": { "displayName": "Headline", "purpose": "Wordmark, destination card titles, panel heading. Ceiling for type size in the chrome." },
+      "body": { "displayName": "Body", "purpose": "Default text: inputs, status line, panel prose, footnote." },
+      "label": { "displayName": "Label", "purpose": "Uppercase field labels above every control." },
+      "numeric": { "displayName": "Numeric / Cell", "purpose": "The price printed in each fare cell and the matrix date headers. Small by necessity; hundreds on screen." }
+    },
+    "shadows": [
+      { "name": "tooltip-ambient", "value": "0 6px 20px rgba(0, 0, 0, 0.18)", "purpose": "The only true drop shadow in the system. Belongs to the hover tooltip, the one element that genuinely floats free above everything." },
+      { "name": "ring-card-best", "value": "0 0 0 1px var(--marker-yellow)", "purpose": "Not elevation: a spread outline marking the board-wide cheapest card." },
+      { "name": "ring-cell-best-here", "value": "0 0 0 1px var(--surface-1), 0 0 0 3px var(--marker-yellow)", "purpose": "Marks each card's own cheapest cell with a 1px surface gap then a yellow ring." },
+      { "name": "ring-cell-best-board", "value": "0 0 0 1px var(--surface-1), 0 0 0 4px var(--marker-yellow), 0 0 0 5px var(--text-primary)", "purpose": "Heavier double ring for the single cheapest cell on the whole board." }
+    ],
+    "motion": [
+      { "name": "panel-slide", "value": "transform 0.16s ease", "purpose": "The detail panel entering from the right edge (translateX(100%) to none). Mobile: same, as a full sheet." },
+      { "name": "locate-flash", "value": "locate-flash 0.4s ease-in-out 4", "purpose": "Pulses the cheapest-cell marker ring four times after a jump-to-cheapest, so the eye lands on the right square." }
+    ],
+    "breakpoints": [
+      { "name": "mobile", "value": "720px" }
+    ]
+  },
+  "components": [
+    {
+      "name": "Secondary Button",
+      "kind": "button",
+      "refersTo": "button",
+      "description": "The default button: quiet, hairline-bordered, no fill change on hover.",
+      "html": "<button class=\"ds-btn\">Table view</button>",
+      "css": ".ds-btn { font: 14px/1.45 system-ui, -apple-system, 'Segoe UI', sans-serif; color: #0b0b0b; background: #f9f9f7; border: 1px solid #c3c2b7; border-radius: 6px; padding: 6px 12px; cursor: pointer; } .ds-btn:hover { border-color: #898781; } .ds-btn:focus-visible { outline: 2px solid #0b0b0b; outline-offset: 1px; } .ds-btn[disabled] { opacity: 0.5; cursor: default; }"
+    },
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "Inverted ink fill for commit actions (Search). Goes to 75% opacity while running.",
+      "html": "<button class=\"ds-btn-primary\">Search</button>",
+      "css": ".ds-btn-primary { font: 14px/1.45 system-ui, -apple-system, 'Segoe UI', sans-serif; color: #fcfcfb; background: #0b0b0b; border: 1px solid #0b0b0b; border-radius: 6px; padding: 6px 12px; cursor: pointer; } .ds-btn-primary:hover { opacity: 0.85; } .ds-btn-primary:focus-visible { outline: 2px solid #0b0b0b; outline-offset: 2px; } .ds-btn-primary.is-running { opacity: 0.75; }"
+    },
+    {
+      "name": "Primary Button (Stale)",
+      "kind": "button",
+      "refersTo": "button-primary-stale",
+      "description": "The Search button when a pending change (a time-window filter) needs a re-run. The one place a button changes colour to signal state.",
+      "html": "<button class=\"ds-btn-stale\">Search</button>",
+      "css": ".ds-btn-stale { font: 14px/1.45 system-ui, -apple-system, 'Segoe UI', sans-serif; color: #0b0b0b; background: #f2b705; border: 1px solid #f2b705; border-radius: 6px; padding: 6px 12px; cursor: pointer; } .ds-btn-stale:hover { filter: brightness(0.96); }"
+    },
+    {
+      "name": "Field + Label",
+      "kind": "input",
+      "refersTo": "input",
+      "description": "Text/number/date input with its uppercase label above. Focus treatment is a proposed addition (calm border shift to ink).",
+      "html": "<div class=\"ds-field\"><label class=\"ds-label\" for=\"ds-demo-input\">Depart around</label><input class=\"ds-input\" id=\"ds-demo-input\" type=\"text\" value=\"TLV\" /></div>",
+      "css": ".ds-field { display: flex; flex-direction: column; gap: 3px; } .ds-label { font: 400 11px/1.2 system-ui, sans-serif; letter-spacing: 0.02em; text-transform: uppercase; color: #898781; } .ds-input { font: 14px/1.45 system-ui, sans-serif; color: #0b0b0b; background: #f9f9f7; border: 1px solid #c3c2b7; border-radius: 6px; padding: 5px 8px; min-width: 72px; } .ds-input:focus { outline: none; border-color: #0b0b0b; }"
+    },
+    {
+      "name": "Day-of-Week Toggle",
+      "kind": "chip",
+      "refersTo": "button",
+      "description": "One of seven square toggles; empty selection means 'any day'. Selected = solid ink fill.",
+      "html": "<div class=\"ds-dow\"><button class=\"ds-dow-btn\">M</button><button class=\"ds-dow-btn is-on\">T</button><button class=\"ds-dow-btn\">W</button><button class=\"ds-dow-btn\">T</button><button class=\"ds-dow-btn is-on\">F</button><button class=\"ds-dow-btn\">S</button><button class=\"ds-dow-btn\">S</button></div>",
+      "css": ".ds-dow { display: flex; gap: 2px; } .ds-dow-btn { width: 20px; padding: 4px 0; font: 400 10px/1 system-ui, sans-serif; text-align: center; color: #898781; background: #f9f9f7; border: 1px solid #c3c2b7; border-radius: 4px; cursor: pointer; } .ds-dow-btn:hover { border-color: #898781; } .ds-dow-btn.is-on { background: #0b0b0b; color: #fcfcfb; border-color: #0b0b0b; font-weight: 700; }"
+    },
+    {
+      "name": "Status Tag",
+      "kind": "chip",
+      "refersTo": "tag",
+      "description": "Hollow uppercase micro-chip marking a price's provenance. Variants: default (EST/KIWI), live (verified on Google Flights).",
+      "html": "<span class=\"ds-tag\">KIWI</span> <span class=\"ds-tag ds-tag--live\">LIVE</span>",
+      "css": ".ds-tag { display: inline-block; font: 600 9px/1.4 system-ui, sans-serif; text-transform: uppercase; letter-spacing: 0.04em; color: #898781; border: 1px solid rgba(11,11,11,0.1); border-radius: 3px; padding: 0 3px; } .ds-tag--live { color: #0ca30c; border-color: #0ca30c; }"
+    },
+    {
+      "name": "Destination Card",
+      "kind": "card",
+      "refersTo": "card",
+      "description": "One card per destination. Flat, 8px radius, hairline border. The '.is-winner' state adds a yellow border + 1px ring.",
+      "html": "<div class=\"ds-card\"><div class=\"ds-card-head\"><h2 class=\"ds-card-title\">Athens</h2><span class=\"ds-card-code\">ATH</span><span class=\"ds-card-best\">₪412</span></div><div class=\"ds-card-slot\">matrix</div></div>",
+      "css": ".ds-card { background: #fcfcfb; border: 1px solid rgba(11,11,11,0.1); border-radius: 8px; padding: 7px 9px 8px; } .ds-card.is-winner { border-color: #f2b705; box-shadow: 0 0 0 1px #f2b705; } .ds-card-head { display: flex; align-items: baseline; gap: 8px; margin-bottom: 8px; } .ds-card-title { font: 600 15px/1.2 system-ui, sans-serif; margin: 0; } .ds-card-code { color: #898781; font-size: 12px; } .ds-card-best { margin-left: auto; font-weight: 600; font-variant-numeric: tabular-nums; } .ds-card-slot { height: 60px; border: 1px dashed #e1e0d9; border-radius: 2px; display: flex; align-items: center; justify-content: center; color: #898781; font-size: 11px; }"
+    },
+    {
+      "name": "Fare Matrix Cells",
+      "kind": "custom",
+      "refersTo": "matrix-cell",
+      "description": "The signature component. A mesh of 26x17px tiles, 2px radius, 2px gap, 9px tabular-nums, per-step background + matched ink. Shown: ramp steps, cheapest marker, verified, no-data hatch.",
+      "html": "<table class=\"ds-matrix\"><tr><td class=\"ds-c ds-c0 is-best\">412</td><td class=\"ds-c ds-c1\">438</td><td class=\"ds-c ds-c2\">501</td><td class=\"ds-c ds-c3\">566</td></tr><tr><td class=\"ds-c ds-c2\">497</td><td class=\"ds-c ds-c3 is-verified\">559</td><td class=\"ds-c ds-c5\">712</td><td class=\"ds-c ds-nodata\"></td></tr></table>",
+      "css": ".ds-matrix { border-collapse: separate; border-spacing: 2px; font-variant-numeric: tabular-nums; } .ds-c { width: 26px; height: 17px; text-align: center; font: 400 9px/15px system-ui, sans-serif; border-radius: 2px; border: 1px solid transparent; color: #0b0b0b; cursor: pointer; } .ds-c0 { background: #54b95c; } .ds-c1 { background: #4f9e3c; } .ds-c2 { background: #7f8a2f; } .ds-c3 { background: #b0742a; } .ds-c4 { background: #a95a2c; color: #fff; } .ds-c5 { background: #903a27; color: #fff; } .ds-c6 { background: #6a2a20; color: #fff; } .ds-c:hover { outline: 2px solid #0b0b0b; outline-offset: 1px; } .ds-c.is-best { box-shadow: 0 0 0 1px #fcfcfb, 0 0 0 3px #f2b705; font-weight: 600; } .ds-c.is-verified { border-color: #0b0b0b; font-weight: 600; } .ds-c.ds-nodata { background-color: #fcfcfb; background-image: repeating-linear-gradient(45deg, transparent, transparent 3px, rgba(11,11,11,0.07) 3px, rgba(11,11,11,0.07) 5px); border-color: rgba(11,11,11,0.1); }"
+    },
+    {
+      "name": "Detail Panel Price Block",
+      "kind": "custom",
+      "refersTo": "card",
+      "description": "Top of the slide-in detail panel: the one large price, a definition list of facts, flight legs indented under a bold sector summary.",
+      "html": "<div class=\"ds-panel\"><h3 class=\"ds-panel-h\">Athens · 12–19 Nov</h3><div class=\"ds-big\">₪412</div><dl class=\"ds-dl\"><dt>Source</dt><dd>Kiwi</dd><dt>Stops</dt><dd>Nonstop</dd></dl></div>",
+      "css": ".ds-panel { width: 300px; background: #fcfcfb; border-left: 1px solid rgba(11,11,11,0.1); padding: 16px; font: 14px/1.45 system-ui, sans-serif; color: #0b0b0b; } .ds-panel-h { margin: 0 0 4px; font-size: 16px; font-weight: 600; } .ds-big { font-size: 26px; font-weight: 600; font-variant-numeric: tabular-nums; } .ds-dl { display: grid; grid-template-columns: auto 1fr; gap: 4px 10px; margin: 12px 0; } .ds-dl dt { color: #898781; } .ds-dl dd { margin: 0; font-variant-numeric: tabular-nums; }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Departures Board",
+    "overview": "FlightMatrix looks like the analog board in an airport concourse: tabular, glanceable, numbers first, and stripped of decoration. The interface's whole job is to get out of the way of a dense grid of prices so the eye can scan across destinations and date pairs and land on the cheap one. Every element is sized to the information it carries — a fare cell is 26×17px because that is what a four-digit price needs, not a pixel more — and the chrome around the grid is deliberately quiet: hairline borders, a faint warm-paper ground, one weight of one typeface doing all the hierarchy.\n\nThe stance is a quiet instrument, explicitly not a consumer travel site. There are no hero images, no gradients, no urgency banners, no \"1 seat left\" theatre, no decorative colour. The one place colour is loud — the green-to-red fare heatmap — is load-bearing data, and even there the number is always printed on the cell so colour is never the only signal. The product's voice is candid about its own limits (estimates are a ranking, not a quote; a hatched cell means \"no data\", not \"expensive\") and the design carries that honesty: states are labelled in words, warnings ship with text, and nothing is styled to look more certain than it is.\n\nDensity is high and calculated. Several destination cards sit side by side, each matrix scrolls inside its own fixed viewport rather than stretching the card, and the page fills the viewport edge to edge like a tool rather than sitting in a document column. Motion is minimal — a panel slide, a locate pulse — and surfaces are flat.",
+    "keyCharacteristics": [
+      "Numbers-first: tabular figures everywhere comparison happens; the grid is the hero.",
+      "One typeface, one warm-neutral palette, hairline separation — the chrome recedes.",
+      "Flat by default: depth is a 1px border or a tonal step, not a shadow.",
+      "Colour is a second channel, never the only one; yellow is reserved for the \"cheapest\" marker.",
+      "Honest states: labelled in words, never over-styled for false confidence.",
+      "Light and dark are equal citizens (system-following, with a manual override)."
+    ],
+    "rules": [
+      { "name": "The Colour-Is-Second Rule", "body": "Every priced cell prints its price. The fare ramp's WCAG relative luminance is strictly monotonic cheapest → dearest, so the scale still reads (light → dark) with hue removed — green/orange/red otherwise collapse together under deuteranopia. Never ship a state where colour is the only carrier of meaning.", "section": "colors" },
+      { "name": "The Reserved Yellow Rule", "body": "marker-yellow (#f2b705, #ffcf33 in dark) marks the cheapest cell — a ring on each card's own cheapest, a thicker ring plus card border on the board-wide cheapest. It appears nowhere in the fare ramp, so a yellow ring can never be misread as a price level.", "section": "colors" },
+      { "name": "The Per-Matrix Scale Rule", "body": "Heatmap colour ranks date pairs within one destination, never across cards. A green cell on an expensive city can cost more than a red cell on a cheap one. Cross-card comparison is by headline price and cheapest-first order only — never imply otherwise in UI copy or legend.", "section": "colors" },
+      { "name": "The One Family Rule", "body": "A single system-ui stack does all the work. Weight (400/600/700) and size carry hierarchy. Do not introduce a display serif, a monospace, or a second sans — the neutrality is the point.", "section": "typography" },
+      { "name": "The Tabular Numbers Rule", "body": "Any number a user might compare, sort, or watch update uses font-variant-numeric: tabular-nums so digits stay column-aligned. This is already on the matrix, every headline price, the panel, and both table views.", "section": "typography" },
+      { "name": "The Flat-By-Default Rule", "body": "Surfaces are flat at rest. If you reach for a box-shadow, stop: use a 1px border or a tonal step instead. The tooltip is the single sanctioned exception, because it is the single element that actually floats.", "section": "elevation" },
+      { "name": "The Ring, Not Glow Rule", "body": "Focus, selection and \"you are here\" are hard offset rings (crisp, 1–5px spread, often with a 1px surface-coloured gap), never a soft blurred glow. Hover on a fare cell is a 2px ink outline at outline-offset: 1px.", "section": "elevation" },
+      { "name": "The Radius-Tracks-Size Rule", "body": "8px for containers, 6px for controls, 4px for small toggles, 3px for chips, 2px for fare cells. Radius shrinks as the element shrinks so the dense grid stays crisp.", "section": "elevation" },
+      { "name": "The Card-Sized-Not-Grid-Sized Rule", "body": "A destination card never grows to fit its matrix; the matrix scrolls inside a fixed viewport (max-height: min(46vh, 268px)) so many cards stay comparable on one screen.", "section": "elevation" },
+      { "name": "The Pinned Axes Rule", "body": "When a matrix scrolls, the departure row, return column and corner stay pinned via position: sticky, z-order corner (3) > header row (2) > row header (1).", "section": "elevation" }
+    ],
+    "dos": [
+      "Do print the number on anything that also uses colour to encode a value; the colour is the second channel.",
+      "Do keep font-variant-numeric: tabular-nums on every comparable figure.",
+      "Do separate surfaces with a 1px border (hairline / axis / gridline) and the paper → paper-raised tonal step.",
+      "Do use hard offset rings for focus / selection / \"you are here\"; give the fare-cell hover a 2px ink outline.",
+      "Do size an element to its content — the grid's tightness (2px gaps, 2px radius, 9px type) is deliberate.",
+      "Do let colour rank within a card only; compare across cards by headline price and order.",
+      "Do ship every warning and state with a word or icon, not colour alone; keep advisory things in advisory-amber, errors in error-red, verified in verified-green.",
+      "Do keep the warm-paper neutrals (#f9f9f7 / #fcfcfb); they are the system's character, not an accident.",
+      "Do support light and dark equally — define every colour as a token in all three roots (:root, prefers-color-scheme: dark, [data-theme='dark'])."
+    ],
+    "donts": [
+      "Don't add a box-shadow to cards, the panel, buttons, or inputs. The tooltip is the only element that carries an ambient shadow.",
+      "Don't use marker-yellow (#f2b705 / #ffcf33) as a fill, a ramp step, or anything other than the \"cheapest\" marker.",
+      "Don't introduce a second typeface — no display serif, no monospace. Weight and size carry hierarchy.",
+      "Don't put the app in a centred max-width column; it is full-bleed.",
+      "Don't let a destination card grow to fit its matrix — the matrix scrolls inside a fixed viewport so cards stay comparable.",
+      "Don't hide the matrix scrollbars or make them overlay-only; their visibility tells the user there is more grid.",
+      "Don't style an estimate to look as certain as a verified price, or a nodata cell to look expensive.",
+      "Don't add gradients, hero imagery, urgency messaging, or decorative colour — this is an instrument, not a booking funnel.",
+      "Don't animate beyond the sanctioned set (panel slide 0.16s, locate pulse); there is no prefers-reduced-motion handling yet, so keep motion small and purposeful."
+    ]
+  }
+}

@@ -155,11 +155,12 @@ on Google Flights), *anchors mode* vs *range mode*, *EST* / `KIWI` / *LIVE*.
 
 - Target **WCAG 2.1 AA** for the interface overall.
 - The fare ramp must stay **distinguishable under red–green colour vision deficiency**. The
-  current diverging ramp uses deliberately asymmetric arm lightness (dark green arm, light
-  red arm) so cheap vs dear reads by lightness alone; verified with the Machado–Oliveira–
-  Fernandes model at severity 1.0 via `data/check_diverging_cvd.py`. Regenerate with
-  `data/emit_ramp_css.py` and re-run the CVD check after any ramp change.
+  shipped ramp is green → orange → red where **WCAG relative luminance is strictly
+  monotonic** cheapest → dearest, so the scale still reads (light → dark) with hue removed —
+  green/orange/red otherwise collapse together under deuteranopia. Preserve luminance
+  monotonicity on any ramp change and re-check with the `data/` CVD scripts.
 - **Colour is never the sole carrier of price meaning:** every cell carries a visible price
-  label (minimum measured label contrast 4.8:1) and the table view lists every value.
-- Yellow is reserved for the cheapest-cell markers and must never appear as a ramp fill, so
-  the marker cannot be read as a price level.
+  label (per-step black/white ink chosen by measured contrast) and the table view lists
+  every value.
+- Yellow (`--cheapest`) is reserved for the cheapest-cell markers and must never appear as a
+  ramp fill, so the marker cannot be read as a price level.
