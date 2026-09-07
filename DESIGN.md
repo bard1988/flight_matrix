@@ -14,13 +14,13 @@ colors:
   verified-green: "#0ca30c"
   error-red: "#d03b3b"
   advisory-amber: "#fab219"
-  fare-0: "#54b95c"
-  fare-1: "#4f9e3c"
-  fare-2: "#7f8a2f"
-  fare-3: "#b0742a"
-  fare-4: "#a95a2c"
-  fare-5: "#903a27"
-  fare-6: "#6a2a20"
+  fare-0: "#12603d"
+  fare-1: "#19773f"
+  fare-2: "#278d41"
+  fare-3: "#bb7c24"
+  fare-4: "#e0875c"
+  fare-5: "#f99885"
+  fare-6: "#fbb7b4"
 typography:
   display:
     fontFamily: "system-ui, -apple-system, 'Segoe UI', sans-serif"
@@ -144,10 +144,10 @@ A warm near-monochrome — cream-tinted paper, near-black ink, warm greys — wi
 - **Advisory Amber** (`#fab219`): Coverage/horizon warnings (as a left border on a text hint), the "price is stale" dot, the drift badge, and the Search button when a pending change needs a re-run.
 
 ### The Fare Heatmap (`fare-0` … `fare-6`)
-A seven-step ramp from **`#54b95c` (green, cheapest)** through **`#b0742a` (orange, mid)** to **`#6a2a20` (deep red, dearest)**. It is scaled *per matrix*: each card runs its own cheapest cell to its own dearest. Each step ships a matched ink token (`--qi0`…`--qi6`, black or white by measured contrast) applied per cell. Dark theme uses a parallel seven-step ramp tuned to the dark ground (see `.impeccable/design.json`).
+A seven-step green → amber → red ramp from **`#12603d` (deep green, cheapest)** through **`#bb7c24` (gold, mid)** to **`#fbb7b4` (faded warm red, dearest)**. Its **OKLCH lightness is strictly monotonic** cheapest → dearest (L 0.43 → 0.84, minimum step ΔL 0.065), which is what carries the scale when hue is lost. The **cheap end owns the salience**: a dark, saturated green that jumps off the warm-white field, so the eye lands on the good dates first; the dear end recedes toward the surface. Scaled *per matrix* — each card runs its own cheapest to its own dearest. Each step ships a matched ink token (`--qi0`…`--qi6`, black or white by measured contrast, minimum label contrast 4.66:1). Dark theme mirrors it on the near-black ground: cheap = the brightest green (L 0.83), dearest = a deep muted red (L 0.40). Derive and re-validate with `data/emit_fare_ramp.py`; full step values and tonal context in `.impeccable/design.json`.
 
 ### Named Rules
-**The Colour-Is-Second Rule.** Every priced cell prints its price. The fare ramp's WCAG relative luminance is strictly monotonic cheapest → dearest, so the scale still reads (light → dark) with hue removed — green/orange/red otherwise collapse together under deuteranopia. Never ship a state where colour is the only carrier of meaning.
+**The Colour-Is-Second Rule.** Every priced cell prints its price, and the fare ramp's OKLCH lightness is strictly monotonic cheapest → dearest, so the scale still separates every step with hue removed — green, amber and red otherwise collapse together under deuteranopia. Any ramp change must keep the lightness monotone (min step ΔL ≥ 0.06) and re-run `data/emit_fare_ramp.py`. Never ship a state where colour is the only carrier of meaning.
 
 **The Reserved Yellow Rule.** `marker-yellow` (`#f2b705`, `#ffcf33` in dark) marks the cheapest cell — a ring on each card's own cheapest, a thicker ring plus card border on the board-wide cheapest. It appears **nowhere** in the fare ramp, so a yellow ring can never be misread as a price level.
 

@@ -155,10 +155,11 @@ on Google Flights), *anchors mode* vs *range mode*, *EST* / `KIWI` / *LIVE*.
 
 - Target **WCAG 2.1 AA** for the interface overall.
 - The fare ramp must stay **distinguishable under red–green colour vision deficiency**. The
-  shipped ramp is green → orange → red where **WCAG relative luminance is strictly
-  monotonic** cheapest → dearest, so the scale still reads (light → dark) with hue removed —
-  green/orange/red otherwise collapse together under deuteranopia. Preserve luminance
-  monotonicity on any ramp change and re-check with the `data/` CVD scripts.
+  shipped ramp is green → amber → red where **OKLCH lightness is strictly monotonic**
+  cheapest → dearest (min step ΔL ≥ 0.06), so the scale still separates every step with hue
+  removed — green/amber/red otherwise collapse under deuteranopia. The cheap end also
+  carries the salience (darkest, most saturated). Preserve monotonicity on any ramp change
+  and re-run `data/emit_fare_ramp.py` (derives + validates lightness, contrast, and CVD ΔE).
 - **Colour is never the sole carrier of price meaning:** every cell carries a visible price
   label (per-step black/white ink chosen by measured contrast) and the table view lists
   every value.

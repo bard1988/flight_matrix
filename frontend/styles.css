@@ -1,8 +1,10 @@
 /* FlightMatrix board.
-   Colour roles follow the dataviz reference palette. The fare heatmap is a SEQUENTIAL
-   one-hue green ramp encoding cheapness: dark green = cheapest, receding toward the
-   surface as price rises. Every cell also carries a visible price label, so the
-   near-surface end never carries meaning by fill alone. */
+   Colour roles follow the dataviz reference palette. The fare heatmap is a green -> amber
+   -> red price ramp whose LIGHTNESS is strictly monotonic cheapest -> dearest, so it still
+   reads with hue removed (the fix for red-green colour blindness). The cheap end carries
+   the salience: a deep saturated green on the light surface, the brightest green on the
+   dark one. Every cell also prints its price, so colour is never the only signal.
+   Ramp derived and validated in data/ (OKLCH lightness/chroma + CVD delta-E). */
 
 .viz-root,
 :root {
@@ -22,19 +24,17 @@
   --ink-flipped: #ffffff;
   --cheapest: #f2b705;   /* reserved for the cheapest-cell marker, never used as a fill */
 
-  /* Price ramp: q0 = cheapest (green) -> q3 = mid (orange) -> q6 = dearest (red).
-     Hue alone fails red-green colour blindness (green/orange/red all collapse together
-     under deuteranopia), so LIGHTNESS carries the scale: WCAG relative luminance is
-     strictly monotonic cheapest -> dearest, i.e. the ramp still reads as light -> dark
-     with hue fully removed. Every cell also prints its price, which is the real backstop.
-     --qiN is the readable ink (black/white) for step N. */
-  --q0: #54b95c;  --qi0: #0b0b0b;
-  --q1: #4f9e3c;  --qi1: #0b0b0b;
-  --q2: #7f8a2f;  --qi2: #0b0b0b;
-  --q3: #b0742a;  --qi3: #0b0b0b;
-  --q4: #a95a2c;  --qi4: #ffffff;
-  --q5: #903a27;  --qi5: #ffffff;
-  --q6: #6a2a20;  --qi6: #ffffff;
+  /* Price ramp on the light surface: q0 cheapest = deep green (L 0.43), through a gold
+     pivot, to q6 dearest = faded warm red (L 0.84). Lightness rises monotonically the
+     whole way (min step dL 0.065), so under any colour-vision deficiency the scale still
+     separates every step by tone. --qiN is the measured-contrast ink for step N. */
+  --q0: #12603d;  --qi0: #ffffff;
+  --q1: #19773f;  --qi1: #ffffff;
+  --q2: #278d41;  --qi2: #0b0b0b;
+  --q3: #bb7c24;  --qi3: #0b0b0b;
+  --q4: #e0875c;  --qi4: #0b0b0b;
+  --q5: #f99885;  --qi5: #0b0b0b;
+  --q6: #fbb7b4;  --qi6: #0b0b0b;
   --hatch: rgba(11, 11, 11, 0.07);
 }
 
@@ -52,14 +52,15 @@
     --ink-on-fill: #ffffff;
     --ink-flipped: #0b0b0b;
     --cheapest: #ffcf33;
-    /* green -> orange -> red, luminance monotonic on the dark surface too */
-    --q0: #63c96a;  --qi0: #0b0b0b;
-    --q1: #69b544;  --qi1: #0b0b0b;
-    --q2: #9ba23f;  --qi2: #0b0b0b;
-    --q3: #cf8b3c;  --qi3: #0b0b0b;
-    --q4: #c56b34;  --qi4: #0b0b0b;
-    --q5: #b04a30;  --qi5: #ffffff;
-    --q6: #94382b;  --qi6: #ffffff;
+    /* Same ramp mirrored for the dark surface: cheap = the brightest green (L 0.83),
+       dearest = a deep muted red (L 0.40). Lightness falls monotonically throughout. */
+    --q0: #68e4a3;  --qi0: #0b0b0b;
+    --q1: #5bcc80;  --qi1: #0b0b0b;
+    --q2: #52b365;  --qi2: #0b0b0b;
+    --q3: #b4771f;  --qi3: #0b0b0b;
+    --q4: #aa562a;  --qi4: #ffffff;
+    --q5: #953e2f;  --qi5: #ffffff;
+    --q6: #723232;  --qi6: #ffffff;
     --hatch: rgba(255, 255, 255, 0.08);
   }
 }
@@ -77,14 +78,15 @@
   --ink-on-fill: #ffffff;
   --ink-flipped: #0b0b0b;
   --cheapest: #ffcf33;
-  /* green -> orange -> red, luminance monotonic on the dark surface too */
-  --q0: #63c96a;  --qi0: #0b0b0b;
-  --q1: #69b544;  --qi1: #0b0b0b;
-  --q2: #9ba23f;  --qi2: #0b0b0b;
-  --q3: #cf8b3c;  --qi3: #0b0b0b;
-  --q4: #c56b34;  --qi4: #0b0b0b;
-  --q5: #b04a30;  --qi5: #ffffff;
-  --q6: #94382b;  --qi6: #ffffff;
+  /* Same ramp mirrored for the dark surface: cheap = the brightest green (L 0.83),
+     dearest = a deep muted red (L 0.40). Lightness falls monotonically throughout. */
+  --q0: #68e4a3;  --qi0: #0b0b0b;
+  --q1: #5bcc80;  --qi1: #0b0b0b;
+  --q2: #52b365;  --qi2: #0b0b0b;
+  --q3: #b4771f;  --qi3: #0b0b0b;
+  --q4: #aa562a;  --qi4: #ffffff;
+  --q5: #953e2f;  --qi5: #ffffff;
+  --q6: #723232;  --qi6: #ffffff;
   --hatch: rgba(255, 255, 255, 0.08);
 }
 
@@ -646,7 +648,9 @@ td.best-board {
               0 0 0 5px var(--text-primary);
   font-weight: 700;
 }
-td.verified { border-color: var(--text-primary); font-weight: 600; }
+/* Verified border rides the cell's own ink so it stays visible on the dark green
+   (cheap) end as well as the light red (dear) end. */
+td.verified { border-color: currentColor; font-weight: 600; }
 td:hover { outline: 2px solid var(--text-primary); outline-offset: 1px; }
 
 /* Cross-hair. Deliberately faint on the cells (the price colours must stay readable) and
