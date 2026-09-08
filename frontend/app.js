@@ -465,6 +465,8 @@ function render() {
     ? { dest: af.closest('.card') && af.closest('.card').dataset.dest, r: af.dataset.r, c: af.dataset.c }
     : null;
 
+  seedExpanded(ordered);
+
   // Each card gets its own colour scale, computed from just its own cells.
   board.replaceChildren(...ordered.map((dest) => renderCard(dest, scaleDomain(dest.allowed))));
 
@@ -522,6 +524,13 @@ function renderHeadline(ordered) {
       `${dest.city}, ${fmtMoney(cellValue(cell), cur)}, ${trip(cell)}, ` +
       `${cell.verified ? 'live price' : 'estimate'}. Show it on the board.`);
     b.addEventListener('click', () => {
+      // There is nothing to jump to while the destination is collapsed, so open it first.
+      // render() is synchronous, so the rebuilt card is queryable immediately after.
+      if (!isExpanded(dest.destination)) {
+        expanded.add(dest.destination);
+        autoExpandDone = true;
+        render();
+      }
       const card = $('board').querySelector(`.card[data-dest="${dest.destination}"]`);
       if (card) locateBest(card, dest);
     });
@@ -552,6 +561,64 @@ function headlineChip(dest) {
    destination animates once, when it first lands. Cleared by resetForSearch. */
 const animatedDests = new Set();
 
+/* Which destinations show their full grid. Survives the wholesale board rebuild that every
+   stream event triggers, exactly like animatedDests and scrollOffsets. */
+const expanded = new Set();
+let autoExpandDone = false;
+
+function isExpanded(code) {
+  return expanded.has(code);
+}
+
+/* Open the cheapest destination once, on the first render that has anything to show.
+   A board of nothing but collapsed lines hides the thing the product is for, and seeding
+   exactly once keeps it predictable: the winner changing later does not reshuffle what is
+   open, and the first manual toggle takes over for good. */
+function seedExpanded(ordered) {
+  if (autoExpandDone || !ordered.length) return;
+  expanded.add(ordered[0].destination);
+  autoExpandDone = true;
+}
+
+/* One cell per departure date, coloured by the cheapest fare available that day: the
+   matrix flattened onto its departure axis. This is what makes a collapsed row useful
+   rather than merely short, because "which day should I leave" is most of what the grid
+   gets scanned for. Same ramp as the grid, so the two read as one system. */
+function departureStrip(dest, domain) {
+  const wrap = document.createElement('div');
+  wrap.className = 'strip';
+
+  const cheapestByDeparture = new Map();
+  for (const cell of dest.allowed || []) {
+    const v = cellValue(cell);
+    if (v == null) continue;
+    const cur = cheapestByDeparture.get(cell.depart);
+    if (cur == null || v < cur.v) cheapestByDeparture.set(cell.depart, { v, cell });
+  }
+
+  for (const depart of state.meta.depart_dates) {
+    const hit = cheapestByDeparture.get(depart);
+    const i = document.createElement('i');
+    if (!hit) {
+      i.className = 'strip-cell strip-none';
+      i.title = `${weekday(depart)} ${shortDate(depart)}: no price`;
+    } else {
+      const idx = rampIndex(hit.v, domain);
+      i.className = 'strip-cell' + (idx === null ? ' unscaled' : ` q${idx}`);
+      i.title = `${weekday(depart)} ${shortDate(depart)}: from ` +
+        `${fmtMoney(hit.v, state.meta.currency)} (${hit.cell.nights} nights)`;
+    }
+    if (isWeekend(depart)) i.classList.add('strip-weekend');
+    wrap.appendChild(i);
+  }
+
+  // No caption here on purpose. It used to print "cheapest by departure day" beside every
+  // collapsed row, which on a twenty-destination board is the same sentence twenty times.
+  // It is stated once in the legend instead, and every cell carries the full figure in its
+  // title.
+  return wrap;
+}
+
 function renderCard(dest, domain) {
   const meta = state.meta;
   const card = document.createElement('section');
@@ -580,6 +647,38 @@ function renderCard(dest, domain) {
     `<span class="cov" title="${dest.coverage.populated} of ${dest.coverage.valid} date pairs priced">${dest.coverage.populated}/${dest.coverage.valid}</span>` +
     headlineChip(dest) +
     `<span class="best">${best != null ? fmtMoney(best, meta.currency) : ''} ${bestTag}</span>`;
+
+  /* Collapsed by default. Twenty full matrices, each with its own scrollbar, is a wall of
+     grids: the page cannot be taken in, and it gets worse the more destinations you ask
+     for. Collapsed, a destination is one line plus a strip showing WHICH departure days
+     are cheap, which is the question a grid answers by being scanned. Expand the ones
+     worth the detail.
+     The toggle sits first among the controls because it governs everything after it. */
+  const open = isExpanded(dest.destination);
+  card.classList.add(open ? 'is-open' : 'is-collapsed');
+  const toggle = document.createElement('button');
+  toggle.className = 'fillbtn disclose';
+  toggle.type = 'button';
+  toggle.textContent = open ? '−' : '+';   // minus / plus
+  toggle.title = open ? `Collapse ${dest.city}` : `Show ${dest.city}'s full date grid`;
+  toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+  toggle.setAttribute('aria-label',
+    open ? `Collapse ${dest.city}` : `Show ${dest.city}'s full date grid`);
+  toggle.onclick = () => {
+    if (isExpanded(dest.destination)) expanded.delete(dest.destination);
+    else expanded.add(dest.destination);
+    // Any manual toggle ends the one-time auto-expand, so the winner changing as prices
+    // stream in cannot reopen something the user just closed.
+    autoExpandDone = true;
+    render();
+  };
+  head.appendChild(toggle);
+
+  if (!open) {
+    card.appendChild(head);
+    card.appendChild(departureStrip(dest, domain));
+    return card;
+  }
 
   // Bulk live fill: ~1 minute for a whole grid, and it replaces every estimate with a
   // real price for the actual passenger mix. This is the answer to sparse cached data.
@@ -1546,6 +1645,8 @@ function startSearch() {
   $('note').hidden = true;
   scrollOffsets.clear();
   animatedDests.clear();        // a new board: let every destination animate in again
+  expanded.clear();             // and let the new winner be the one that opens
+  autoExpandDone = false;
   state.searchSignature = searchSignature();
   // Deliberately NOT disabled: a long search used to leave the button dead while it also
   // looked amber/clickable, so changing a setting mid-search trapped you. Pressing Search

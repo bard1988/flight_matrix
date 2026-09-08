@@ -854,6 +854,74 @@ table.matrix td.flash { animation: locate-flash 0.4s ease-in-out 4; }
   white-space: nowrap;
 }
 
+/* ------------------------------------------------- collapsed destination strip */
+
+/* A collapsed destination gives up its grid but not its information: one cell per
+   departure date, coloured by the cheapest fare that day. The matrix flattened onto its
+   departure axis, which is most of what the grid gets scanned for. */
+.card.is-collapsed { padding-bottom: 12px; }
+
+.strip {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 1px;
+}
+
+.strip-cell {
+  width: 15px;
+  height: 15px;
+  flex: 0 0 auto;
+}
+
+.strip-cell.q0 { background: var(--q0); }
+.strip-cell.q1 { background: var(--q1); }
+.strip-cell.q2 { background: var(--q2); }
+.strip-cell.q3 { background: var(--q3); }
+.strip-cell.q4 { background: var(--q4); }
+.strip-cell.q5 { background: var(--q5); }
+.strip-cell.q6 { background: var(--q6); }
+.strip-cell.unscaled { background: var(--gridline); }
+
+/* Nothing priced that day. Same hatch idiom as a nodata cell in the grid, so the two mean
+   the same thing in both places. */
+.strip-cell.strip-none {
+  background-color: var(--canvas);
+  background-image: repeating-linear-gradient(
+    45deg, transparent, transparent 4px, var(--hatch) 4px, var(--hatch) 6px);
+}
+
+/* The week rhythm matters for "which day should I leave", and the strip has no axis to
+   carry it. An inset rule rather than a border, so it costs no layout. */
+.strip-cell.strip-weekend { box-shadow: inset 0 -2px 0 0 var(--text-primary); }
+
+/* Legend swatch for the collapsed strip: three ramp steps, so it is recognisable as the
+   same object without repeating a caption on every collapsed row. */
+.legend .legend-strip {
+  display: inline-flex;
+  gap: 1px;
+  vertical-align: -2px;
+}
+
+.legend .legend-strip i {
+  width: 6px;
+  height: 12px;
+}
+
+.legend .legend-strip i:nth-child(1) { background: var(--q0); }
+.legend .legend-strip i:nth-child(2) { background: var(--q3); }
+.legend .legend-strip i:nth-child(3) { background: var(--q6); }
+
+/* The disclosure sits first among the head controls because it governs everything after
+   it. Square-ish, since its label is a single +/- glyph. */
+.card-head .disclose {
+  min-width: 26px;
+  padding: 2px 6px;
+  font-size: 14px;
+  line-height: 1.15;
+  text-align: center;
+}
+
 /* ---------------------------------------------------------------- matrix */
 
 table.matrix {
