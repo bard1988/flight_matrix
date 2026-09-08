@@ -1809,14 +1809,35 @@ $('nmin').value = '5';
 $('nmax').value = '9';
 
 // A shared/bookmarked board carries its search in the query string; it wins over the
-// isoToday and server defaults, and auto-runs once health has loaded.
+// isoToday and server defaults, and auto-runs on load.
 const urlBoard = boardFromUrl(new URLSearchParams(location.search));
 syncDateMode();
 syncReturnDate();
 
-fetch('/api/health')
-  .then((r) => r.json())
+// Say so immediately. /api/health has to answer before the search can start (it fills in
+// any field the URL left out), and until it does there is otherwise nothing on screen but
+// the first-run panel, which makes a restored board look like a cold start.
+if (urlBoard.size) {
+  $('firstrun').hidden = true;
+  $('datehint').hidden = true;
+  $('progress').textContent = 'Restoring your board…';
+}
+
+/* Health is a source of DEFAULTS, not a gate on searching.
+   This used to be `fetch('/api/health').then(...).finally(() => startSearch())`, which
+   quietly made a bookmarked board unopenable whenever health was slow to answer: fetch
+   has no timeout, so a hanging request never settles, `.finally` never runs, and the page
+   sits on the first-run panel forever with the query string still in the address bar.
+   Racing a timeout means the search always starts; if health loses the race we fall back
+   to the markup's own default values, which match the server's. */
+const HEALTH_TIMEOUT_MS = 4000;
+
+Promise.race([
+  fetch('/api/health').then((r) => r.json()).catch(() => null),
+  new Promise((resolve) => setTimeout(() => resolve(null), HEALTH_TIMEOUT_MS)),
+])
   .then((h) => {
+    if (!h || !h.defaults) return;   // lost the race, or unreachable: keep markup defaults
     if (!h.token_configured) {
       $('errors').textContent =
         'No Travelpayouts token configured. Add TRAVELPAYOUTS_TOKEN=... to the .env file in the project root, then restart.';
