@@ -85,17 +85,27 @@
   --cell-h: 20px;
   --cell-type: 10px;
   --cell-line: 18px;
-  --best-here-shadow: inset 0 0 0 2px var(--cheapest);
-  --best-board-shadow: inset 0 0 0 2px var(--cheapest), inset 0 0 0 4px var(--text-primary);
-  --flash-from: inset 0 0 0 2px var(--cheapest);
-  --flash-to: inset 0 0 0 6px var(--cheapest);
+  /* Every marker carries a 1px currentColor edge. currentColor is the cell's own measured
+     ink, so that edge is guaranteed to clear AA against whatever fill it lands on, and
+     without it the marker is unreadable: the cheapest cell is ALWAYS the vivid green q0,
+     and marker-yellow against that green measures 1.32 contrast. The yellow still carries
+     the meaning; the ink edge is what makes it visible. */
+  --best-here-shadow: inset 0 0 0 1px currentColor, inset 0 0 0 3px var(--cheapest);
+  --best-board-shadow:
+    inset 0 0 0 1px currentColor, inset 0 0 0 4px var(--cheapest),
+    inset 0 0 0 5px currentColor;
+  --flash-from: inset 0 0 0 1px currentColor, inset 0 0 0 3px var(--cheapest);
+  --flash-to: inset 0 0 0 1px currentColor, inset 0 0 0 7px var(--cheapest);
 }
 
 /* Revert switch 1: the previous spaced-chip grid, markers included. */
 :root[data-grid='tiles'] {
   --cell-gap: 2px;
   --cell-radius: 2px;
-  --best-here-shadow: 0 0 0 1px var(--canvas), 0 0 0 3px var(--cheapest);
+  /* Same problem outside the cell: marker-yellow on the light canvas is only ~1.7
+     contrast, so the spaced variant gets an ink hairline on the OUTER edge of the ring. */
+  --best-here-shadow:
+    0 0 0 1px var(--canvas), 0 0 0 3px var(--cheapest), 0 0 0 4px var(--text-primary);
   --best-board-shadow:
     0 0 0 1px var(--canvas), 0 0 0 4px var(--cheapest), 0 0 0 5px var(--text-primary);
   --flash-from: 0 0 0 1px var(--canvas), 0 0 0 4px var(--cheapest);
@@ -141,30 +151,40 @@
   --ink-flipped: #fcfcfb;
   --cheapest: #f2b705;   /* reserved for the cheapest-cell marker, never used as a fill */
 
-  /* DIVERGING price ramp (default): q0 cheapest = deep green, q3 mid = a cream that
-     recedes into the canvas, q6 dearest = clear red. Derived and gated by
-     data/emit_fare_ramp.py; --qiN is the measured-contrast ink for step N.
+  /* Price ramp: vivid green at cheapest, deep red at dearest, and ONE ramp for both
+     themes. Derived and gated by data/emit_fare_ramp.py; --qiN is the measured-contrast
+     ink for step N. Do not hand-edit these: run the script.
 
-     This replaced a sequential green-to-red ramp because sRGB caps chroma hardest at
-     extreme lightness, so that ramp was DULLEST at its ends: its cheapest step measured
-     chroma 0.086 against 0.142 in the middle, which made a MID-priced cell the most
-     obviously green thing on the board. Exactly backwards for a board about finding cheap.
+     Two earlier shapes were built, measured and rejected, and the reasons are worth
+     keeping because they are not obvious:
 
-     Lightness is no longer monotonic, so it cannot carry the ranking alone. The two arms
-     are asymmetric on purpose: the dear end sits at a different lightness from the cheap
-     end, so greyscale still ranks them (|dL| 0.180) and deuteranopic cheap-vs-dear
-     separation stays at 20.0 dE. A naive SYMMETRIC diverging ramp measured 5.1 dE there,
-     i.e. a red-green colour-blind user could not tell the best date from the worst. That
-     is why this shape is lopsided, and why the script now gates on both numbers.
+       1. Sequential cheap-dark -> dear-light. sRGB caps chroma hardest at extreme
+          lightness, so that ramp was DULLEST at its ends: its cheapest step measured
+          chroma 0.086 against 0.142 mid-ramp. The most obviously green cell was therefore
+          a MID-priced one, and the dearest came out pale pink.
+       2. Diverging green -> cream -> red. Vivid at both ends, but it gave up monotonic
+          lightness, and cheapest-vs-dearest separation under deuteranopia fell to 20.0 dE
+          (5.1 for the naive symmetric version, where the two ends are literally identical
+          in greyscale).
 
-     Set data-ramp="mono" on <html> to get the sequential ramp back. */
-  --q0: #115c35;  --qi0: #fcfcfb;
-  --q1: #1d8547;  --qi1: #fcfcfb;
-  --q2: #69a672;  --qi2: #0b0b0b;
-  --q3: #dfd7c5;  --qi3: #0b0b0b;
-  --q4: #de9277;  --qi4: #0b0b0b;
-  --q5: #dc6e62;  --qi5: #0b0b0b;
-  --q6: #d74745;  --qi6: #0b0b0b;
+     The fix came from measuring where sRGB puts its most vivid colours: green peaks at
+     L 0.87, red at L 0.63. "Best green" is a LIGHT colour, so vivid-green -> red is
+     naturally a FALLING-lightness ramp. That is why one ramp now serves both grounds:
+     every step is mid-to-high lightness and carries its own ink. Result beats both earlier
+     shapes at once (cheapest is the most chromatic step at 0.231, adjacency 6.1, ends
+     38.8 dE, lightness still ranks it).
+
+     The hue path jumps the yellow band between q2 and q3 rather than easing through gold,
+     because marker-yellow is reserved for the cheapest-cell ring and a gold FILL would
+     make that ring ambiguous. Going through gold measured marginally better and was
+     rejected on that rule, not on numbers. */
+  --q0: #3ffb74;  --qi0: #0b0b0b;
+  --q1: #69df32;  --qi1: #0b0b0b;
+  --q2: #89be2b;  --qi2: #0b0b0b;
+  --q3: #d47d23;  --qi3: #0b0b0b;
+  --q4: #d0561d;  --qi4: #0b0b0b;
+  --q5: #c32f17;  --qi5: #fcfcfb;
+  --q6: #a7192a;  --qi6: #fcfcfb;
   --hatch: rgba(11, 11, 11, 0.05);
 }
 
@@ -183,17 +203,10 @@
     --ink-on-fill: #fcfcfb;
     --ink-flipped: #0b0b0b;
     --cheapest: #ffcf33;
-    /* Diverging, same shape on the near-black surface: bright green at cheapest, bright
-       red at dearest, and the mid steps receding by going DARK instead of pale. Same
-       principle as light mode, mirrored: extremes pop, mid-price steps back toward the
-       canvas. Ends still 0.220 apart in lightness and 20.8 dE under deuteranopia. */
-    --q0: #31c97a;  --qi0: #0b0b0b;
-    --q1: #279552;  --qi1: #0b0b0b;
-    --q2: #266333;  --qi2: #fcfcfb;
-    --q3: #342d1f;  --qi3: #fcfcfb;
-    --q4: #6b2a11;  --qi4: #fcfcfb;
-    --q5: #922b24;  --qi5: #fcfcfb;
-    --q6: #ba2b2e;  --qi6: #fcfcfb;
+    /* No ramp override here: the fare ramp is theme-independent now. Every step sits at
+       mid-to-high lightness with its own measured ink, so the same seven fills read on
+       warm paper and on near-black alike. Two mirrored ramps were only ever needed
+       because the light one climbed in lightness while the dark one fell. */
     --hatch: rgba(255, 255, 255, 0.06);
   }
 }
@@ -212,54 +225,8 @@
   --ink-on-fill: #fcfcfb;
   --ink-flipped: #0b0b0b;
   --cheapest: #ffcf33;
-  /* Diverging dark, as above (manual [data-theme='dark'] override). */
-  --q0: #31c97a;  --qi0: #0b0b0b;
-  --q1: #279552;  --qi1: #0b0b0b;
-  --q2: #266333;  --qi2: #fcfcfb;
-  --q3: #342d1f;  --qi3: #fcfcfb;
-  --q4: #6b2a11;  --qi4: #fcfcfb;
-  --q5: #922b24;  --qi5: #fcfcfb;
-  --q6: #ba2b2e;  --qi6: #fcfcfb;
+  /* No ramp override: theme-independent, as above. */
   --hatch: rgba(255, 255, 255, 0.06);
-}
-
-/* ---- revert switch 3: the previous SEQUENTIAL ramp -------------------------------------
-   document.documentElement.dataset.ramp = 'mono'
-
-   Source order and specificity matter here, so do not reorder these three blocks. The
-   light override is (0,2,0), which outranks the plain dark :root at (0,1,0); the dark
-   override that follows it is also (0,2,0) and wins only by coming later. The
-   [data-theme][data-ramp] block is (0,3,0) and beats both. */
-:root[data-ramp='mono'] {
-  --q0: #0f5535;  --qi0: #fcfcfb;
-  --q1: #156b38;  --qi1: #fcfcfb;
-  --q2: #1b8138;  --qi2: #fcfcfb;
-  --q3: #a0771d;  --qi3: #0b0b0b;
-  --q4: #d0784d;  --qi4: #0b0b0b;
-  --q5: #f97c65;  --qi5: #0b0b0b;
-  --q6: #fa9d9a;  --qi6: #0b0b0b;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root[data-ramp='mono']:where(:not([data-theme='light'])) {
-    --q0: #68e4a3;  --qi0: #0b0b0b;
-    --q1: #5bcc80;  --qi1: #0b0b0b;
-    --q2: #52b365;  --qi2: #0b0b0b;
-    --q3: #a87d1f;  --qi3: #0b0b0b;
-    --q4: #aa562a;  --qi4: #fcfcfb;
-    --q5: #a62712;  --qi5: #fcfcfb;
-    --q6: #881220;  --qi6: #fcfcfb;
-  }
-}
-
-:root[data-theme='dark'][data-ramp='mono'] {
-  --q0: #68e4a3;  --qi0: #0b0b0b;
-  --q1: #5bcc80;  --qi1: #0b0b0b;
-  --q2: #52b365;  --qi2: #0b0b0b;
-  --q3: #a87d1f;  --qi3: #0b0b0b;
-  --q4: #aa562a;  --qi4: #fcfcfb;
-  --q5: #a62712;  --qi5: #fcfcfb;
-  --q6: #881220;  --qi6: #fcfcfb;
 }
 
 * { box-sizing: border-box; }

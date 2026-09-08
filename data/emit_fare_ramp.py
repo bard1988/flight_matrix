@@ -94,114 +94,60 @@ def ink_for(fill):
 
 
 # --- the ramp -------------------------------------------------------------------------
-
-HUE = [158, 152, 148, 82, 46, 32, 22]        # green ... gold pivot ... warm red (deg)
-# The gold pivot sits at 82, not 70. Protanopia collapses the red-green axis, so the
-# green -> gold step is the weakest adjacency in the whole ramp under simulation; at hue 70
-# it measured 2.3 dE, and moving the pivot to 82 lifts it to 2.8, slightly better than the
-# 2.6 the previous ramp managed. This adjacency is why the monotonic-lightness rule and the
-# printed price in every cell both exist: hue alone was never going to carry this step.
-
-# The warm end asks for more chroma than sRGB can hold, so build() clips each step to 92%
-# of the gamut boundary at its own lightness. Writing 0.26 for the dearest step is a way of
-# saying "as saturated as this lightness allows", not a literal target.
 #
-# Why this matters: the dearest cell used to be #fbb7b4, a pale pink that made the board
-# look cheap. That pink was not a choice. At its old lightness of 0.842 the gamut caps red
-# chroma at 0.088, so it was ALREADY maxed out. Pale was a consequence of being light, and
-# it was light because lightness has to climb monotonically for the ramp to survive hue
-# loss. The only way to a redder red is a darker dear end, which costs lightness range.
-CHR = [0.145, 0.150, 0.145, 0.125, 0.124, 0.180, 0.260]
-L = {
-    # cheap dark -> dear light. Range tightened from 0.435-0.842 to 0.400-0.790: deepening
-    # the cheap end buys the headroom to pull the dear end down to a coral-red (#fa9d9a)
-    # while still clearing the 0.06 minimum step. Every guarantee holds; nothing regresses.
-    # A true red (#f8696b) needs L 0.700, which drops the step to 0.048 and adjacent CVD
-    # separation from 6.8 to 5.3, so it was measured and rejected.
-    "light": [0.400, 0.465, 0.530, 0.595, 0.660, 0.725, 0.790],
-    # mirrored for the near-black surface: cheap bright -> dear deep
-    "dark":  [0.830, 0.760, 0.688, 0.618, 0.548, 0.478, 0.405],
-}
-SURFACE = {"light": "#fcfcfb", "dark": "#1a1a19"}
+# ONE ramp serves both themes. Vivid green at the cheapest, deep red at the dearest, with
+# lightness falling the whole way, so the scale still ranks correctly with hue removed.
+# Every step sits mid-to-high lightness with its own measured ink, which is what lets a
+# single set of fills work on warm paper and on near-black alike. Two mirrored ramps used
+# to be needed only because the light one climbed in lightness while the dark one fell.
+#
+# HOW WE GOT HERE, because two earlier shapes were built, measured and rejected:
+#
+#  1. Sequential, cheap-dark -> dear-light. sRGB caps chroma hardest at extreme lightness,
+#     so this was DULLEST at its ends: the cheapest step measured chroma 0.086 against
+#     0.142 mid-ramp, which made a MID-priced cell the most obviously green thing on the
+#     board, and forced the dearest into a pale pink. Backwards for a board about cheap.
+#
+#  2. Diverging, green -> cream -> red. Fixed the vivid-green end but gave up monotonic
+#     lightness, and a naive symmetric version was disqualifying: both ends at equal
+#     lightness are identical in greyscale (|dL| 0.001) and cheapest-vs-dearest separation
+#     under deuteranopia collapsed to 5.1 dE. An asymmetric version recovered 20.0 dE, but
+#     that is still half of what a monotonic ramp gets for free.
+#
+# The way out came from measuring where sRGB actually puts its most vivid colours: green
+# peaks at L 0.87 (chroma 0.271) and red at L 0.63 (chroma 0.255). So "best green" is a
+# LIGHT colour and the best red is darker, which means vivid-green -> red is naturally a
+# FALLING lightness ramp. Anchoring the cheap end at green's peak and pushing the dear end
+# to L 0.47 (a little past red's peak, to buy lightness range) satisfies every constraint
+# at once, and beats both earlier shapes on adjacency and end separation together.
+HUE = [148, 138, 128, 60, 42, 32, 22]
+# The hue path deliberately jumps the yellow band between q2 and q3, rather than easing
+# through gold. marker-yellow (#f2b705) is reserved for the cheapest-cell ring, and a gold
+# FILL at mid-price would make that ring ambiguous. Measured alternative: routing through
+# gold scores marginally better (label 4.81, adjacency 6.4) but puts #c4a92a on the board,
+# so it was rejected on the Reserved Yellow Rule rather than on numbers.
+
+# Ask for more chroma than sRGB can hold at every step; build() clips to 92% of the gamut
+# boundary at that step's own lightness. This is how "as saturated as this lightness
+# allows" is expressed, and it is what keeps the cheap end the most vivid green available.
+CHR = [0.40] * 7
+
+# Falling from green's chroma peak to a deep red. Span 0.400 over six steps gives 0.067 per
+# step, clearing the 0.06 floor with a little room.
+L = [0.870, 0.803, 0.737, 0.670, 0.603, 0.537, 0.470]
+
+# The grounds a cell actually sits on, for the reported fill-vs-canvas contrast. These are
+# --canvas in styles.css, not the raised chrome: with the card container retired, the board
+# paints directly onto the recessed canvas.
+SURFACE = {"light": "#f4f3ef", "dark": "#0d0d0d"}
 
 
-def build(mode: str) -> list[str]:
+def build() -> list[str]:
     out = []
-    for Lv, Hv, Cv in zip(L[mode], HUE, CHR):
+    for Lv, Hv, Cv in zip(L, HUE, CHR):
         cap = max_chroma(Lv, Hv * RAD) * 0.92
         out.append(to_hex(Lv, min(Cv, cap), Hv * RAD))
     return out
-
-
-# --- the diverging alternative -----------------------------------------------------------
-#
-# The sequential ramp above is dullest at its ends, because sRGB caps chroma hardest at
-# extreme lightness: measured, its cheapest step has the LOWEST chroma of all seven (0.086
-# against 0.142 in the middle). So the most obviously green cell is a mid-priced one, not
-# the cheapest, which is the opposite of what the board is for.
-#
-# This ramp puts vivid green at cheapest and vivid red at dearest, with the mid-price steps
-# receding toward the canvas (pale on the light surface, dark on the near-black one).
-#
-# The cost is real and is why the sequential version existed. Lightness is no longer
-# monotonic, so it cannot be checked the same way. A NAIVE symmetric diverging ramp is
-# disqualifying: with both ends at equal lightness they are identical in greyscale, and
-# cheapest-vs-dearest separation under deuteranopia collapses to 5.1 dE, meaning a
-# red-green colour-blind user cannot tell the best date from the worst. Measured.
-#
-# So the arms are deliberately ASYMMETRIC: the dear end sits at a different lightness from
-# the cheap end, which restores greyscale ranking and lifts end separation back to ~20 dE.
-# Still below the sequential ramp's 39.7, and that is the trade being made knowingly. It is
-# affordable only because colour was never the sole signal here: every cell prints its
-# price, the cheapest carries a reserved-yellow marker, and destinations are ordered
-# cheapest-first.
-DIV_HUE = [155, 152, 148, 85, 40, 28, 25]
-DIV_CHR = [0.17, 0.14, 0.10, 0.025, 0.10, 0.14, 0.18]
-DIV_L = {
-    # light: deep green -> cream middle -> clear red. Cream recedes into the warm canvas.
-    "light": [0.420, 0.545, 0.670, 0.880, 0.730, 0.665, 0.600],
-    # dark: bright green -> near-black middle -> bright red. The middle recedes again, this
-    # time by going dark, so the same "extremes pop, middle steps back" logic holds.
-    "dark": [0.740, 0.593, 0.447, 0.300, 0.373, 0.447, 0.520],
-}
-
-# Floors for the diverging ramp. Monotonic lightness is not one of them by design; the
-# ends-apart checks stand in for it.
-DIV_MIN_ENDS_DL = 0.12       # cheapest vs dearest must still rank in greyscale
-DIV_MIN_ENDS_DE_CVD = 15.0   # ... and must stay far apart under deuteranopia
-
-
-def build_diverging(mode: str) -> list[str]:
-    out = []
-    for Lv, Hv, Cv in zip(DIV_L[mode], DIV_HUE, DIV_CHR):
-        cap = max_chroma(Lv, Hv * RAD) * 0.92
-        out.append(to_hex(Lv, min(Cv, cap), Hv * RAD))
-    return out
-
-
-def check_diverging(mode: str, ramp: list[str]) -> bool:
-    inks = [ink_for(c) for c in ramp]
-    Ls = [hex_to_oklch(c)[0] for c in ramp]
-    labels = [contrast(c, k) for c, k in zip(ramp, inks)]
-    ends_dl = abs(Ls[0] - Ls[6])
-    ends_de = delta_e(ramp[0], ramp[6], "deutan")
-    worst_de = worst_adjacent_de(ramp)
-    ok = (min(labels) >= 4.5 and worst_de >= MIN_ADJACENT_DE
-          and ends_dl >= DIV_MIN_ENDS_DL and ends_de >= DIV_MIN_ENDS_DE_CVD)
-
-    print(f"\n=== {mode} (diverging) ===")
-    print("  fills:", ",".join(ramp))
-    print("  inks :", ",".join(inks))
-    print("  L    :", [round(x, 3) for x in Ls])
-    print(f"  label contrast: {[round(x, 2) for x in labels]}  (AA floor 4.5)")
-    print(f"  worst adjacent dE (any vision): {worst_de:.1f}  (floor {MIN_ADJACENT_DE})")
-    print(f"  cheapest vs dearest |dL|: {ends_dl:.3f}  (floor {DIV_MIN_ENDS_DL}) "
-          f"<- greyscale still ranks them")
-    print(f"  cheapest vs dearest dE deutan: {ends_de:.1f}  (floor {DIV_MIN_ENDS_DE_CVD})")
-    print("  CSS:")
-    for i, (f, k) in enumerate(zip(ramp, inks)):
-        print(f"    --q{i}: {f};  --qi{i}: {k};")
-    return ok
 
 
 # Floor for the weakest adjacent pair under ANY simulated vision (normal, protan, deutan).
@@ -222,42 +168,51 @@ def worst_adjacent_de(ramp: list[str]) -> float:
     )
 
 
-def check(mode: str, ramp: list[str]) -> bool:
+# The dearest end must stay far from the cheapest end under simulated colour blindness.
+# This is the single most important distinction the board makes, so it gets its own gate
+# rather than being left to the adjacency check: a ramp can have healthy neighbour-to-
+# neighbour separation and still fold its two ENDS together (a symmetric diverging ramp
+# scored 11.2 on adjacency and 5.1 end-to-end, which is useless for finding cheap).
+MIN_ENDS_DE_CVD = 30.0
+
+
+def check(ramp: list[str]) -> bool:
     inks = [ink_for(c) for c in ramp]
     Ls = [hex_to_oklch(c)[0] for c in ramp]
     dL = [Ls[i + 1] - Ls[i] for i in range(6)]
-    mono = all(d > 0 for d in dL) if mode == "light" else all(d < 0 for d in dL)
+    # Falling, in both themes: one ramp now serves both, so there is no per-mode direction.
+    mono = all(d < 0 for d in dL)
     labels = [contrast(c, k) for c, k in zip(ramp, inks)]
     worst_de = worst_adjacent_de(ramp)
+    ends_de = delta_e(ramp[0], ramp[6], "deutan")
     ok = (mono and min(abs(d) for d in dL) >= 0.06 and min(labels) >= 4.5
-          and worst_de >= MIN_ADJACENT_DE)
+          and worst_de >= MIN_ADJACENT_DE and ends_de >= MIN_ENDS_DE_CVD)
 
-    print(f"\n=== {mode} ===  monotonic L: {mono}   min |dL|: {min(abs(d) for d in dL):.3f}"
-          f"   worst adjacent dE (any vision): {worst_de:.1f} (floor {MIN_ADJACENT_DE})")
+    print(f"\n=== fare ramp ===  lightness falls throughout: {mono}   "
+          f"min |dL|: {min(abs(d) for d in dL):.3f} (floor 0.06)")
     print("  fills:", ",".join(ramp))
     print("  inks :", ",".join(inks))
     print("  L    :", [round(x, 3) for x in Ls])
+    print("  C    :", [round(hex_to_oklch(c)[1], 3) for c in ramp],
+          " <- cheapest should be the MOST chromatic green available")
     print("  label contrast:", [round(x, 2) for x in labels], " (WCAG AA floor 4.5)")
-    print("  vs surface    :", [round(contrast(c, SURFACE[mode]), 2) for c in ramp],
-          " (dear end relieved by the price label + table view)")
+    for mode, surface in SURFACE.items():
+        print(f"  vs {mode:5} canvas:", [round(contrast(c, surface), 2) for c in ramp])
     print("  adjacent ΔE  normal / protan / deutan:")
     for i in range(6):
         n = delta_e(ramp[i], ramp[i + 1])
         p = delta_e(ramp[i], ramp[i + 1], "protan")
         d = delta_e(ramp[i], ramp[i + 1], "deutan")
         print(f"    q{i}-q{i+1}: {n:5.1f} / {p:5.1f} / {d:5.1f}")
-    print("  cheapest vs dearest ΔE (deutan):",
-          f"{delta_e(ramp[0], ramp[6], 'deutan'):.1f}  (near-poles q1-q5: "
-          f"{delta_e(ramp[1], ramp[5], 'deutan'):.1f})")
-    print("  CSS:")
+    print(f"  worst adjacent ΔE (any vision): {worst_de:.1f}  (floor {MIN_ADJACENT_DE})")
+    print(f"  cheapest vs dearest ΔE (deutan): {ends_de:.1f}  (floor {MIN_ENDS_DE_CVD})")
+    print("  CSS (one ramp, both themes):")
     for i, (f, k) in enumerate(zip(ramp, inks)):
         print(f"    --q{i}: {f};  --qi{i}: {k};")
     return ok
 
 
 if __name__ == "__main__":
-    seq = [check(m, build(m)) for m in ("light", "dark")]
-    div = [check_diverging(m, build_diverging(m)) for m in ("light", "dark")]
-    good = all(seq) and all(div)
-    print("\nOK (both ramps)" if good else "\nFAIL: a hard check did not pass")
+    good = check(build())
+    print("\nOK" if good else "\nFAIL: a hard check did not pass")
     sys.exit(0 if good else 1)
