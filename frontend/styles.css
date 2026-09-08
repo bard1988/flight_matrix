@@ -65,6 +65,60 @@
   /* Motion: one shared curve for the 4-7 "fluid CSS" band. */
   --ease: cubic-bezier(0.16, 1, 0.3, 1);
 
+  /* ---- grid geometry: two reversible switches -------------------------------------
+     FLUSH (default) makes the matrix one continuous field of colour. TILES restores the
+     previous look, where every fare floated as its own rounded chip.
+
+       document.documentElement.dataset.grid = 'tiles'   // back to spaced chips
+       document.documentElement.dataset.cell = '9'       // back to 9px in a 26px cell
+
+     Both are plain attributes on <html>, so either can be flipped live in devtools with
+     no rebuild, and reverting for good means deleting one override block below.
+
+     The cheapest-cell marker has to change with the geometry, not just the spacing: the
+     spaced version rings the cell from OUTSIDE (a 1px canvas gap then yellow), which needs
+     4-5px of clearance and would paint over its neighbours once the gap is gone. Flush
+     therefore marks from the inside instead. */
+  --cell-gap: 0px;
+  --cell-radius: 0px;
+  --cell-w: 28px;
+  --cell-h: 20px;
+  --cell-type: 10px;
+  --cell-line: 18px;
+  --best-here-shadow: inset 0 0 0 2px var(--cheapest);
+  --best-board-shadow: inset 0 0 0 2px var(--cheapest), inset 0 0 0 4px var(--text-primary);
+  --flash-from: inset 0 0 0 2px var(--cheapest);
+  --flash-to: inset 0 0 0 6px var(--cheapest);
+}
+
+/* Revert switch 1: the previous spaced-chip grid, markers included. */
+:root[data-grid='tiles'] {
+  --cell-gap: 2px;
+  --cell-radius: 2px;
+  --best-here-shadow: 0 0 0 1px var(--canvas), 0 0 0 3px var(--cheapest);
+  --best-board-shadow:
+    0 0 0 1px var(--canvas), 0 0 0 4px var(--cheapest), 0 0 0 5px var(--text-primary);
+  --flash-from: 0 0 0 1px var(--canvas), 0 0 0 4px var(--cheapest);
+  --flash-to: 0 0 0 1px var(--canvas), 0 0 0 9px var(--cheapest);
+}
+
+/* Revert switch 2: back to 9px type in a 26px cell.
+   --cell-w is a floor, not a fixed width: the table distributes whatever space the
+   destination block has, so these cells measure wider than declared (about 34px at 10px
+   type on a three-column board). Column COUNT comes from the search window, not from the
+   cell size, so the larger cell does not cost any dates. What it costs is horizontal room:
+   the grid overflows its scroll viewport sooner, so a wide date range needs more sideways
+   scrolling per destination. That is the whole trade. */
+:root[data-cell='9'] {
+  --cell-w: 26px;
+  --cell-h: 19px;
+  --cell-type: 9px;
+  --cell-line: 17px;
+}
+
+/* Colour tokens, in their own block so the geometry switches above stay readable. */
+.viz-root,
+:root {
   /* Three grounds, deliberately stepped so the page has a structure instead of one flat
      wash: --surface-1 is raised chrome (the control bar, tooltip, panel), --page is the
      document ground that controls sit on, --canvas is the recessed board area. The old
@@ -87,19 +141,21 @@
   --ink-flipped: #fcfcfb;
   --cheapest: #f2b705;   /* reserved for the cheapest-cell marker, never used as a fill */
 
-  /* Price ramp on the light surface: q0 cheapest = deep green (L 0.43), through a gold
-     pivot, to q6 dearest = faded warm red (L 0.84). Lightness rises monotonically the
-     whole way (min step dL 0.065), so under any colour-vision deficiency the scale still
+  /* Price ramp on the light surface: q0 cheapest = deep green (L 0.40), through a gold
+     pivot at hue 82, to q6 dearest = coral-red (L 0.79). Lightness rises monotonically the
+     whole way (min step dL 0.064), so under any colour-vision deficiency the scale still
      separates every step by tone. --qiN is the measured-contrast ink for step N.
      Inks are off-white (#fcfcfb), never pure white; re-derived by data/emit_fare_ramp.py,
-     which holds every label at WCAG AA or better (lowest here: 4.66 on q2). */
-  --q0: #12603d;  --qi0: #fcfcfb;
-  --q1: #19773f;  --qi1: #fcfcfb;
-  --q2: #278d41;  --qi2: #0b0b0b;
-  --q3: #bb7c24;  --qi3: #0b0b0b;
-  --q4: #e0875c;  --qi4: #0b0b0b;
-  --q5: #f99885;  --qi5: #0b0b0b;
-  --q6: #fbb7b4;  --qi6: #0b0b0b;
+     which holds every label at WCAG AA or better (lowest here: 4.82 on q2). The dearest
+     step is a coral-red, not the old pale pink: see that script for why a truer red costs
+     adjacent-step separation under colour-vision deficiency. */
+  --q0: #0f5535;  --qi0: #fcfcfb;
+  --q1: #156b38;  --qi1: #fcfcfb;
+  --q2: #1b8138;  --qi2: #fcfcfb;
+  --q3: #a0771d;  --qi3: #0b0b0b;
+  --q4: #d0784d;  --qi4: #0b0b0b;
+  --q5: #f97c65;  --qi5: #0b0b0b;
+  --q6: #fa9d9a;  --qi6: #0b0b0b;
   --hatch: rgba(11, 11, 11, 0.05);
 }
 
@@ -123,10 +179,10 @@
     --q0: #68e4a3;  --qi0: #0b0b0b;
     --q1: #5bcc80;  --qi1: #0b0b0b;
     --q2: #52b365;  --qi2: #0b0b0b;
-    --q3: #b4771f;  --qi3: #0b0b0b;
+    --q3: #a87d1f;  --qi3: #0b0b0b;
     --q4: #aa562a;  --qi4: #fcfcfb;
-    --q5: #953e2f;  --qi5: #fcfcfb;
-    --q6: #723232;  --qi6: #fcfcfb;
+    --q5: #a62712;  --qi5: #fcfcfb;
+    --q6: #881220;  --qi6: #fcfcfb;
     --hatch: rgba(255, 255, 255, 0.06);
   }
 }
@@ -150,10 +206,10 @@
   --q0: #68e4a3;  --qi0: #0b0b0b;
   --q1: #5bcc80;  --qi1: #0b0b0b;
   --q2: #52b365;  --qi2: #0b0b0b;
-  --q3: #b4771f;  --qi3: #0b0b0b;
+  --q3: #a87d1f;  --qi3: #0b0b0b;
   --q4: #aa562a;  --qi4: #fcfcfb;
-  --q5: #953e2f;  --qi5: #fcfcfb;
-  --q6: #723232;  --qi6: #fcfcfb;
+  --q5: #a62712;  --qi5: #fcfcfb;
+  --q6: #881220;  --qi6: #fcfcfb;
   --hatch: rgba(255, 255, 255, 0.06);
 }
 
@@ -740,8 +796,8 @@ table.matrix th.corner {
 
 /* Pulse the cheapest cell after jumping to it, so the eye lands on the right square. */
 @keyframes locate-flash {
-  0%, 100% { box-shadow: 0 0 0 1px var(--canvas), 0 0 0 4px var(--cheapest); }
-  50%      { box-shadow: 0 0 0 1px var(--canvas), 0 0 0 9px var(--cheapest); }
+  0%, 100% { box-shadow: var(--flash-from); }
+  50%      { box-shadow: var(--flash-to); }
 }
 
 table.matrix td.flash { animation: locate-flash 0.4s ease-in-out 4; }
@@ -764,36 +820,51 @@ table.matrix td.flash { animation: locate-flash 0.4s ease-in-out 4; }
 
 table.matrix {
   border-collapse: separate;
-  border-spacing: 2px; /* 2px surface gap between adjacent fills */
+  border-spacing: var(--cell-gap);   /* 0 = one continuous field; see the grid switch */
   font-variant-numeric: tabular-nums;
 }
 
-/* 9px is below the 11px functional-text floor, kept deliberately: these are the axis
-   labels of a dense data grid (like a spreadsheet's row/column headers), sized to match
-   the 9px cell values, and 11px would widen every column enough to break the "many cards
-   on one screen" density the board exists for. Contrast still clears WCAG AA. */
+/* The axis runs below the 11px functional-text floor, deliberately: these are the row and
+   column headers of a dense data grid, and 11px would widen every column enough to break
+   the "many destinations on one screen" density the board exists for. They take their size
+   from --cell-type so the axis and the cells can never drift apart. Contrast clears AA.
+   The small positive tracking matters at this size: without it Geist Mono runs the weekday
+   and the date together into one blur. */
 table.matrix th {
   font-weight: 500;
-  font-size: 9px;
-  line-height: 1.2;
+  font-size: var(--cell-type);
+  line-height: 1.25;
+  letter-spacing: 0.01em;
   color: var(--text-muted);
-  padding: 0 2px;
+  padding: 0 2px 2px;
   white-space: nowrap;
 }
 
 table.matrix th.col { text-align: center; }
-table.matrix th.row { text-align: right; padding-right: 5px; }
-table.matrix th.weekend { color: var(--text-secondary); font-weight: 600; }
-table.matrix th.corner { text-align: right; font-size: 9px; }
+table.matrix th.row { text-align: right; padding-right: 6px; }
+
+/* Weekend emphasis lives on the axis, not behind the cells. Every priced cell carries a
+   full-strength ramp fill, so a tinted column under the grid would be invisible; putting
+   the weight and the full ink on Fri/Sat is what actually reads. */
+table.matrix th.weekend { color: var(--text-primary); font-weight: 600; }
+
+/* The corner label is the only instruction in the grid (which axis is which), so it reads
+   as a label rather than joining the recessive date headers. */
+table.matrix th.corner {
+  text-align: right;
+  font-size: var(--cell-type);
+  color: var(--text-secondary);
+  padding-right: 6px;
+}
 
 table.matrix td {
-  width: 26px;
-  height: 19px;
+  width: var(--cell-w);
+  height: var(--cell-h);
   padding: 0;
   text-align: center;
-  font-size: 9px;
-  line-height: 17px;
-  border-radius: 2px;
+  font-size: var(--cell-type);
+  line-height: var(--cell-line);
+  border-radius: var(--cell-radius);
   color: var(--ink-on-fill);
   border: 1px solid transparent;
 }
@@ -843,13 +914,12 @@ td.week-diag { border-left-color: var(--axis); border-left-style: dotted; }
    the marker can never be mistaken for a price level. The board-wide cheapest gets a
    thicker ring than each destination's own cheapest. */
 td.best-here {
-  box-shadow: 0 0 0 1px var(--canvas), 0 0 0 3px var(--cheapest);
+  box-shadow: var(--best-here-shadow);
   font-weight: 600;
 }
 
 td.best-board {
-  box-shadow: 0 0 0 1px var(--canvas), 0 0 0 4px var(--cheapest),
-              0 0 0 5px var(--text-primary);
+  box-shadow: var(--best-board-shadow);
   font-weight: 700;
 }
 /* Verified border rides the cell's own ink so it stays visible on the dark green
@@ -887,17 +957,22 @@ table.matrix td.cross-at {
 .cellwrap { position: relative; display: block; height: 100%; }
 
 /* Corner wedge = this itinerary has stops. One notch for 1 stop, a bigger one for 2+.
-   The exact count is in the tooltip; a digit here collides with the price. */
+   The exact count is in the tooltip; a digit here collides with the price.
+
+   Quieter and inset by 1px since the grid went flush. Sitting hard in the corner, adjacent
+   wedges used to touch across the old 2px gap and read as grid noise rather than as a mark
+   on one cell. The opacity drop is affordable because the wedge was never the only signal:
+   the tooltip and the detail panel both state the stop count in words. */
 .stopdot {
   position: absolute;
-  top: 0; right: 0;
+  top: 1px; right: 1px;
   width: 0; height: 0;
   border-top: 4px solid currentColor;
   border-left: 4px solid transparent;
-  opacity: 0.55;
+  opacity: 0.38;
 }
 
-.stopdot.many { border-top-width: 6px; border-left-width: 6px; opacity: 0.8; }
+.stopdot.many { border-top-width: 6px; border-left-width: 6px; opacity: 0.6; }
 
 .staledot {
   position: absolute;
@@ -1203,8 +1278,12 @@ body.show-table .tableview { display: block; }
   table.matrix thead th { position: static; }
   table.matrix th.corner { position: sticky; left: 0; top: auto; z-index: 1; }
 
-  /* A touch of extra cell size for fingers and small screens. */
-  table.matrix td { width: 32px; height: 22px; font-size: 10px; line-height: 20px; }
+  /* A touch of extra cell size for fingers and small screens. Set through the same vars
+     the desktop switches use, so flipping data-grid or data-cell still behaves here.
+     The [data-cell] selector is repeated because an attribute selector outranks a bare
+     :root, so without it the 9px revert switch would also shrink the phone's cells. */
+  :root,
+  :root[data-cell='9'] { --cell-w: 32px; --cell-h: 22px; --cell-line: 20px; }
 
   /* Side panel becomes a full-screen sheet; touch has no hover so the tooltip is dead
      weight, because the tap-to-open panel carries the detail. */

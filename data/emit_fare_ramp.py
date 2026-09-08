@@ -95,11 +95,30 @@ def ink_for(fill):
 
 # --- the ramp -------------------------------------------------------------------------
 
-HUE = [158, 152, 148, 70, 46, 32, 22]        # green ... gold pivot ... warm red (deg)
-CHR = [0.145, 0.150, 0.145, 0.125, 0.124, 0.120, 0.090]
+HUE = [158, 152, 148, 82, 46, 32, 22]        # green ... gold pivot ... warm red (deg)
+# The gold pivot sits at 82, not 70. Protanopia collapses the red-green axis, so the
+# green -> gold step is the weakest adjacency in the whole ramp under simulation; at hue 70
+# it measured 2.3 dE, and moving the pivot to 82 lifts it to 2.8, slightly better than the
+# 2.6 the previous ramp managed. This adjacency is why the monotonic-lightness rule and the
+# printed price in every cell both exist: hue alone was never going to carry this step.
+
+# The warm end asks for more chroma than sRGB can hold, so build() clips each step to 92%
+# of the gamut boundary at its own lightness. Writing 0.26 for the dearest step is a way of
+# saying "as saturated as this lightness allows", not a literal target.
+#
+# Why this matters: the dearest cell used to be #fbb7b4, a pale pink that made the board
+# look cheap. That pink was not a choice. At its old lightness of 0.842 the gamut caps red
+# chroma at 0.088, so it was ALREADY maxed out. Pale was a consequence of being light, and
+# it was light because lightness has to climb monotonically for the ramp to survive hue
+# loss. The only way to a redder red is a darker dear end, which costs lightness range.
+CHR = [0.145, 0.150, 0.145, 0.125, 0.124, 0.180, 0.260]
 L = {
-    # cheap dark -> dear light, tuned to the warm-white surface
-    "light": [0.435, 0.502, 0.568, 0.638, 0.710, 0.776, 0.842],
+    # cheap dark -> dear light. Range tightened from 0.435-0.842 to 0.400-0.790: deepening
+    # the cheap end buys the headroom to pull the dear end down to a coral-red (#fa9d9a)
+    # while still clearing the 0.06 minimum step. Every guarantee holds; nothing regresses.
+    # A true red (#f8696b) needs L 0.700, which drops the step to 0.048 and adjacent CVD
+    # separation from 6.8 to 5.3, so it was measured and rejected.
+    "light": [0.400, 0.465, 0.530, 0.595, 0.660, 0.725, 0.790],
     # mirrored for the near-black surface: cheap bright -> dear deep
     "dark":  [0.830, 0.760, 0.688, 0.618, 0.548, 0.478, 0.405],
 }
@@ -114,15 +133,36 @@ def build(mode: str) -> list[str]:
     return out
 
 
+# Floor for the weakest adjacent pair under ANY simulated vision (normal, protan, deutan).
+# Set to what the previous ramp actually achieved, so the gate means "never ship worse
+# separation than we already had". This check used to only PRINT the delta-E table while
+# asserting on lightness and label contrast, which let a ramp with a 2.3 green-to-gold step
+# report OK. Adjacency is the property most easily lost when retuning hue or chroma, so it
+# is now a hard gate rather than a number for a human to notice.
+MIN_ADJACENT_DE = 2.6
+
+
+def worst_adjacent_de(ramp: list[str]) -> float:
+    return min(
+        min(delta_e(ramp[i], ramp[i + 1]),
+            delta_e(ramp[i], ramp[i + 1], "protan"),
+            delta_e(ramp[i], ramp[i + 1], "deutan"))
+        for i in range(6)
+    )
+
+
 def check(mode: str, ramp: list[str]) -> bool:
     inks = [ink_for(c) for c in ramp]
     Ls = [hex_to_oklch(c)[0] for c in ramp]
     dL = [Ls[i + 1] - Ls[i] for i in range(6)]
     mono = all(d > 0 for d in dL) if mode == "light" else all(d < 0 for d in dL)
     labels = [contrast(c, k) for c, k in zip(ramp, inks)]
-    ok = mono and min(abs(d) for d in dL) >= 0.06 and min(labels) >= 4.5
+    worst_de = worst_adjacent_de(ramp)
+    ok = (mono and min(abs(d) for d in dL) >= 0.06 and min(labels) >= 4.5
+          and worst_de >= MIN_ADJACENT_DE)
 
-    print(f"\n=== {mode} ===  monotonic L: {mono}   min |dL|: {min(abs(d) for d in dL):.3f}")
+    print(f"\n=== {mode} ===  monotonic L: {mono}   min |dL|: {min(abs(d) for d in dL):.3f}"
+          f"   worst adjacent dE (any vision): {worst_de:.1f} (floor {MIN_ADJACENT_DE})")
     print("  fills:", ",".join(ramp))
     print("  inks :", ",".join(inks))
     print("  L    :", [round(x, 3) for x in Ls])
