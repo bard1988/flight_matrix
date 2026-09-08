@@ -328,13 +328,28 @@ header.controls {
   border-left: 1px solid var(--border);
 }
 
+/* Holds the inlined compact lockup, in the control row itself rather than a masthead of
+   its own: a brand row tall enough for the tagline costs ~112px of every screen, and the
+   board is what the screen is for.
+
+   No colour is declared here. The mark and FLIGHT are currentColor and inherit
+   --text-primary, which is what lets one inlined copy serve the media query and the
+   manual [data-theme] toggle alike. MATRIX carries the fixed brand accent, measured
+   against both canvases at 3.06 on the light one and 5.56 on near-black.
+
+   34px is what the row allows without growing it. The wordmark's caps land at 18.5px
+   there, comfortably clear; the tagline is absent by design rather than shrunk, because
+   at this height it would render at 2.4px. */
 .brand {
-  font-size: 15px;
-  font-weight: 700;
-  letter-spacing: -0.01em;
-  padding-bottom: 6px;
-  margin-right: 6px;
-  white-space: nowrap;
+  align-self: center;
+  margin-right: 4px;
+  flex: none;
+}
+
+.brand svg {
+  display: block;
+  height: 34px;
+  width: auto;
 }
 
 .field { display: flex; flex-direction: column; gap: 3px; }
@@ -549,7 +564,8 @@ button[disabled] { opacity: 0.5; cursor: default; }
    start work that takes a second or two to show up, so the press needs to land before the
    result does. Transform and opacity only, so it composites without layout work. */
 button {
-  transition: border-color 0.18s var(--ease), transform 0.12s var(--ease);
+  transition: border-color 0.18s var(--ease), background-color 0.18s var(--ease),
+              transform 0.12s var(--ease);
 }
 button:active:not([disabled]) { transform: translateY(1px); }
 
@@ -562,6 +578,27 @@ button:focus-visible {
 button.primary {
   background: var(--text-primary);
   color: var(--surface-1);
+  border-color: var(--text-primary);
+}
+
+/* Filled buttons had no hover state at all, which read as the button going dead once it
+   changed colour. Two reasons, both of them here: the system's only hover affordance is
+   border-color, and every filled state sets border-color to its own background, so there
+   was nothing to see; and those rules outrank `button:hover` anyway, since
+   .opts-toggle[aria-expanded='true'] is 0-2-0 against its 0-1-1 and button.primary ties
+   it and wins on source order. So a filled button shifts its fill instead, which is the
+   only part of it a pointer can see move. --text-secondary keeps --surface-1 legible on
+   top in both themes (7.5:1 light, 10.2:1 dark). */
+button.primary:hover:not([disabled]),
+.opts-toggle[aria-expanded='true']:hover:not([disabled]) {
+  background: var(--text-secondary);
+  border-color: var(--text-secondary);
+}
+
+/* The stale state is the exception: its yellow is carrying the "re-search to apply this"
+   meaning, so it keeps the fill and takes a dark ring instead. */
+button.primary.stale:hover:not([disabled]) {
+  background: var(--cheapest);
   border-color: var(--text-primary);
 }
 
@@ -1324,40 +1361,17 @@ table.matrix td.cross-at {
 }
 
 .firstrun-lede {
-  margin: 0 0 22px;
+  margin: 0;
   max-width: 62ch;
   font-size: 15px;
   line-height: 1.5;
   color: var(--text-secondary);
 }
 
-.firstrun-key { margin: 0; }
-
-/* One hairline above each entry: the same separator the board itself uses, so the
-   explanation is built the same way as the thing it explains. */
-.firstrun-key > div {
-  display: grid;
-  grid-template-columns: minmax(0, 15rem) minmax(0, 1fr);
-  gap: 2px 24px;
-  padding: 11px 0;
-  border-top: 1px solid var(--gridline);
-}
-
-.firstrun-key dt { font-size: 13px; font-weight: 600; }
-
-.firstrun-key dd {
-  margin: 0;
-  font-size: 13px;
-  line-height: 1.5;
-  color: var(--text-muted);
-}
-
 @media (max-width: 720px) {
   .firstrun { padding: 18px 0 6px; }
   .firstrun h1 { font-size: 22px; }
-  .firstrun-lede { margin-bottom: 16px; font-size: 14px; }
-  /* Single column: 15rem of label beside prose does not fit a phone. */
-  .firstrun-key > div { grid-template-columns: 1fr; gap: 4px; }
+  .firstrun-lede { font-size: 14px; }
 }
 
 /* ---------------------------------------------------------------- table view */
@@ -1426,7 +1440,8 @@ body.show-table .tableview { display: block; }
     align-items: stretch;
     padding: 8px max(12px, env(safe-area-inset-right)) 8px max(12px, env(safe-area-inset-left));
   }
-  .brand { align-self: center; padding-bottom: 0; margin-right: auto; }
+  .brand { margin-right: auto; }
+  .brand svg { height: 28px; }
   .spacer { display: none; }
 
   /* Primary fields stack full-width; the compact ones pair up two-per-row. */

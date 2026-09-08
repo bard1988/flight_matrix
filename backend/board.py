@@ -208,14 +208,18 @@ def _apply_verified(
                 airline=record.get("airline"),
                 transfers=record.get("stops_out"),
                 return_transfers=record.get("stops_back"),
-                link=record.get("link"),
+                # No link. Cell.link is the BOOKING deeplink, and the panel labels it with
+                # the fare's own source; the record's link points at Google Flights, which
+                # reaches the frontend separately from /api/verify.
             )
             matrix.cells[(depart, ret)] = cell
         cell.verified = True
         cell.verified_total = record["total"]
         cell.verified_at = record.get("fetched_at")
-        if record.get("link"):
-            cell.link = record["link"]
+        # record["link"] is deliberately NOT copied onto cell.link. It used to be, so a
+        # verified Travelpayouts cell offered "Book on Aviasales" pointing at Google
+        # Flights: the booking deeplink was destroyed and the Google link served twice,
+        # once under the wrong name.
 
 
 def build(

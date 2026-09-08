@@ -1140,7 +1140,7 @@ async function verifyCell(dest, cell) {
       : '';
     const links = [];
     if (cell.link) {
-      links.push(`<a href="${cell.link}" target="_blank" rel="noopener">Book on ${cell.source === 'kiwi' ? 'Kiwi.com' : 'Aviasales'}</a>`);
+      links.push(`<a href="${cell.link}" target="_blank" rel="noopener">Book on ${sourceName(cell.source)}</a>`);
     }
     if (data.link) {
       links.push(`<a href="${data.link}" target="_blank" rel="noopener">Open on Google Flights</a>`);
@@ -1178,7 +1178,7 @@ async function verifyCell(dest, cell) {
       // Filled in by the parallel times request from the board source, which covers both
       // legs and works at horizons the Google cross-check cannot reach.
       '<div id="paneltimes"></div>' +
-      (cell.link ? `<p><a href="${cell.link}" target="_blank" rel="noopener">Book on ${cell.source === 'kiwi' ? 'Kiwi.com' : 'Aviasales'}</a></p>` : '') +
+      (cell.link ? `<p><a href="${cell.link}" target="_blank" rel="noopener">Book on ${sourceName(cell.source)}</a></p>` : '') +
       (data.link ? `<p><a href="${data.link}" target="_blank" rel="noopener">Open on Google Flights</a></p>` : '')
   );
   restoreTimes();
@@ -1910,9 +1910,13 @@ $('optsbtn').addEventListener('click', () => {
 });
 $('themetoggle').addEventListener('click', () => {
   const root = document.documentElement;
-  const current = root.getAttribute('data-theme');
-  const next = current === 'dark' ? 'light' : current === 'light' ? 'dark' : 'dark';
-  root.setAttribute('data-theme', next);
+  /* Until data-theme is set the page is following the OS preference, so that preference
+     is what the first click has to flip. Defaulting to 'dark' here instead made the first
+     click a no-op for anyone whose OS is already dark: it set data-theme="dark" on an
+     already-dark page, and only the second click did anything. */
+  const current = root.getAttribute('data-theme')
+    || (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+  root.setAttribute('data-theme', current === 'dark' ? 'light' : 'dark');
   if (state.meta) render();
 });
 

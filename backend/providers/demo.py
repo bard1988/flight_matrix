@@ -12,6 +12,9 @@ from datetime import date, timedelta
 
 import config
 from models import Cell, DestinationMatrix, SearchRequest, utcnow
+# Borrowed rather than reimplemented: the Aviasales URL format should have exactly one
+# definition, and demo cells claim source "travelpayouts" like every other unverified cell.
+from providers.travelpayouts import TravelpayoutsProvider
 
 _DESTINATIONS = [
     ("ATH", 240), ("LCA", 210), ("SKG", 260), ("BUD", 320), ("SOF", 300),
@@ -90,7 +93,14 @@ class DemoProvider:
                         return_transfers=transfers,
                         found_at=found.isoformat(),
                         expires_at=expires.isoformat(),
-                        link="https://www.aviasales.com/",
+                        # A real search deeplink for THIS route and date pair. This was
+                        # the bare aviasales.com homepage, so every "Book on Aviasales" in
+                        # demo mode dropped you on the front page with nothing selected,
+                        # which reads as a broken link rather than as synthetic data.
+                        link=TravelpayoutsProvider._search_link(
+                            request.origin, destination, depart.isoformat(),
+                            ret.isoformat(), request.passengers,
+                        ),
                     )
                 )
         return matrix

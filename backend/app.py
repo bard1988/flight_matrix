@@ -207,7 +207,18 @@ def verify(body: VerifyBody) -> dict[str, Any]:
             body.adults, body.children, body.currency,
         )
         if cached and cached.get("total") is not None:
-            return {**cached, "cached": True}
+            # Rebuild the link instead of serving the stored one. It is a pure function of
+            # route, dates, party and currency, so caching it buys nothing and goes stale
+            # for real: records written before the URL format changed kept handing out the
+            # old free-text search, which is the form that opens an empty Flights page.
+            return {
+                **cached,
+                "link": google_flights_url(
+                    body.origin, body.destination, body.depart_date, body.return_date,
+                    body.adults, body.children, body.currency, body.nonstop_only,
+                ),
+                "cached": True,
+            }
 
     base = {
         "origin": body.origin.upper(),
@@ -235,7 +246,7 @@ def verify(body: VerifyBody) -> dict[str, Any]:
             "duration": None,
             "link": google_flights_url(
                 body.origin, body.destination, body.depart_date, body.return_date,
-                body.adults, body.children,
+                body.adults, body.children, body.currency, body.nonstop_only,
             ),
             "error": str(exc),
         }

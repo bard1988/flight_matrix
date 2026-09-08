@@ -258,33 +258,18 @@ class GoogleFlightsProvider:
         nonstop_only: bool = False,
     ) -> dict[str, Any]:
         try:
-            from fast_flights import (
-                FlightQuery, Passengers, create_query, fetch_flights_html, get_flights,
-            )
+            from fast_flights import fetch_flights_html, get_flights
+
+            query = _build_query(origin, destination, depart_date, return_date,
+                                 adults, children, currency, nonstop_only)
         except ImportError as exc:
             raise ProviderError(f"{_INSTALL_HINT} ({exc})") from exc
 
-        max_stops = 0 if nonstop_only else None
-        legs = [
-            FlightQuery(date=depart_date, from_airport=origin.upper(),
-                        to_airport=destination.upper(), max_stops=max_stops),
-            FlightQuery(date=return_date, from_airport=destination.upper(),
-                        to_airport=origin.upper(), max_stops=max_stops),
-        ]
-        query = create_query(
-            flights=legs,
-            trip="round-trip",
-            seat="economy",
-            passengers=Passengers(
-                adults=max(adults, 1), children=children, infants_in_seat=0, infants_on_lap=0
-            ),
-            currency=currency.upper(),
-            max_stops=max_stops,
-        )
-
         # Fetch once, parse every itinerary block ourselves. Fall back to the library's
         # own parser if Google changes the payload shape under us.
-        link = google_flights_url(origin, destination, depart_date, return_date, adults, children)
+        # The link comes off the same query object that fetches the price, so the page the
+        # user opens and the number they were shown describe one trip by construction.
+        link = query.url()
         try:
             html = fetch_flights_html(query)
             rows = _parse_all_itineraries(html)
@@ -339,15 +324,57 @@ class GoogleFlightsProvider:
         }
 
 
-def google_flights_url(
-    origin: str, destination: str, depart_date: str, return_date: str, adults: int, children: int
-) -> str:
-    """A human-openable Google Flights search for the same query."""
-    from urllib.parse import quote_plus
+def _build_query(
+    origin: str, destination: str, depart_date: str, return_date: str,
+    adults: int, children: int, currency: str, nonstop_only: bool,
+):
+    """The round trip as fast-flights describes it. Raises ImportError if it is missing."""
+    from fast_flights import FlightQuery, Passengers, create_query
 
-    who = f"{adults} adults" + (f" {children} children" if children else "")
-    query = (
-        f"Flights from {origin.upper()} to {destination.upper()} on {depart_date} "
-        f"through {return_date} for {who}"
+    max_stops = 0 if nonstop_only else None
+    legs = [
+        FlightQuery(date=depart_date, from_airport=origin.upper(),
+                    to_airport=destination.upper(), max_stops=max_stops),
+        FlightQuery(date=return_date, from_airport=destination.upper(),
+                    to_airport=origin.upper(), max_stops=max_stops),
+    ]
+    return create_query(
+        flights=legs,
+        trip="round-trip",
+        seat="economy",
+        passengers=Passengers(
+            adults=max(adults, 1), children=children, infants_in_seat=0, infants_on_lap=0
+        ),
+        currency=currency.upper(),
+        max_stops=max_stops,
     )
-    return f"https://www.google.com/travel/flights?q={quote_plus(query)}"
+
+
+def google_flights_url(
+    origin: str, destination: str, depart_date: str, return_date: str, adults: int,
+    children: int, currency: str = "USD", nonstop_only: bool = False,
+) -> str:
+    """A Google Flights URL that opens THIS itinerary, prefilled.
+
+    This used to hand Google free text: `?q=Flights from TLV to ATH on 2026-10-08 through
+    2026-10-29 for 2 adults`. Google parses that only sometimes, and with ISO dates plus a
+    passenger clause it generally landed on the bare Flights homepage with nothing filled
+    in, which is what made "Open on Google Flights" look broken. `tfs` is the real
+    parameter: a base64 protobuf of the query, and the same object the verifier builds to
+    price the date pair.
+
+    Falls back to the old text form only if fast-flights is unavailable, which is itself
+    one of the reasons verify() fails and reaches the caller that needs this link.
+    """
+    try:
+        return _build_query(origin, destination, depart_date, return_date, adults,
+                            children, currency, nonstop_only).url()
+    except Exception:
+        from urllib.parse import quote_plus
+
+        who = f"{adults} adults" + (f" {children} children" if children else "")
+        query = (
+            f"Flights from {origin.upper()} to {destination.upper()} on {depart_date} "
+            f"through {return_date} for {who}"
+        )
+        return f"https://www.google.com/travel/flights?q={quote_plus(query)}"
