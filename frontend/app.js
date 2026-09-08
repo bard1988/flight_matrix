@@ -1814,22 +1814,29 @@ const urlBoard = boardFromUrl(new URLSearchParams(location.search));
 syncDateMode();
 syncReturnDate();
 
-// Say so immediately. /api/health has to answer before the search can start (it fills in
-// any field the URL left out), and until it does there is otherwise nothing on screen but
-// the first-run panel, which makes a restored board look like a cold start.
+/* A URL that carries a search PREFILLS the form and stops there. It deliberately does not
+   run the search itself.
+
+   It used to auto-run, which is defensible (the link then always means "current fares")
+   but turned every page refresh into a fresh 60-destination search: half a minute of
+   waiting and a chunk of provider quota, just to redraw a board that was already on
+   screen. Reloading during a session is far more common than wanting fresh prices, and
+   pressing Search is one click, so the cheap default wins.
+
+   The first-run panel and the date hint stay visible on purpose: the board really is
+   empty, and a shared link may well be opened by somebody who has never seen this tool,
+   for whom that panel is the only explanation of what the colours mean. */
 if (urlBoard.size) {
-  $('firstrun').hidden = true;
-  $('datehint').hidden = true;
-  $('progress').textContent = 'Restoring your board…';
+  $('progress').textContent =
+    'Your saved search is loaded. Press Search to price these dates.';
 }
 
-/* Health is a source of DEFAULTS, not a gate on searching.
-   This used to be `fetch('/api/health').then(...).finally(() => startSearch())`, which
-   quietly made a bookmarked board unopenable whenever health was slow to answer: fetch
-   has no timeout, so a hanging request never settles, `.finally` never runs, and the page
-   sits on the first-run panel forever with the query string still in the address bar.
-   Racing a timeout means the search always starts; if health loses the race we fall back
-   to the markup's own default values, which match the server's. */
+/* Health only supplies defaults for fields the URL left unset. It is raced against a
+   timeout because fetch has none of its own: a hanging request never settles, and when
+   the auto-search was chained onto this promise's .finally() that silently made a
+   bookmarked board unopenable. Nothing is chained onto it now, but the timeout still
+   earns its keep by not leaving the form half-populated forever. If health loses the
+   race we keep the markup's own defaults, which match the server's. */
 const HEALTH_TIMEOUT_MS = 4000;
 
 Promise.race([
@@ -1848,5 +1855,4 @@ Promise.race([
     if (!urlBoard.has('children')) $('children').value = h.defaults.children;
     if (!urlBoard.has('places')) $('dests').value = h.defaults.max_destinations;
   })
-  .catch(() => {})
-  .finally(() => { if (urlBoard.size) startSearch(); });
+  .catch(() => {});
