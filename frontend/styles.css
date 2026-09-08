@@ -151,40 +151,35 @@
   --ink-flipped: #fcfcfb;
   --cheapest: #f2b705;   /* reserved for the cheapest-cell marker, never used as a fill */
 
-  /* Price ramp: vivid green at cheapest, deep red at dearest, and ONE ramp for both
-     themes. Derived and gated by data/emit_fare_ramp.py; --qiN is the measured-contrast
-     ink for step N. Do not hand-edit these: run the script.
+  /* Price ramp, ONE ramp for both themes. Validated (not derived) by
+     data/emit_fare_ramp.py, which holds the provenance and the gates; --qiN is the
+     measured-contrast ink for step N. Run that script rather than hand-editing.
 
-     Two earlier shapes were built, measured and rejected, and the reasons are worth
-     keeping because they are not obvious:
+     ART-DIRECTED: q0-q5 are sampled verbatim from a supplied credit-score scale
+     (Excellent -> Very Bad). q6 is an addition, a deeper red at the same hue as the last
+     band, because the reference has six steps and the board needs seven. Extending the
+     dark end rather than interpolating a middle step keeps all six source colours exact
+     AND pulls the two ends apart, which is the reference palette's weakest property.
 
-       1. Sequential cheap-dark -> dear-light. sRGB caps chroma hardest at extreme
-          lightness, so that ramp was DULLEST at its ends: its cheapest step measured
-          chroma 0.086 against 0.142 mid-ramp. The most obviously green cell was therefore
-          a MID-priced one, and the dearest came out pale pink.
-       2. Diverging green -> cream -> red. Vivid at both ends, but it gave up monotonic
-          lightness, and cheapest-vs-dearest separation under deuteranopia fell to 20.0 dE
-          (5.1 for the naive symmetric version, where the two ends are literally identical
-          in greyscale).
+     TWO THINGS THIS PALETTE COSTS, both accepted knowingly:
 
-     The fix came from measuring where sRGB puts its most vivid colours: green peaks at
-     L 0.87, red at L 0.63. "Best green" is a LIGHT colour, so vivid-green -> red is
-     naturally a FALLING-lightness ramp. That is why one ramp now serves both grounds:
-     every step is mid-to-high lightness and carries its own ink. Result beats both earlier
-     shapes at once (cheapest is the most chromatic step at 0.231, adjacency 6.1, ends
-     38.8 dE, lightness still ranks it).
-
-     The hue path jumps the yellow band between q2 and q3 rather than easing through gold,
-     because marker-yellow is reserved for the cheapest-cell ring and a gold FILL would
-     make that ring ambiguous. Going through gold measured marginally better and was
-     rejected on that rule, not on numbers. */
-  --q0: #3ffb74;  --qi0: #0b0b0b;
-  --q1: #69df32;  --qi1: #0b0b0b;
-  --q2: #89be2b;  --qi2: #0b0b0b;
-  --q3: #d47d23;  --qi3: #0b0b0b;
-  --q4: #d0561d;  --qi4: #0b0b0b;
-  --q5: #c32f17;  --qi5: #fcfcfb;
-  --q6: #a7192a;  --qi6: #fcfcfb;
+       1. Lightness humps instead of falling (yellow is the lightest band), so tone no
+          longer ranks the scale. Cheapest-vs-dearest separation under deuteranopia is
+          18.9 dE, against 38.8 for the monotonic green-to-red ramp this replaced. The
+          worst pair at ANY distance is q1 vs q3 at 4.4 dE, i.e. a cheap cell and a
+          mid-priced one a colour-blind user may not separate by colour. Affordable only
+          because every cell prints its price and the table view lists them all.
+       2. q2 is yellow, which brushes the Reserved Yellow Rule (marker-yellow is meant to
+          be the cheapest marker and nothing else). It survives because the marker only
+          ever lands on q0 and is a ring, not a fill, and because every marker now carries
+          a 1px ink edge. Worth remembering if the marker is ever restyled. */
+  --q0: #0f9246;  --qi0: #0b0b0b;
+  --q1: #7ebb42;  --qi1: #0b0b0b;
+  --q2: #fdcb08;  --qi2: #0b0b0b;
+  --q3: #f68e1f;  --qi3: #0b0b0b;
+  --q4: #ef4723;  --qi4: #0b0b0b;
+  --q5: #bc1f26;  --qi5: #fcfcfb;
+  --q6: #7f0a13;  --qi6: #fcfcfb;
   --hatch: rgba(11, 11, 11, 0.05);
 }
 
