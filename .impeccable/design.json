@@ -28,7 +28,7 @@
       "display": { "displayName": "Display", "purpose": "The single large price in the detail panel. The one big number on the surface." },
       "headline": { "displayName": "Headline", "purpose": "Wordmark, destination card titles, panel heading. Ceiling for type size in the chrome." },
       "body": { "displayName": "Body", "purpose": "Default text: inputs, status line, panel prose, footnote." },
-      "label": { "displayName": "Label", "purpose": "Uppercase field labels above every control." },
+      "label": { "displayName": "Label", "purpose": "Field labels above every control. Sentence case, 11px, muted, no tracking: twelve uppercase wide-tracked labels at once made the control bar read as a database query form, and upper case is harder to read at 11px than lower." },
       "numeric": { "displayName": "Numeric / Cell", "purpose": "The price printed in each fare cell and the matrix date headers. Small by necessity; hundreds on screen." }
     },
     "shadows": [

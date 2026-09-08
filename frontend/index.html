@@ -29,46 +29,72 @@
   <div class="controls-primary">
     <span class="brand">FlightMatrix</span>
 
-    <div class="field field-sm">
-      <label for="origin">From</label>
-      <input id="origin" value="TLV" maxlength="3" autocapitalize="characters" />
-    </div>
-    <div class="field field-date">
-      <label for="depart" id="departlabel">Travel from</label>
-      <input id="depart" type="date" />
-    </div>
-    <div class="field field-date">
-      <label for="ret" id="retlabel">Travel until</label>
-      <input id="ret" type="date" />
-    </div>
-    <div class="field field-nights">
-      <label for="nmin">Nights</label>
-      <span class="nights">
-        <input id="nmin" type="number" min="0" max="60" placeholder="min" />
-        <input id="nmax" type="number" min="0" max="60" placeholder="max" />
-      </span>
-    </div>
-    <div class="field-group" role="group" aria-label="Travellers">
-      <div class="field field-xs">
-        <label for="adults">Adults</label>
-        <input id="adults" type="number" min="1" max="9" value="2" />
+    <!-- The trip itself: where from, when, how long, how many people. Everything in this
+         group defines the search; nothing in it is a preference. Grouped so the bar reads
+         as three things rather than twelve. -->
+    <div class="bar-group">
+      <div class="field field-sm">
+        <label for="origin">From</label>
+        <input id="origin" value="TLV" maxlength="3" autocapitalize="characters" />
       </div>
-      <div class="field field-xs">
-        <label for="children">Children</label>
-        <input id="children" type="number" min="0" max="8" value="0" />
+      <div class="field field-date">
+        <label for="depart" id="departlabel">Travel from</label>
+        <input id="depart" type="date" />
+      </div>
+      <div class="field field-date">
+        <label for="ret" id="retlabel">Travel until</label>
+        <input id="ret" type="date" />
+      </div>
+      <div class="field field-nights">
+        <label for="nmin">Nights</label>
+        <span class="nights">
+          <input id="nmin" type="number" min="0" max="60" placeholder="min" />
+          <input id="nmax" type="number" min="0" max="60" placeholder="max" />
+        </span>
+      </div>
+      <div class="field-group" role="group" aria-label="Travellers">
+        <div class="field field-xs">
+          <label for="adults">Adults</label>
+          <input id="adults" type="number" min="1" max="9" value="2" />
+        </div>
+        <div class="field field-xs">
+          <label for="children">Children</label>
+          <input id="children" type="number" min="0" max="8" value="0" />
+        </div>
       </div>
     </div>
 
-    <button id="go" class="primary">Search</button>
-    <button id="stop" hidden title="Stop the running search and keep what has loaded">Stop</button>
+    <!-- Run it, stop it, or refine it. Advanced sits here rather than with the display
+         controls because everything behind it changes which fares come back. -->
+    <div class="bar-group bar-actions">
+      <button id="go" class="primary">Search</button>
+      <button id="stop" hidden title="Stop the running search and keep what has loaded">Stop</button>
+      <button type="button" id="optsbtn" class="opts-toggle" aria-expanded="false" aria-controls="advfilters">
+        Advanced<span class="opts-chevron" aria-hidden="true">›</span>
+      </button>
+    </div>
 
     <span class="spacer"></span>
 
-    <button type="button" id="optsbtn" class="opts-toggle" aria-expanded="false" aria-controls="advfilters">
-      Filters<span class="opts-chevron" aria-hidden="true">›</span>
-    </button>
-    <button id="tabletoggle" title="Accessible table of every priced cell">Table view</button>
-    <button id="themetoggle" title="Toggle light and dark">Theme</button>
+    <!-- Display, not filters. Every one of these changes how the board is RENDERED rather
+         than which fares it contains, which is why Currency and Per person moved out of
+         the Advanced panel: currency relabels a loaded board without re-searching (see
+         the note by the change handler in app.js) and Per person just divides by the
+         passenger count. Both were buried two levels down under "Advanced > Results". -->
+    <div class="bar-group bar-display">
+      <div class="field field-xs">
+        <label for="currency">Currency</label>
+        <select id="currency">
+          <option value="ils">ILS</option>
+          <option value="eur">EUR</option>
+          <option value="usd">USD</option>
+          <option value="gbp">GBP</option>
+        </select>
+      </div>
+      <label class="check" title="Divide every price by the number of travellers"><input type="checkbox" id="perperson" /> Per person</label>
+      <button id="tabletoggle" title="Accessible table of every priced cell">Table view</button>
+      <button id="themetoggle" title="Toggle light and dark">Theme</button>
+    </div>
   </div>
 
   <div class="controls-adv" id="advfilters">
@@ -112,15 +138,6 @@
           <label for="dests">Places</label>
           <input id="dests" type="number" min="1" max="60" value="20" />
         </div>
-        <div class="field field-xs">
-          <label for="currency">Currency</label>
-          <select id="currency">
-            <option value="ils">ILS</option>
-            <option value="eur">EUR</option>
-            <option value="usd">USD</option>
-            <option value="gbp">GBP</option>
-          </select>
-        </div>
         <div class="field field-sm">
           <label for="maxprice">Max total</label>
           <input id="maxprice" type="number" min="0" step="100" placeholder="any" />
@@ -130,7 +147,6 @@
           <input id="destfilter" type="search" placeholder="city, code or country" autocomplete="off"
                  title="Set before Search to restrict the search itself (e.g. IT = Italy only); type after a search to narrow what is shown" />
         </div>
-        <label class="check"><input type="checkbox" id="perperson" /> Per person</label>
         <label class="check" title="After the board loads, re-price its cheapest cells live on Google Flights"><input type="checkbox" id="autoverify" checked /> Auto cross-check</label>
       </div>
     </div>

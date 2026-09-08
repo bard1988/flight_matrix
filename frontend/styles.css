@@ -1,10 +1,10 @@
 /* FlightMatrix board.
-   Colour roles follow the dataviz reference palette. The fare heatmap is a green -> amber
-   -> red price ramp whose LIGHTNESS is strictly monotonic cheapest -> dearest, so it still
-   reads with hue removed (the fix for red-green colour blindness). The cheap end carries
-   the salience: a deep saturated green on the light surface, the brightest green on the
-   dark one. Every cell also prints its price, so colour is never the only signal.
-   Ramp derived and validated in data/ (OKLCH lightness/chroma + CVD delta-E). */
+   The fare heatmap runs green -> yellow -> orange -> red, cheapest to dearest, sampled
+   from a supplied credit-score scale. It is art-directed rather than computed, so it does
+   NOT rank by lightness the way the earlier generated ramps did; see the ramp comment
+   below and data/emit_fare_ramp.py for what that costs under colour-vision deficiency and
+   why it is affordable. Every cell prints its price, so colour is never the only signal.
+   One ramp serves both themes. Validated (not derived) in data/emit_fare_ramp.py. */
 
 /* ---------------------------------------------------------------- type
    Geist for the chrome, Geist Mono for every numeral. Both self-hosted, so the board
@@ -284,12 +284,30 @@ header.controls {
 
 /* The primary row carries the whole task path (from, dates, travellers, Search)
    and nothing else. Every refinement lives in the Filters panel below. */
+/* Three clusters, not twelve controls: the trip, the actions, and the display settings.
+   The gap BETWEEN groups is wide and the gap within them tight, so proximity does the
+   grouping and the bar needs no divider rules to be legible. */
 .controls-primary {
   display: flex;
   flex-wrap: wrap;
   align-items: flex-end;
-  gap: 8px 12px;
-  padding: 10px 16px;
+  gap: 10px 30px;
+  padding: 11px 16px;
+}
+
+.bar-group {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 8px 10px;
+}
+
+/* Display settings sit after the flexible spacer, where proximity cannot group anything,
+   so they get a hairline to mark them as a different KIND of control: these change how
+   the board is drawn, not which fares are in it. */
+.bar-display {
+  padding-left: 18px;
+  border-left: 1px solid var(--border);
 }
 
 .brand {
@@ -303,30 +321,39 @@ header.controls {
 
 .field { display: flex; flex-direction: column; gap: 3px; }
 
+/* Sentence case, no tracking. Twelve uppercase wide-tracked labels shouting at once was
+   the single biggest reason the bar read as a database query form; at 11px, upper case is
+   also simply harder to read than lower. Held at 11px, not smaller, per the floor rule. */
 .field > label {
   font-size: 11px;
   line-height: 1.3;
-  letter-spacing: 0.02em;
-  text-transform: uppercase;
   color: var(--text-muted);
 }
 
+/* Underlines, not boxes. Twelve bordered rectangles at identical weight is what made this
+   look homemade; a bottom rule keeps the affordance while letting the VALUES read as the
+   content. Hover darkens the rule, focus thickens it to 2px in ink. */
 .field input,
 .field select {
   font: inherit;
   color: var(--text-primary);
-  background: var(--page);
-  border: 1px solid var(--axis);
-  border-radius: 6px;
-  padding: 5px 8px;
+  background: none;
+  border: 0;
+  border-bottom: 1px solid var(--axis);
+  border-radius: 0;
+  padding: 4px 2px;
   min-width: 72px;
 }
 
+.field input:hover,
+.field select:hover { border-bottom-color: var(--text-muted); }
+
+/* The inset shadow doubles the rule to 2px without reflowing anything. */
 .field input:focus-visible,
 .field select:focus-visible {
   outline: none;
-  border-color: var(--text-primary);
-  box-shadow: 0 0 0 1px var(--text-primary);
+  border-bottom-color: var(--text-primary);
+  box-shadow: inset 0 -1px 0 0 var(--text-primary);
 }
 
 .field input[type='date'] { min-width: 138px; }
@@ -1273,6 +1300,16 @@ body.show-table .tableview { display: block; }
     padding: 10px max(10px, env(safe-area-inset-right)) max(48px, env(safe-area-inset-bottom))
              max(10px, env(safe-area-inset-left));
   }
+  /* Stacked, so the display cluster's divider has to lie down: a left border reads as a
+     stray vertical rule running down the side of the controls once nothing is beside it. */
+  .bar-display {
+    width: 100%;
+    padding-left: 0;
+    padding-top: 10px;
+    border-left: 0;
+    border-top: 1px solid var(--border);
+  }
+
   /* One destination per row, still separated by its own hairline rather than a gap. */
   .board { grid-template-columns: 1fr; gap: 0; }
   .card { padding: 12px 0 16px; }
