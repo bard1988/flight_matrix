@@ -1118,6 +1118,73 @@ table.matrix td.cross-at {
   margin-top: 28px;
 }
 
+/* ---------------------------------------------------------------- headline band */
+
+/* The page's focal point. Twenty destination blocks are visually equal, so before this
+   there was nothing to look at first and "so where is cheap" was left to the reader to
+   work out by scanning.
+   Deliberately not a card and not tinted: it sits on the canvas like everything else and
+   earns its prominence from type scale and one hairline, which keeps it consistent with a
+   board that has no boxes anywhere else. */
+.headline {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 30px;
+  padding: 4px 0 16px;
+  border-bottom: 1px solid var(--gridline);
+  margin-bottom: 4px;
+}
+
+/* Each row jumps to the cell it names, so each is a real button: keyboard focus, Enter and
+   Space come free, which a div with a click handler would not give. Stripped of button
+   chrome because the type is the affordance here. */
+.headline-item {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 3px 9px;
+  padding: 3px 6px 3px 0;
+  border: 0;
+  border-radius: 4px;
+  background: none;
+  text-align: left;
+  cursor: pointer;
+}
+
+.headline-item:hover { border-color: transparent; }
+.headline-item:hover .headline-city { text-decoration: underline; }
+
+.headline-item:focus-visible {
+  outline: 2px solid var(--text-primary);
+  outline-offset: 2px;
+  box-shadow: none;
+}
+
+.headline-city { font-size: 15px; font-weight: 600; letter-spacing: -0.01em; }
+.headline-price {
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 15px;
+  font-weight: 600;
+}
+.headline-when { color: var(--text-muted); font-size: 12px; }
+
+/* The winner gets the scale. The two behind it stay at body size, so the hierarchy is one
+   glance deep rather than three equal rows competing. */
+.headline-item.is-lead { padding-right: 10px; }
+.headline-item.is-lead .headline-city { font-size: 27px; font-weight: 600; letter-spacing: -0.02em; }
+.headline-item.is-lead .headline-price { font-size: 27px; font-weight: 600; }
+.headline-item.is-lead .headline-when { font-size: 13px; }
+
+@media (max-width: 720px) {
+  .headline { gap: 2px 16px; padding-bottom: 12px; }
+  /* Full width each, so the lead is not squeezed beside a runner-up on a phone. */
+  .headline-item { width: 100%; }
+  .headline-item.is-lead .headline-city,
+  .headline-item.is-lead .headline-price { font-size: 22px; }
+}
+
 /* ---------------------------------------------------------------- first run */
 
 /* Shown until the first search, then hidden for good (app.js). It carries the two things a

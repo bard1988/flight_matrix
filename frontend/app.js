@@ -476,9 +476,57 @@ function render() {
   }
 
   state.lastOrdered = ordered;
+  renderHeadline(ordered);
   renderTable(ordered);
   $('footnote').hidden = ordered.length === 0;
   $('legend').hidden = ordered.length === 0;
+}
+
+/* The board's focal point: the cheapest find, then the two behind it.
+ *
+ * `ordered` is already sorted by each destination's own cheapest fare, so ordered[0] is the
+ * board-wide winner and no separate search is needed. Every row jumps to the cell it
+ * describes, which is the same thing the per-destination locate button does; without that
+ * the band would be decoration restating what the first card already says.
+ *
+ * Buttons rather than divs with click handlers: these are the most likely thing on the page
+ * to be reached by keyboard, and a real button gets focus, Enter and Space for free. */
+function renderHeadline(ordered) {
+  const host = $('headline');
+  const top = ordered.filter((d) => d.shownBest).slice(0, 3);
+  host.hidden = top.length === 0;
+  if (!top.length) {
+    host.replaceChildren();
+    return;
+  }
+
+  const cur = state.meta.currency;
+  const trip = (cell) =>
+    `${weekday(cell.depart)} ${shortDate(cell.depart)} to ${weekday(cell.ret)} ` +
+    `${shortDate(cell.ret)}, ${cell.nights} night${cell.nights === 1 ? '' : 's'}`;
+
+  host.replaceChildren(...top.map((dest, i) => {
+    const cell = dest.shownBest;
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = i === 0 ? 'headline-item is-lead' : 'headline-item';
+    b.innerHTML =
+      `<span class="headline-city">${dest.city}</span>` +
+      `<span class="headline-price">${fmtMoney(cellValue(cell), cur)}</span>` +
+      `<span class="headline-when">${trip(cell)}</span>` +
+      (cell.verified ? '<span class="tag live">live</span>' : '<span class="tag">est</span>');
+    b.title = `Show ${dest.city} on the board`;
+    // The visible spans are flex items with no whitespace between them, so the derived
+    // accessible name would run together as "Larnaca352Fri Oct 9". State it properly.
+    b.setAttribute('aria-label',
+      `${dest.city}, ${fmtMoney(cellValue(cell), cur)}, ${trip(cell)}, ` +
+      `${cell.verified ? 'live price' : 'estimate'}. Show it on the board.`);
+    b.addEventListener('click', () => {
+      const card = $('board').querySelector(`.card[data-dest="${dest.destination}"]`);
+      if (card) locateBest(card, dest);
+    });
+    return b;
+  }));
 }
 
 // How much to trust the headline price. The board is built from a price calendar, which is
@@ -1487,6 +1535,7 @@ function startSearch() {
   $('tableview').replaceChildren();
   $('errors').textContent = '';
   $('empty').hidden = true;
+  $('headline').hidden = true;   // no winner until something comes back
   // Orientation is a first-run thing; once you've searched, you know. The date hint is
   // part of that same orientation (the field labels and the first-run lede already say
   // it), and it was costing a permanent line in the status strip above every board.
