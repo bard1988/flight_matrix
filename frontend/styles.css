@@ -65,8 +65,15 @@
   /* Motion: one shared curve for the 4-7 "fluid CSS" band. */
   --ease: cubic-bezier(0.16, 1, 0.3, 1);
 
+  /* Three grounds, deliberately stepped so the page has a structure instead of one flat
+     wash: --surface-1 is raised chrome (the control bar, tooltip, panel), --page is the
+     document ground that controls sit on, --canvas is the recessed board area. The old
+     palette had chrome at #fcfcfb on a #f9f9f7 page, a 3-in-255 step that was invisible,
+     so the toolbar was held up by a single hairline. --canvas is separate from --page on
+     purpose: darkening --page itself would have restyled every button and input too. */
   --surface-1: #fcfcfb;
   --page: #f9f9f7;
+  --canvas: #f4f3ef;
   --text-primary: #0b0b0b;
   --text-secondary: #52514e;
   --text-muted: #6c6960;
@@ -93,7 +100,7 @@
   --q4: #e0875c;  --qi4: #0b0b0b;
   --q5: #f99885;  --qi5: #0b0b0b;
   --q6: #fbb7b4;  --qi6: #0b0b0b;
-  --hatch: rgba(11, 11, 11, 0.07);
+  --hatch: rgba(11, 11, 11, 0.05);
 }
 
 @media (prefers-color-scheme: dark) {
@@ -101,6 +108,7 @@
     color-scheme: dark;
     --surface-1: #1a1a19;
     --page: #0d0d0d;
+    --canvas: #0d0d0d;
     --text-primary: #fcfcfb;
     --text-secondary: #c3c2b7;
     --text-muted: #97938a;
@@ -119,7 +127,7 @@
     --q4: #aa562a;  --qi4: #fcfcfb;
     --q5: #953e2f;  --qi5: #fcfcfb;
     --q6: #723232;  --qi6: #fcfcfb;
-    --hatch: rgba(255, 255, 255, 0.08);
+    --hatch: rgba(255, 255, 255, 0.06);
   }
 }
 
@@ -127,6 +135,7 @@
   color-scheme: dark;
   --surface-1: #1a1a19;
   --page: #0d0d0d;
+  --canvas: #0d0d0d;
   --text-primary: #fcfcfb;
   --text-secondary: #c3c2b7;
   --text-muted: #97938a;
@@ -145,7 +154,7 @@
   --q4: #aa562a;  --qi4: #fcfcfb;
   --q5: #953e2f;  --qi5: #fcfcfb;
   --q6: #723232;  --qi6: #fcfcfb;
-  --hatch: rgba(255, 255, 255, 0.08);
+  --hatch: rgba(255, 255, 255, 0.06);
 }
 
 * { box-sizing: border-box; }
@@ -425,15 +434,27 @@ button.primary {
   gap: 4px;
 }
 
-/* The live status is the lead line of the strip; every other span under it is a secondary
-   note at 11-12px, so the stack has a clear top even when four of them are showing. */
+/* The lead line: live status on the left, colour key pushed to the right. Both used to be
+   separate stacked lines, which is what made the top of the page read as a wall of grey
+   prose. Wraps to two lines only when the window is too narrow to hold both. */
+.status-lead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 4px 24px;
+  width: 100%;
+}
+
 #progress { color: var(--text-primary); font-weight: 500; }
 #progress:empty { display: none; }
 
-/* Keep the status/legend prose to a readable measure on wide screens. */
-.status > span { max-width: 74ch; }
+/* Keep the status prose to a readable measure on wide screens. */
+.status > span,
+.status-lead > span { max-width: 74ch; }
 .status .legend { max-width: none; }
-.legend-rule { max-width: 74ch; }
+
+.legend-scope { color: var(--text-muted); }
 
 .status .err { color: var(--critical); }
 
@@ -456,9 +477,9 @@ button.primary {
 
 /* ---------------------------------------------------------------- legend */
 
-/* The rule and the swatch key sit on one line where there is room, and wrap to two when
-   there is not. Stacked unconditionally, they cost the board two lines of height on every
-   screen for something read once. */
+/* Just the swatch key now, riding the right end of the status lead line. The two-sentence
+   "colour ranks within each destination" paragraph that used to sit above it moved to the
+   first-run panel, and survives here as .legend-scope plus a title tooltip. */
 .legend {
   display: flex;
   flex-flow: row wrap;
@@ -533,13 +554,16 @@ button.primary {
   display: inline-block;
   border: 1px solid var(--border);
   background-image: repeating-linear-gradient(
-    45deg, transparent, transparent 3px, var(--hatch) 3px, var(--hatch) 5px);
+    45deg, transparent, transparent 4px, var(--hatch) 4px, var(--hatch) 6px);
   vertical-align: -2px;
 }
 
 /* ---------------------------------------------------------------- board */
 
-main { padding: 14px 16px 60px; }
+main {
+  padding: 14px 16px 60px;
+  background: var(--canvas);
+}
 
 .board {
   display: grid;
@@ -557,7 +581,7 @@ main { padding: 14px 16px 60px; }
    do: the city name and its own matrix bound the group perfectly well. One hairline
    above each block separates them, and the board reads as a single surface. */
 .card {
-  padding: 10px 0 14px;
+  padding: 14px 0 20px;
   border-top: 1px solid var(--gridline);
   /* A grid item defaults to min-width:auto, which lets the wide matrix inside force the
      block past its track and the page into horizontal scroll. Let it shrink; the
@@ -582,14 +606,14 @@ main { padding: 14px 16px 60px; }
 /* Keep the scrollbars visible rather than overlay-hidden, so it is obvious the grid
    scrolls and how far through it you are. */
 .matrix-wrap::-webkit-scrollbar { width: 9px; height: 9px; }
-.matrix-wrap::-webkit-scrollbar-track { background: var(--page); border-radius: 5px; }
+.matrix-wrap::-webkit-scrollbar-track { background: var(--canvas); border-radius: 5px; }
 .matrix-wrap::-webkit-scrollbar-thumb {
   background: var(--axis);
   border-radius: 5px;
-  border: 2px solid var(--page);
+  border: 2px solid var(--canvas);
 }
 .matrix-wrap::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
-.matrix-wrap::-webkit-scrollbar-corner { background: var(--page); }
+.matrix-wrap::-webkit-scrollbar-corner { background: var(--canvas); }
 
 /* The pinned axes paint over the scrolling grid, so their background has to match what
    now sits behind the matrix. With the card gone that is the page ground, not the old
@@ -598,14 +622,14 @@ table.matrix thead th {
   position: sticky;
   top: 0;
   z-index: 2;
-  background: var(--page);
+  background: var(--canvas);
 }
 
 table.matrix th.row {
   position: sticky;
   left: 0;
   z-index: 1;
-  background: var(--page);
+  background: var(--canvas);
 }
 
 table.matrix th.corner {
@@ -613,7 +637,7 @@ table.matrix th.corner {
   left: 0;
   top: 0;
   z-index: 3;
-  background: var(--page);
+  background: var(--canvas);
 }
 
 .growing {
@@ -631,20 +655,47 @@ table.matrix th.corner {
   box-shadow: inset 0 1px 0 0 var(--cheapest);
 }
 
+/* Two rows, no extra markup.
+   Row 1 carries the only two things worth reading at a glance, the city and its cheapest
+   price, plus the controls. Row 2 carries the metadata that used to compete with them.
+   Previously all five items sat on one line at near-identical size, which is why the row
+   read as a jumble rather than a heading. The zero-height ::after is a flex line break, so
+   the split needs no DOM change and the buttons keep their position and tab order. */
 .card-head {
   display: flex;
-  flex-wrap: wrap;   /* wrap a control onto a second line rather than clip it on a narrow card */
-  align-items: center;
-  gap: 5px 8px;
-  margin-bottom: 8px;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 3px 8px;
+  margin-bottom: 9px;
 }
 
-.card-head h2 { font-size: 15px; margin: 0; font-weight: 600; }
-.card-head .code { color: var(--text-muted); font-size: 12px; }
-.card-head .best { margin-left: auto; font-weight: 600; font-variant-numeric: tabular-nums; }
-.card-head .cov { color: var(--text-muted); font-size: 11px; font-variant-numeric: tabular-nums; }
+.card-head h2 {
+  order: 1;
+  margin: 0;
+  font-size: 19px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  line-height: 1.15;
+}
 
+.card-head .best {
+  order: 2;
+  margin-left: auto;
+  font-size: 17px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.card-head button { order: 3; align-self: center; }
+.card-head::after { content: ''; order: 4; flex-basis: 100%; height: 0; }
+
+.card-head .code { order: 5; color: var(--text-muted); font-size: 11px; }
+.card-head .cov { order: 6; color: var(--text-muted); font-size: 11px; font-variant-numeric: tabular-nums; }
+
+/* order 7: the calendar-drift warning belongs with the metadata on row 2, not competing
+   with the city name. Without an explicit order it would default to 0 and sort first. */
 .card-head .drift {
+  order: 7;
   font-size: 11px;
   color: #0b0b0b;
   background: var(--warning);
@@ -689,8 +740,8 @@ table.matrix th.corner {
 
 /* Pulse the cheapest cell after jumping to it, so the eye lands on the right square. */
 @keyframes locate-flash {
-  0%, 100% { box-shadow: 0 0 0 1px var(--page), 0 0 0 4px var(--cheapest); }
-  50%      { box-shadow: 0 0 0 1px var(--page), 0 0 0 9px var(--cheapest); }
+  0%, 100% { box-shadow: 0 0 0 1px var(--canvas), 0 0 0 4px var(--cheapest); }
+  50%      { box-shadow: 0 0 0 1px var(--canvas), 0 0 0 9px var(--cheapest); }
 }
 
 table.matrix td.flash { animation: locate-flash 0.4s ease-in-out 4; }
@@ -737,11 +788,11 @@ table.matrix th.corner { text-align: right; font-size: 9px; }
 
 table.matrix td {
   width: 26px;
-  height: 17px;
+  height: 19px;
   padding: 0;
   text-align: center;
   font-size: 9px;
-  line-height: 15px;
+  line-height: 17px;
   border-radius: 2px;
   color: var(--ink-on-fill);
   border: 1px solid transparent;
@@ -750,9 +801,9 @@ table.matrix td {
 td.void { background: none; }
 
 td.nodata {
-  background-color: var(--page);
+  background-color: var(--canvas);
   background-image: repeating-linear-gradient(
-    45deg, transparent, transparent 3px, var(--hatch) 3px, var(--hatch) 5px);
+    45deg, transparent, transparent 4px, var(--hatch) 4px, var(--hatch) 6px);
   border-color: var(--border);
   cursor: pointer;
   color: var(--text-muted);
@@ -792,12 +843,12 @@ td.week-diag { border-left-color: var(--axis); border-left-style: dotted; }
    the marker can never be mistaken for a price level. The board-wide cheapest gets a
    thicker ring than each destination's own cheapest. */
 td.best-here {
-  box-shadow: 0 0 0 1px var(--page), 0 0 0 3px var(--cheapest);
+  box-shadow: 0 0 0 1px var(--canvas), 0 0 0 3px var(--cheapest);
   font-weight: 600;
 }
 
 td.best-board {
-  box-shadow: 0 0 0 1px var(--page), 0 0 0 4px var(--cheapest),
+  box-shadow: 0 0 0 1px var(--canvas), 0 0 0 4px var(--cheapest),
               0 0 0 5px var(--text-primary);
   font-weight: 700;
 }
@@ -943,14 +994,15 @@ table.matrix td.cross-at {
 #panel .big { font-size: 26px; font-weight: 600; font-variant-numeric: tabular-nums; }
 #panel .close { position: absolute; top: 10px; right: 12px; border: none; background: none; font-size: 18px; }
 
+/* No rule above this. The footnote is held to a 72ch measure, so a border-top drew a short
+   hairline under the leftmost column only, which read as a stray mark rather than a
+   separator. Space and the muted colour separate it perfectly well. */
 .note {
   color: var(--text-muted);
   font-size: 12px;
   line-height: 1.5;
   max-width: 72ch;   /* readable measure, the footnote is prose, not a full-bleed strip */
-  border-top: 1px solid var(--border);
-  margin-top: 14px;
-  padding-top: 10px;
+  margin-top: 28px;
 }
 
 /* ---------------------------------------------------------------- first run */
@@ -1034,7 +1086,8 @@ body.show-table .tableview { display: block; }
   font-weight: 600;
   position: sticky;
   top: 72px;
-  background: var(--page);
+  /* Sticky, so it paints over the scrolling rows: match the canvas it sits on. */
+  background: var(--canvas);
   cursor: pointer;
   user-select: none;
 }
@@ -1136,7 +1189,7 @@ body.show-table .tableview { display: block; }
   }
   /* One destination per row, still separated by its own hairline rather than a gap. */
   .board { grid-template-columns: 1fr; gap: 0; }
-  .card { padding: 9px 0 12px; }
+  .card { padding: 12px 0 16px; }
 
   /* The grid is no longer its own vertical scroll box: it grows to fit and the
      PAGE scrolls. It still scrolls sideways for the departure-date axis, and a
