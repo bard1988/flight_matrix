@@ -450,17 +450,6 @@ button.primary.stale {
   color: #0b0b0b;
 }
 
-/* Sits immediately after "Travel until", so it needs to land on the same baseline as the
-   inputs rather than centring against fields that carry a label above them. flex-end plus
-   a matching bottom edge is what makes it read as attached to the dates instead of
-   floating between groups. Sized to its short label to cost the bar minimal width. */
-.widen {
-  align-self: flex-end;
-  margin-bottom: 1px;
-  padding: 4px 8px;
-  font-size: 12px;
-  white-space: nowrap;
-}
 
 .nights { display: flex; gap: 3px; }
 .nights input { width: 52px; min-width: 0; }

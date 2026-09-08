@@ -479,7 +479,6 @@ function render() {
 
   state.lastOrdered = ordered;
   syncExpandAll(ordered);
-  syncWiden();
   renderHeadline(ordered);
   renderTable(ordered);
   $('footnote').hidden = ordered.length === 0;
@@ -566,6 +565,25 @@ const animatedDests = new Set();
 /* Which destinations show their full grid. Survives the wholesale board rebuild that every
    stream event triggers, exactly like animatedDests and scrollOffsets. */
 const expanded = new Set();
+
+/* Per-destination date axes, for destinations that have been widened on their own.
+ *
+ * The board starts with ONE set of axes for everything, which is what makes the same date
+ * pair comparable across destinations. Widening a single destination necessarily breaks
+ * that for that destination, and this map is where the divergence lives.
+ *
+ * It is keyed by IATA code and kept OUTSIDE the destination payload on purpose: every
+ * stream event replaces the payload object wholesale (state.destinations.set(code, msg)),
+ * so axes stored on it would be discarded seconds later. */
+const destAxes = new Map();
+
+/** The axes this destination's grid should be drawn on: its own if it has been widened,
+ *  otherwise the board's. */
+function axesFor(dest) {
+  const own = destAxes.get(dest.destination);
+  if (own) return own;
+  return { departs: state.meta.depart_dates, returns: state.meta.return_dates };
+}
 let userToggled = false;
 
 function isExpanded(code) {
@@ -644,7 +662,7 @@ function departureStrip(dest, domain) {
     if (cur == null || v < cur.v) cheapestByDeparture.set(cell.depart, { v, cell });
   }
 
-  for (const depart of state.meta.depart_dates) {
+  for (const depart of axesFor(dest).departs) {
     const hit = cheapestByDeparture.get(depart);
     const i = document.createElement('i');
     if (!hit) {
@@ -755,18 +773,30 @@ function renderCard(dest, domain) {
 
   head.appendChild(fillBtn);
 
-  /* The "± Nd" widen control used to live here and has been removed, not fixed. It was
-     built for the old model, where the two date fields were ANCHORS and the grid spread
-     window_days either side of them. Under the current model those fields bound the period
-     outright, so board.date_axes() takes the range_axes() branch and never reads
-     window_days at all: the button's entire purpose had already evaporated.
-     It was also actively destructive, measured: on a 19x19 board over Oct 8 to Nov 5 with
-     10-14 nights, pressing it produced a 6x6 grid and dropped 40 of 54 priced cells. The
-     extend request sends the axis MIDPOINTS as its two dates and carries no nights range,
-     so the backend rebuilt the axes from a five-day midpoint span using the default 5-9
-     nights while the user's fields still read 10-14.
-     Widening the period is now simply editing "Travel until", which is strictly more
-     expressive than a symmetric window ever was. */
+  /* Widen THIS destination's dates by a week at each end. Per destination because that is
+     how the need arises: you narrow to a candidate and want more dates for it, and one
+     destination costs a twentieth of the provider calls a whole board would.
+     Only offered while expanded: a collapsed row is meant to be one line, and the point of
+     widening is to look at the grid.
+     Hidden rather than disabled at the period ceiling, since a permanently dead control
+     invites clicking. */
+  if (canWiden(dest)) {
+    const wider = document.createElement('button');
+    wider.type = 'button';
+    wider.className = 'fillbtn';
+    const busy = widening.has(dest.destination);
+    wider.textContent = busy ? '…' : `± ${WIDEN_STEP_DAYS}d`;
+    wider.disabled = busy;
+    const p = periodOf(dest);
+    wider.title = busy
+      ? `Widening ${dest.city}…`
+      : `Widen ${dest.city} by ${WIDEN_STEP_DAYS} days at each end ` +
+        `(${p.start} to ${p.end} now) and re-price just this destination`;
+    wider.setAttribute('aria-label', `Widen ${dest.city}'s dates by a week at each end`);
+    wider.onclick = () => widenDestination(dest);
+    head.appendChild(wider);
+  }
+
   card.appendChild(head);
 
   const byKey = new Map(dest.cells.map((c) => [c.depart + '|' + c.ret, c]));
@@ -783,7 +813,9 @@ function renderCard(dest, domain) {
   // Keep this short: it is the widest thing in the first column and a long label pushes
   // the grid past the card, clipping the last date columns.
   headRow.innerHTML = '<th class="corner" title="rows are return dates, columns are departure dates">ret ↓ dep →</th>';
-  meta.depart_dates.forEach((depart, colIndex) => {
+  // This destination's own axes if it has been widened by itself, else the board's.
+  const { departs: axDeparts, returns: axReturns } = axesFor(dest);
+  axDeparts.forEach((depart, colIndex) => {
     const th = document.createElement('th');
     th.className = 'col' + (isWeekend(depart) ? ' weekend' : '');
     th.scope = 'col';
@@ -795,7 +827,7 @@ function renderCard(dest, domain) {
   table.appendChild(thead);
 
   const tbody = document.createElement('tbody');
-  meta.return_dates.forEach((ret, rowIndex) => {
+  axReturns.forEach((ret, rowIndex) => {
     const tr = document.createElement('tr');
     const th = document.createElement('th');
     th.className = 'row' + (isWeekend(ret) ? ' weekend' : '');
@@ -804,7 +836,7 @@ function renderCard(dest, domain) {
     th.innerHTML = `${weekday(ret)} ${shortDate(ret)}`;
     tr.appendChild(th);
 
-    meta.depart_dates.forEach((depart, colIndex) => {
+    axDeparts.forEach((depart, colIndex) => {
       const td = document.createElement('td');
       if (ret < depart) {
         td.className = 'void';                       // return before departure
@@ -1253,127 +1285,100 @@ function locateBest(card, dest) {
   }
 }
 
-/* --------------------------------------------------------- widen the period */
+/* ----------------------------------------------------- widen ONE destination */
 
-/* Widen the travel period by a week at each end and re-price what is on the board.
+/* Widen a single destination's travel period by a week at each end and re-price just it.
  *
- * This is the rebuilt "± 7d". The original was written for the old model, where the two
- * date fields were anchors and the grid spread window_days around them; under the period
- * model there is no window to widen, so it now does the thing it always meant: push
- * "Travel from" a week earlier and "Travel until" a week later.
+ * Per destination rather than per board, because that is how the need actually arises: you
+ * narrow to a candidate or two and want more dates for THOSE, and widening one costs one
+ * destination's worth of provider calls instead of twenty.
  *
- * It goes through /api/extend rather than a fresh search on purpose. Extend re-prices the
- * destinations already on the board instead of discovering the cheapest ones again, so
- * widening the dates cannot silently swap the cities out from under you. It also skips
- * discovery, which is the slow part.
+ * The cost is real and worth stating: a widened destination no longer shares its axes with
+ * the rest of the board, so the same grid position stops meaning the same date pair across
+ * destinations. Comparing by headline price still works, which is what the cheapest-first
+ * ordering and the headline band are for.
  *
- * The date inputs are updated to the new period and the search signature is refreshed with
- * them, otherwise the board would immediately read as stale against its own controls. */
+ * /api/extend already takes a destinations list, so asking for exactly one needs no backend
+ * change. Its axes reply is stored per destination in destAxes rather than on meta, so the
+ * rest of the board keeps the axes it was searched on.
+ */
 const WIDEN_STEP_DAYS = 7;
-const MAX_PERIOD_DAYS = 60;      // a 60-day period is already ~55x55 cells per destination
-let widening = false;
+const MAX_PERIOD_DAYS = 60;      // a 60-day period is already ~55x55 cells for one grid
+const widening = new Set();      // IATA codes currently being re-priced
 
-function periodBounds() {
-  const meta = state.meta;
-  if (!meta || !meta.depart_dates.length || !meta.return_dates.length) return null;
-  return { start: meta.depart_dates[0], end: meta.return_dates[meta.return_dates.length - 1] };
-}
-
-function periodDays(bounds) {
-  return Math.round(
-    (new Date(bounds.end + 'T00:00:00') - new Date(bounds.start + 'T00:00:00')) / 86400000
+function periodOf(dest) {
+  const ax = axesFor(dest);
+  if (!ax.departs.length || !ax.returns.length) return null;
+  const start = ax.departs[0];
+  const end = ax.returns[ax.returns.length - 1];
+  const days = Math.round(
+    (new Date(end + 'T00:00:00') - new Date(start + 'T00:00:00')) / 86400000
   );
+  return { start, end, days };
 }
 
-/** Show the widen control only when there is a board and room left to grow. */
-function syncWiden() {
-  const btn = $('widen');
-  const bounds = periodBounds();
-  const canGrow = !!bounds && periodDays(bounds) + 2 * WIDEN_STEP_DAYS <= MAX_PERIOD_DAYS;
-  btn.hidden = !bounds || !canGrow;
-  if (btn.hidden) return;
-  btn.disabled = widening;
-  btn.title =
-    `Widen the travel period by ${WIDEN_STEP_DAYS} days at each end ` +
-    `(${bounds.start} to ${bounds.end} now) and re-price these destinations`;
+function canWiden(dest) {
+  const p = periodOf(dest);
+  return !!p && p.days + 2 * WIDEN_STEP_DAYS <= MAX_PERIOD_DAYS;
 }
 
-function widenPeriod() {
-  const meta = state.meta;
-  const bounds = periodBounds();
-  if (widening || !bounds) return;
-  if (periodDays(bounds) + 2 * WIDEN_STEP_DAYS > MAX_PERIOD_DAYS) return;
+function widenDestination(dest) {
+  const code = dest.destination;
+  const p = periodOf(dest);
+  if (widening.has(code) || !p || !canWiden(dest)) return;
 
-  const start = addDays(bounds.start, -WIDEN_STEP_DAYS);
-  const end = addDays(bounds.end, WIDEN_STEP_DAYS);
-  widening = true;
-  syncWiden();
-  $('growing').hidden = false;
-  $('growing').textContent = `widening to ${start} - ${end}…`;
+  const start = addDays(p.start, -WIDEN_STEP_DAYS);
+  const end = addDays(p.end, WIDEN_STEP_DAYS);
+  widening.add(code);
+  render();
 
-  const codes = [...state.destinations.keys()];
   fetch('/api/extend', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      origin: meta.origin,
+      origin: state.meta.origin,
       depart_date: start,
       return_date: end,
-      destinations: codes,
+      destinations: [code],
       // Carried deliberately: without these the backend falls back to its 5-9 default and
       // rebuilds the axes for a trip length nobody asked for.
       nights_min: state.constraints.min,
       nights_max: state.constraints.max,
-      adults: meta.adults,
-      children: meta.children,
-      currency: meta.currency,
-      nonstop_only: meta.nonstop_only,
+      adults: state.meta.adults,
+      children: state.meta.children,
+      currency: state.meta.currency,
+      nonstop_only: state.meta.nonstop_only,
     }),
   })
     .then((r) => r.json())
     .then((data) => {
       if (!data.extend_id) throw new Error('extend failed');
       const source = new EventSource(`/api/extend/${data.extend_id}/stream`);
-      let done = 0;
-      let pending = codes.length;
       source.onmessage = (event) => {
         const msg = JSON.parse(event.data);
         if (msg.type === 'axes') {
-          meta.depart_dates = msg.depart_dates;
-          meta.return_dates = msg.return_dates;
-          // Keep the controls honest about what is on screen, and re-baseline the
-          // signature so the widened board does not accuse itself of being stale.
-          $('depart').value = start;
-          $('ret').value = end;
-          state.searchSignature = searchSignature();
-          markSearchStale();
-          pending = msg.pending;
+          // Per destination, NOT on meta: the rest of the board keeps its own axes.
+          destAxes.set(code, { departs: msg.depart_dates, returns: msg.return_dates });
           render();
         } else if (msg.type === 'destination') {
           state.destinations.set(msg.destination, msg);
-          done += 1;
-          $('growing').textContent = `widening to ${start} - ${end}… ${done}/${pending}`;
+          recomputeBest(msg.destination);
           render();
-        } else if (msg.type === 'destination_error') {
-          done += 1;
         }
       };
       const finish = () => {
         source.close();
-        widening = false;
-        $('growing').hidden = true;
+        widening.delete(code);
         render();
       };
       source.addEventListener('end', finish);
       source.onerror = finish;
     })
     .catch(() => {
-      widening = false;
-      $('growing').hidden = true;
+      widening.delete(code);
       render();
     });
 }
-
 /* ------------------------------------------------------- matrix scroll memory */
 
 const scrollOffsets = new Map(); // IATA -> {x, y}
@@ -1608,7 +1613,6 @@ function startSearch() {
   $('empty').hidden = true;
   $('headline').hidden = true;   // no winner until something comes back
   $('expandall').hidden = true;  // nothing to expand yet either
-  $('widen').hidden = true;      // nor a period to widen
   // Orientation is a first-run thing; once you've searched, you know. The date hint is
   // part of that same orientation (the field labels and the first-run lede already say
   // it), and it was costing a permanent line in the status strip above every board.
@@ -1620,6 +1624,8 @@ function startSearch() {
   scrollOffsets.clear();
   animatedDests.clear();        // a new board: let every destination animate in again
   expanded.clear();             // and let the new winner be the one that opens
+  destAxes.clear();             // every destination back on the board's own axes
+  widening.clear();
   userToggled = false;
   state.searchSignature = searchSignature();
   // Deliberately NOT disabled: a long search used to leave the button dead while it also
@@ -1778,7 +1784,6 @@ function consume(searchId) {
 
 $('go').addEventListener('click', startSearch);
 $('stop').addEventListener('click', stopSearch);
-$('widen').addEventListener('click', widenPeriod);
 $('perperson').addEventListener('change', (e) => {
   state.perPerson = e.target.checked;
   if (state.meta) render();

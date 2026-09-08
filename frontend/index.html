@@ -45,12 +45,6 @@
         <label for="ret" id="retlabel">Travel until</label>
         <input id="ret" type="date" />
       </div>
-      <!-- Widens the travel period a week at each end and re-prices the same destinations.
-           Directly after "Travel until" because the two date inputs are what it edits.
-           It was briefly placed after Nights instead, which left it orphaned between the
-           dates and the travellers, 136px from the field it acts on. State is set by
-           syncWiden(); hidden until there is a board to widen. -->
-      <button type="button" id="widen" class="widen" hidden>± 7d</button>
       <div class="field field-nights">
         <label for="nmin">Nights</label>
         <span class="nights">
