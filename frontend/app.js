@@ -21,7 +21,7 @@ const state = {
   // Currency is a display concern once the board is loaded: the board is priced in
   // `meta.currency`, and switching the dropdown just converts the numbers with FX
   // rates rather than re-running the whole search.
-  fx: null,                // { eur: 1, usd: 1.08, ... } — units per 1 EUR
+  fx: null,                // { eur: 1, usd: 1.08, ... } in units per 1 EUR
   displayCurrency: null,   // what the dropdown shows; defaults to meta.currency
 };
 
@@ -174,7 +174,7 @@ function fmtCompact(value) {
 
 /* Load FX rates once. Free, keyless, CORS-enabled source; cached in localStorage for
    12h, with a static fallback if it is unreachable. Rates only need to be roughly
-   right — they re-label already-fetched prices, they don't drive any decision. */
+   right: they re-label already-fetched prices, they don't drive any decision. */
 async function loadFx() {
   const CACHE_KEY = 'flightmatrix.fx';
   const MAX_AGE = 12 * 3600 * 1000;
@@ -419,11 +419,14 @@ function render() {
   });
 
   const active = constraintsActive();
-  $('constraintnote').hidden = !active;
   if (active) {
     const kept = ordered.reduce((n, d) => n + d.allowed.length, 0);
     const all = ordered.reduce((n, d) => n + d.cells.length, 0);
-    let text = `${describeConstraints()} — ${kept} of ${all} cells`;
+    // A constraint that excludes nothing has nothing to report. "170 of 170 cells" cost a
+    // permanent line above the board to tell the user their filter was inert, and the
+    // Nights fields in the bar above already show what is set.
+    $('constraintnote').hidden = kept === all;
+    let text = `${describeConstraints()}: ${kept} of ${all} cells`;
     // Explain an impossible constraint rather than showing a silently empty board. The
     // usual cause is treating the two date fields as a range: anchors far apart mean every
     // cell is a long trip, so a short-nights filter can never match.
@@ -434,8 +437,8 @@ function render() {
       const c = state.constraints;
       if ((c.min != null && c.min > hi) || (c.max != null && c.max < lo)) {
         text += ` · this window only contains ${lo}-${hi} night trips. ` +
-                `Your dates are ${Math.round((new Date(state.meta.return_dates[Math.floor(state.meta.return_dates.length / 2)]) - new Date(state.meta.depart_dates[Math.floor(state.meta.depart_dates.length / 2)])) / 86400000)} days apart — ` +
-                `move "Return around" closer to "Depart around" to look for short trips.`;
+                `Your dates are ${Math.round((new Date(state.meta.return_dates[Math.floor(state.meta.return_dates.length / 2)]) - new Date(state.meta.depart_dates[Math.floor(state.meta.depart_dates.length / 2)])) / 86400000)} days apart. ` +
+                `Move "Return around" closer to "Depart around" to look for short trips.`;
       } else {
         text += ' · nothing matches; try fewer days or a wider nights range.';
       }
@@ -443,6 +446,7 @@ function render() {
     $('constraintnote').textContent = text;
     $('constraintnote').classList.toggle('warn', !kept && all > 0);
   } else {
+    $('constraintnote').hidden = true;
     $('constraintnote').textContent = '';
     $('constraintnote').classList.remove('warn');
   }
@@ -450,7 +454,7 @@ function render() {
   const total = state.destinations.size;
   $('filtercount').hidden = !state.filter;
   $('filtercount').textContent = state.filter
-    ? `showing ${ordered.length} of ${total}${ordered.length ? '' : ' — nothing matches'}`
+    ? `showing ${ordered.length} of ${total}${ordered.length ? '' : ', nothing matches'}`
     : '';
 
   // A keyboard user navigating the grid loses focus when the board is rebuilt (every
@@ -494,12 +498,22 @@ function headlineChip(dest) {
   return `<span class="drift" title="The price calendar quoted ${was} for this card's cheapest trip; a real search returned ${now}. The headline shown is the real one. Other cells on this card come from the same calendar, so treat them as indicative until clicked.">calendar ${dir}stated by ~${Math.abs(Math.round(drift))}%</span>`;
 }
 
+/* Destinations that have already played their arrival animation. The board is rebuilt
+   wholesale on every stream event (see renderBoard's replaceChildren), so without this the
+   fade-up would replay on every card each time any one destination updated. Each
+   destination animates once, when it first lands. Cleared by resetForSearch. */
+const animatedDests = new Set();
+
 function renderCard(dest, domain) {
   const meta = state.meta;
   const card = document.createElement('section');
   card.className = 'card';
   card.dataset.dest = dest.destination;
   if (state.globalBest && state.globalBest.dest === dest.destination) card.classList.add('is-winner');
+  if (!animatedDests.has(dest.destination)) {
+    card.classList.add('is-new');
+    animatedDests.add(dest.destination);
+  }
 
   const head = document.createElement('div');
   head.className = 'card-head';
@@ -699,7 +713,7 @@ function finishCard(card, dest, table) {
   wrap.appendChild(table);
   // Scrolling to any edge asks for a wider window. Restore the scroll offset after the
   // re-render so growing the grid does not yank the view back to the corner.
-  wrap.addEventListener('scroll', () => rememberScroll(dest.destination, wrap));
+  wrap.addEventListener('scroll', () => rememberScroll(dest.destination, wrap), { passive: true });
   wrap.addEventListener('wheel', (e) => onWheel(e, wrap), { passive: true });
   card.appendChild(wrap);
 
@@ -805,9 +819,11 @@ function renderTimes(details) {
         `${l.carrier ? ' · ' + l.carrier : ''}${l.code ? ' ' + l.code : ''}</span></div>`;
     }).join('');
     return `<div class="segments"><b>${label}</b>` +
+      // One middle dot per line: duration and stop count used to take one each, which made
+      // the summary read as a dot-separated list rather than a sentence.
       `<div class="sector-summary">${s.departs || ''} → ${split(s.arrives).time || ''}` +
       `<span class="muted">${s.duration ? ' · ' + s.duration : ''}` +
-      ` · ${fmtStops(s.stops || 0)}</span></div>` +
+      `${s.duration ? ', ' : ' · '}${fmtStops(s.stops || 0)}</span></div>` +
       legs + '</div>';
   };
   // Name the source and its price: the cross-check's cheapest is often a DIFFERENT
@@ -887,7 +903,7 @@ async function verifyCell(dest, cell) {
   const estimate = cell.estimate != null ? fmtMoney(cell.estimate, cur) : 'n/a';
   if (data.error || data.total == null) {
     // The live cross-check didn't return a price. The raw reason (route absent from
-    // Google, rate limit, missing dependency) is dev detail — log it, never show it.
+    // Google, rate limit, missing dependency) is dev detail: log it, never show it.
     // The board still priced this cell, so lead with that and keep the booking links live.
     if (data.error) console.debug('cross-check unavailable:', data.error);
     const boardPrice = cell.estimate != null
@@ -902,7 +918,7 @@ async function verifyCell(dest, cell) {
       links.push(`<a href="${data.link}" target="_blank" rel="noopener">Open on Google Flights</a>`);
     }
     const explain = cell.estimate != null
-      ? `Couldn't verify this fare live — not every route is in Google Flights. The price above is the board's ${cell.is_total ? 'total' : 'estimate'}; the booking links below are live.`
+      ? `Couldn't verify this fare live. Not every route is in Google Flights. The price above is the board's ${cell.is_total ? 'total' : 'estimate'}; the booking links below are live.`
       : `Couldn't verify this fare live, and the board has no price for this date pair. Try a nearby cell.`;
     openPanel(
       `<h3>${dest.city} (${dest.destination})</h3>` +
@@ -1460,7 +1476,7 @@ $('panelclose').addEventListener('click', () => $('panel').classList.remove('ope
 function startSearch() {
   if (state.source) state.source.close();
   // On a phone the filter panel fills the screen, so fold it away on search. On desktop
-  // it sits above the board — leave it as the user set it so filters stay easy to tune.
+  // it sits above the board, so leave it as the user set it and filters stay easy to tune.
   if (window.matchMedia('(max-width: 720px)').matches) {
     document.body.classList.remove('opts-open');
     $('optsbtn').setAttribute('aria-expanded', 'false');
@@ -1471,10 +1487,16 @@ function startSearch() {
   $('tableview').replaceChildren();
   $('errors').textContent = '';
   $('empty').hidden = true;
+  // Orientation is a first-run thing; once you've searched, you know. The date hint is
+  // part of that same orientation (the field labels and the first-run lede already say
+  // it), and it was costing a permanent line in the status strip above every board.
+  $('firstrun').hidden = true;
+  $('datehint').hidden = true;
   stopAutoVerify();             // a new search invalidates any in-flight cross-check
   $('growing').hidden = true;   // clear any stale rate-limit / widening notice
   $('note').hidden = true;
   scrollOffsets.clear();
+  animatedDests.clear();        // a new board: let every destination animate in again
   state.searchSignature = searchSignature();
   // Deliberately NOT disabled: a long search used to leave the button dead while it also
   // looked amber/clickable, so changing a setting mid-search trapped you. Pressing Search
@@ -1547,7 +1569,7 @@ function stopSearch() {
   $('stop').hidden = true;
   $('growing').hidden = true;
   $('progress').textContent = state.destinations.size
-    ? `Stopped — ${state.destinations.size} destination${state.destinations.size > 1 ? 's' : ''} loaded`
+    ? `Stopped. ${state.destinations.size} destination${state.destinations.size > 1 ? 's' : ''} loaded`
     : 'Search stopped';
   markSearchStale();
 }
@@ -1582,7 +1604,7 @@ function consume(searchId) {
     } else if (msg.type === 'filter_applied') {
       $('note').hidden = false;
       $('note').textContent = msg.matched
-        ? `Searching only destinations matching "${msg.filter}" — ${msg.matched} of ${msg.considered} reachable destinations matched.`
+        ? `Searching only destinations matching "${msg.filter}": ${msg.matched} of ${msg.considered} reachable destinations matched.`
         : `Nothing reachable from here matches "${msg.filter}". Clear the filter and search again.`;
     } else if (msg.type === 'provider_status') {
       // Rate-limit waits stream in while they happen, so a pause never reads as a hang.
@@ -1683,10 +1705,10 @@ function searchSignature() {
 function markSearchStale() {
   const stale = !!state.meta && searchSignature() !== state.searchSignature;
   $('go').classList.toggle('stale', stale);
-  $('go').title = stale ? 'Settings changed — press Search to update the board' : '';
+  $('go').title = stale ? 'Settings changed. Press Search to update the board' : '';
   $('stalenote').hidden = !stale;
   $('stalenote').textContent = stale
-    ? 'showing the previous search — press Search to apply your changes'
+    ? 'showing the previous search, press Search to apply your changes'
     : '';
 }
 
@@ -1737,7 +1759,7 @@ $('destfilter').addEventListener('input', (e) => {
   if (state.meta) render();
 });
 
-/* Currency: with a board loaded, just convert the displayed numbers — no re-search.
+/* Currency: with a board loaded, just convert the displayed numbers, no re-search.
    With no board yet, it's simply the currency the next search will fetch in. */
 $('currency').addEventListener('change', (e) => {
   if (!state.meta) return;

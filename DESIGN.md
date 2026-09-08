@@ -171,7 +171,15 @@ A seven-step green → amber → red ramp from **`#12603d` (deep green, cheapest
 **The 11px Floor Rule.** Functional text (labels, tags, hints, buttons, meta) is never below 11px. The only exception is inside the fare matrix — its cell values and date-axis headers run at 9px because it is a dense data grid and 11px would break its density.
 
 ### Named Rules
-**The One Family Rule.** A single `system-ui` stack does all the work. Weight (400/600/700) and size carry hierarchy. Do not introduce a display serif, a monospace, or a second sans — the neutrality is the point.
+**The Two Family Rule.** (Supersedes the One Family Rule, which required a single
+`system-ui` stack and banned monospace outright.) Exactly two families, each with one job:
+**Geist** for all chrome, **Geist Mono** for every numeral a user might compare, sort or
+watch update. Both are self-hosted in `frontend/fonts/`, so the board makes no
+third-party font request. Weight (400/500/600/700) and size still carry hierarchy inside
+each family. Do not add a third family, and do not use the mono for prose: the panel's
+definition list and the flight-leg lines carry words next to their figures and stay in the
+sans with `tabular-nums`. Numeric surfaces are enumerated in one selector list at the top
+of `styles.css`; add to that list rather than setting `font-family` ad hoc.
 
 **The Tabular Numbers Rule.** Any number a user might compare, sort, or watch update uses `font-variant-numeric: tabular-nums` so digits stay column-aligned. This is already on the matrix, every headline price, the panel, and the table view.
 
@@ -283,9 +291,10 @@ Replaces the board entirely. Plain `<table>`, `border-collapse`, hairline row ru
 - **Don't** run `ink-muted` on `gridline` — it clears AA on the two paper surfaces, not on the mid-grey.
 - **Don't** add a `box-shadow` to cards, the panel, buttons, or inputs. The tooltip is the only element that carries an ambient shadow.
 - **Don't** use `marker-yellow` (`#f2b705` / `#ffcf33`) as a fill, a ramp step, or anything other than the "cheapest" marker.
-- **Don't** introduce a second typeface — no display serif, no monospace. Weight and size carry hierarchy.
+- **Don't** introduce a *third* typeface, and don't put the mono on prose. Geist for chrome, Geist Mono for numerals, nothing else.
 - **Don't** put the app in a centred max-width column; it is full-bleed.
-- **Don't** let a destination card grow to fit its matrix — the matrix scrolls inside a fixed viewport so cards stay comparable.
+- **Don't** box a destination in a card. Destinations are plain blocks separated by a 1px `gridline` rule; at this density a container per destination is four borders and a radius that the city name and its own matrix already do for free.
+- **Don't** let a destination block grow to fit its matrix. The matrix scrolls inside a fixed viewport (`max-height: min(46vh, 268px)`) so blocks stay comparable.
 - **Don't** hide the matrix scrollbars or make them overlay-only; their visibility tells the user there is more grid.
 - **Don't** style an estimate to look as certain as a verified price, or a `nodata` cell to look expensive.
 - **Don't** add gradients, hero imagery, urgency messaging, or decorative colour — this is an instrument, not a booking funnel.

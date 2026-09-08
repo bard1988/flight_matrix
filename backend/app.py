@@ -9,8 +9,8 @@ import threading
 import uuid
 from typing import Any
 
-from fastapi import FastAPI, HTTPException
-from fastapi.responses import FileResponse, StreamingResponse
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.responses import FileResponse, PlainTextResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
@@ -501,6 +501,34 @@ async def no_store_static(request, call_next):
     if request.url.path == "/" or request.url.path.startswith("/static"):
         response.headers["Cache-Control"] = "no-store, must-revalidate"
     return response
+
+
+@app.get("/robots.txt", response_class=PlainTextResponse)
+def robots(request: Request) -> str:
+    """The board is one indexable page; the JSON API is not content and stays out.
+
+    Both files derive the origin from the request rather than a configured hostname, so
+    they stay correct behind whatever DNS name or reverse proxy the instance ends up on.
+    """
+    base = str(request.base_url).rstrip("/")
+    return (
+        "User-agent: *\n"
+        "Allow: /\n"
+        "Disallow: /api/\n"
+        f"Sitemap: {base}/sitemap.xml\n"
+    )
+
+
+@app.get("/sitemap.xml")
+def sitemap(request: Request) -> Response:
+    base = str(request.base_url).rstrip("/")
+    xml = (
+        '<?xml version="1.0" encoding="UTF-8"?>\n'
+        '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n'
+        f"  <url><loc>{base}/</loc></url>\n"
+        "</urlset>\n"
+    )
+    return Response(content=xml, media_type="application/xml")
 
 
 @app.get("/")

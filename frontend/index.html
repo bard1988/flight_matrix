@@ -3,7 +3,24 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-<title>FlightMatrix</title>
+
+<title>FlightMatrix: compare flight prices across destinations and dates at once</title>
+<meta name="description" content="A flexible-date fare board. Pick a travel period and a trip length, and see every departure and return date pair for many destinations side by side, cheapest dates greenest." />
+
+<meta property="og:type" content="website" />
+<meta property="og:site_name" content="FlightMatrix" />
+<meta property="og:title" content="FlightMatrix: compare flight prices across destinations and dates at once" />
+<meta property="og:description" content="A flexible-date fare board. Pick a travel period and a trip length, and see every departure and return date pair for many destinations side by side." />
+<meta name="twitter:card" content="summary" />
+
+<!-- TODO before launch, both need the real public origin and cannot be inferred from the
+     repo: <link rel="canonical" href="https://HOST/" /> and <meta property="og:url" ... />.
+     A wrong canonical is worse than none, so they are omitted rather than guessed.
+     og:image also needs a real 1200x630 asset; twitter:card is "summary" until then. -->
+
+<link rel="icon" href="/static/favicon.svg" type="image/svg+xml" />
+<link rel="preload" href="/static/fonts/GeistMono-Regular.woff2" as="font" type="font/woff2" crossorigin />
+<link rel="preload" href="/static/fonts/Geist-Regular.woff2" as="font" type="font/woff2" crossorigin />
 <link rel="stylesheet" href="/static/styles.css" />
 </head>
 <body>
@@ -125,9 +142,11 @@
 </header>
 
 <div class="status">
-  <span id="progress">Pick a travel period and a trip length, then Search. Each destination shows every departure/return pair in that band, cheapest dates greenest.</span>
+  <!-- Empty until a search runs. The first-run panel below carries the orientation, so
+       this does not repeat it. -->
+  <span id="progress"></span>
   <span class="legend" id="legend" hidden>
-    <span class="legend-rule">Colour ranks the dates <b>within each destination</b> — cheapest to dearest. Compare destinations by price, not colour.</span>
+    <span class="legend-rule">Colour ranks the dates <b>within each destination</b>, cheapest to dearest. Compare destinations by price, not colour.</span>
     <span class="legend-key">
       <span>cheap</span>
       <span class="swatches">
@@ -150,16 +169,46 @@
 </div>
 
 <main>
+  <!-- First run. Nobody arriving for the first time knows that colour ranks within a
+       destination rather than across the board, or that EST and LIVE mean different
+       things, and both misreadings cost real money. This is where that gets said, once,
+       before there is a board to misread. Hidden for good on the first search. -->
+  <section class="firstrun" id="firstrun">
+    <h1>Where is cheap, and when</h1>
+    <p class="firstrun-lede">
+      Pick a travel period and a trip length, then Search. Every destination comes back as
+      a grid of departure and return dates, cheapest dates greenest.
+    </p>
+    <dl class="firstrun-key">
+      <div>
+        <dt>Colour ranks dates inside one destination</dt>
+        <dd>
+          Athens' greenest cell and Rome's greenest cell are each that city's own cheapest,
+          not the same price. Compare cities by their headline number, not by colour.
+        </dd>
+      </div>
+      <div>
+        <dt>An <span class="tag">EST</span> price is for ranking</dt>
+        <dd>
+          Estimates come from a price calendar: fast, wide, and good enough to sort by.
+          Click any cell to re-price that date pair live on Google Flights, and it becomes
+          <span class="tag live">LIVE</span>.
+        </dd>
+      </div>
+      <div>
+        <dt>A hatched cell means no price came back</dt>
+        <dd>Nobody quoted that date pair. It does not mean the trip is expensive.</dd>
+      </div>
+    </dl>
+  </section>
+
   <div class="board" id="board"></div>
   <div class="tableview" id="tableview"></div>
   <p class="empty" id="empty" hidden></p>
 
   <p class="note" id="footnote" hidden>
-    Prices are round-trip totals for your party, from <b>Kiwi.com</b> — comparable across
-    destinations. Cells tagged <b>EST</b> are estimates for ranking; click one to
-    cross-check it live on <b>Google Flights</b> (it then gets a solid border and a
-    <b>LIVE</b> tag), or use <b>Fill live</b> to re-price a whole grid. Some fares are
-    self-transfer combinations — cheap, but booked as separate tickets.
+    Round-trip totals for your party from <b>Kiwi.com</b>, comparable across destinations.
+    Some of the cheapest fares are self-transfer combinations, booked as separate tickets.
   </p>
 </main>
 

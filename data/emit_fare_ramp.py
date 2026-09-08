@@ -82,8 +82,15 @@ def delta_e(a, b, cvd=None):
     return 100 * math.dist(pa, pb)
 
 
+# Off-black and off-white, never pure #000/#fff: pure values flatten the depth the warm
+# neutrals carry, and #fcfcfb is already the system's raised-paper white, so the ramp inks
+# reuse a palette value instead of introducing an eighth near-white.
+INK_DARK = "#0b0b0b"
+INK_LIGHT = "#fcfcfb"
+
+
 def ink_for(fill):
-    return "#0b0b0b" if contrast(fill, "#0b0b0b") >= contrast(fill, "#ffffff") else "#ffffff"
+    return INK_DARK if contrast(fill, INK_DARK) >= contrast(fill, INK_LIGHT) else INK_LIGHT
 
 
 # --- the ramp -------------------------------------------------------------------------
@@ -139,5 +146,5 @@ def check(mode: str, ramp: list[str]) -> bool:
 
 if __name__ == "__main__":
     good = all(check(m, build(m)) for m in ("light", "dark"))
-    print("\nOK" if good else "\nFAIL — a hard check did not pass")
+    print("\nOK" if good else "\nFAIL: a hard check did not pass")
     sys.exit(0 if good else 1)

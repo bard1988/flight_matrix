@@ -6,9 +6,65 @@
    dark one. Every cell also prints its price, so colour is never the only signal.
    Ramp derived and validated in data/ (OKLCH lightness/chroma + CVD delta-E). */
 
+/* ---------------------------------------------------------------- type
+   Geist for the chrome, Geist Mono for every numeral. Both self-hosted, so the board
+   makes no third-party font request and works on an air-gapped network.
+
+   Two families is a deliberate departure from the board's earlier one-family rule. At
+   this grid's density the numbers are the content, not a label on it, and a true
+   monospace holds a four-character fare ("1.2k", "840") to an identical advance in
+   every column, which proportional tabular figures only approximate.
+
+   font-display: swap is safe here: matrix cells are a fixed 26px, so a late swap
+   repaints glyphs without reflowing anything. No layout shift. */
+@font-face {
+  font-family: 'Geist';
+  src: url('/static/fonts/Geist-Regular.woff2') format('woff2');
+  font-weight: 400; font-style: normal; font-display: swap;
+}
+@font-face {
+  font-family: 'Geist';
+  src: url('/static/fonts/Geist-Medium.woff2') format('woff2');
+  font-weight: 500; font-style: normal; font-display: swap;
+}
+@font-face {
+  font-family: 'Geist';
+  src: url('/static/fonts/Geist-SemiBold.woff2') format('woff2');
+  font-weight: 600; font-style: normal; font-display: swap;
+}
+@font-face {
+  font-family: 'Geist';
+  src: url('/static/fonts/Geist-Bold.woff2') format('woff2');
+  font-weight: 700; font-style: normal; font-display: swap;
+}
+@font-face {
+  font-family: 'Geist Mono';
+  src: url('/static/fonts/GeistMono-Regular.woff2') format('woff2');
+  font-weight: 400; font-style: normal; font-display: swap;
+}
+@font-face {
+  font-family: 'Geist Mono';
+  src: url('/static/fonts/GeistMono-Medium.woff2') format('woff2');
+  font-weight: 500; font-style: normal; font-display: swap;
+}
+@font-face {
+  font-family: 'Geist Mono';
+  src: url('/static/fonts/GeistMono-SemiBold.woff2') format('woff2');
+  font-weight: 600; font-style: normal; font-display: swap;
+}
+
 .viz-root,
 :root {
   color-scheme: light;
+
+  /* One sans, one mono. The fallbacks match Geist's metrics closely enough that a
+     failed font load degrades to the board's previous appearance. */
+  --sans: 'Geist', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --mono: 'Geist Mono', ui-monospace, 'SF Mono', 'Cascadia Mono', 'Segoe UI Mono', monospace;
+
+  /* Motion: one shared curve for the 4-7 "fluid CSS" band. */
+  --ease: cubic-bezier(0.16, 1, 0.3, 1);
+
   --surface-1: #fcfcfb;
   --page: #f9f9f7;
   --text-primary: #0b0b0b;
@@ -21,15 +77,17 @@
   --critical: #d03b3b;
   --warning: #fab219;
   --ink-on-fill: #0b0b0b;
-  --ink-flipped: #ffffff;
+  --ink-flipped: #fcfcfb;
   --cheapest: #f2b705;   /* reserved for the cheapest-cell marker, never used as a fill */
 
   /* Price ramp on the light surface: q0 cheapest = deep green (L 0.43), through a gold
      pivot, to q6 dearest = faded warm red (L 0.84). Lightness rises monotonically the
      whole way (min step dL 0.065), so under any colour-vision deficiency the scale still
-     separates every step by tone. --qiN is the measured-contrast ink for step N. */
-  --q0: #12603d;  --qi0: #ffffff;
-  --q1: #19773f;  --qi1: #ffffff;
+     separates every step by tone. --qiN is the measured-contrast ink for step N.
+     Inks are off-white (#fcfcfb), never pure white; re-derived by data/emit_fare_ramp.py,
+     which holds every label at WCAG AA or better (lowest here: 4.66 on q2). */
+  --q0: #12603d;  --qi0: #fcfcfb;
+  --q1: #19773f;  --qi1: #fcfcfb;
   --q2: #278d41;  --qi2: #0b0b0b;
   --q3: #bb7c24;  --qi3: #0b0b0b;
   --q4: #e0875c;  --qi4: #0b0b0b;
@@ -43,13 +101,13 @@
     color-scheme: dark;
     --surface-1: #1a1a19;
     --page: #0d0d0d;
-    --text-primary: #ffffff;
+    --text-primary: #fcfcfb;
     --text-secondary: #c3c2b7;
     --text-muted: #97938a;
     --gridline: #2c2c2a;
     --axis: #383835;
     --border: rgba(255, 255, 255, 0.1);
-    --ink-on-fill: #ffffff;
+    --ink-on-fill: #fcfcfb;
     --ink-flipped: #0b0b0b;
     --cheapest: #ffcf33;
     /* Same ramp mirrored for the dark surface: cheap = the brightest green (L 0.83),
@@ -58,9 +116,9 @@
     --q1: #5bcc80;  --qi1: #0b0b0b;
     --q2: #52b365;  --qi2: #0b0b0b;
     --q3: #b4771f;  --qi3: #0b0b0b;
-    --q4: #aa562a;  --qi4: #ffffff;
-    --q5: #953e2f;  --qi5: #ffffff;
-    --q6: #723232;  --qi6: #ffffff;
+    --q4: #aa562a;  --qi4: #fcfcfb;
+    --q5: #953e2f;  --qi5: #fcfcfb;
+    --q6: #723232;  --qi6: #fcfcfb;
     --hatch: rgba(255, 255, 255, 0.08);
   }
 }
@@ -69,13 +127,13 @@
   color-scheme: dark;
   --surface-1: #1a1a19;
   --page: #0d0d0d;
-  --text-primary: #ffffff;
+  --text-primary: #fcfcfb;
   --text-secondary: #c3c2b7;
   --text-muted: #97938a;
   --gridline: #2c2c2a;
   --axis: #383835;
   --border: rgba(255, 255, 255, 0.1);
-  --ink-on-fill: #ffffff;
+  --ink-on-fill: #fcfcfb;
   --ink-flipped: #0b0b0b;
   --cheapest: #ffcf33;
   /* Same ramp mirrored for the dark surface: cheap = the brightest green (L 0.83),
@@ -84,9 +142,9 @@
   --q1: #5bcc80;  --qi1: #0b0b0b;
   --q2: #52b365;  --qi2: #0b0b0b;
   --q3: #b4771f;  --qi3: #0b0b0b;
-  --q4: #aa562a;  --qi4: #ffffff;
-  --q5: #953e2f;  --qi5: #ffffff;
-  --q6: #723232;  --qi6: #ffffff;
+  --q4: #aa562a;  --qi4: #fcfcfb;
+  --q5: #953e2f;  --qi5: #fcfcfb;
+  --q6: #723232;  --qi6: #fcfcfb;
   --hatch: rgba(255, 255, 255, 0.08);
 }
 
@@ -109,10 +167,31 @@
 
 body {
   margin: 0;
-  min-height: 100vh;
+  /* dvh, not vh: the mobile browser's collapsing address bar makes 100vh taller than the
+     visible viewport, which pushes the board down and jumps on first scroll. */
+  min-height: 100dvh;
   background: var(--page);
   color: var(--text-primary);
-  font: 14px/1.45 system-ui, -apple-system, 'Segoe UI', sans-serif;
+  font: 14px/1.45 var(--sans);
+}
+
+/* Every numeral the user might compare, sort, or watch update runs in the mono. Scoped to
+   numeric surfaces only: the panel's definition list and the flight-leg lines carry words
+   ("Airline", "previously verified", "Nonstop") alongside their figures and stay in the
+   sans with tabular figures, because mono on prose is just costume.
+   The `tabular-nums` declarations elsewhere are kept even though Geist Mono is already
+   fixed-advance, so the fallback stack still aligns if the webfont fails. */
+.mono,
+table.matrix td,
+table.matrix th,
+.card-head .best,
+.card-head .cov,
+#tooltip b,
+#panel .big,
+.tableview th.num,
+.tableview td.num {
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
 }
 
 a { color: inherit; }
@@ -127,7 +206,7 @@ header.controls {
   border-bottom: 1px solid var(--border);
 }
 
-/* The primary row carries the whole task path — from, dates, travellers, Search —
+/* The primary row carries the whole task path (from, dates, travellers, Search)
    and nothing else. Every refinement lives in the Filters panel below. */
 .controls-primary {
   display: flex;
@@ -314,6 +393,14 @@ button {
 button:hover { border-color: var(--text-muted); }
 button[disabled] { opacity: 0.5; cursor: default; }
 
+/* Tactile press. Feedback only: it acknowledges the click on a board where most buttons
+   start work that takes a second or two to show up, so the press needs to land before the
+   result does. Transform and opacity only, so it composites without layout work. */
+button {
+  transition: border-color 0.18s var(--ease), transform 0.12s var(--ease);
+}
+button:active:not([disabled]) { transform: translateY(1px); }
+
 button:focus-visible {
   outline: none;
   border-color: var(--text-primary);
@@ -337,6 +424,11 @@ button.primary {
   align-items: flex-start;
   gap: 4px;
 }
+
+/* The live status is the lead line of the strip; every other span under it is a secondary
+   note at 11-12px, so the stack has a clear top even when four of them are showing. */
+#progress { color: var(--text-primary); font-weight: 500; }
+#progress:empty { display: none; }
 
 /* Keep the status/legend prose to a readable measure on wide screens. */
 .status > span { max-width: 74ch; }
@@ -364,11 +456,14 @@ button.primary {
 
 /* ---------------------------------------------------------------- legend */
 
+/* The rule and the swatch key sit on one line where there is room, and wrap to two when
+   there is not. Stacked unconditionally, they cost the board two lines of height on every
+   screen for something read once. */
 .legend {
   display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 3px;
+  flex-flow: row wrap;
+  align-items: baseline;
+  gap: 3px 20px;
   font-size: 12px;
   color: var(--text-secondary);
 }
@@ -448,20 +543,24 @@ main { padding: 14px 16px 60px; }
 
 .board {
   display: grid;
-  /* Cards no longer have to fit the whole grid, because the grid scrolls inside them.
-     So they can be narrow enough to get several boards side by side. */
+  /* A destination block never has to fit its whole grid, because the grid scrolls inside
+     it. So blocks can be narrow enough to get several side by side. */
   grid-template-columns: repeat(auto-fill, minmax(420px, 1fr));
-  gap: 10px;
+  /* No row gap: the hairline above each block does the separating, so consecutive rows
+     read as one continuous instrument rather than a tray of tiles. */
+  gap: 0 22px;
   align-items: start;
 }
 
+/* No card container. At this density, boxing every destination costs four borders and a
+   radius per block across twenty blocks and buys nothing the content does not already
+   do: the city name and its own matrix bound the group perfectly well. One hairline
+   above each block separates them, and the board reads as a single surface. */
 .card {
-  background: var(--surface-1);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 7px 9px 8px;
+  padding: 10px 0 14px;
+  border-top: 1px solid var(--gridline);
   /* A grid item defaults to min-width:auto, which lets the wide matrix inside force the
-     card past its track and the page into horizontal scroll. Let it shrink; the
+     block past its track and the page into horizontal scroll. Let it shrink; the
      .matrix-wrap then clips and scrolls as intended. */
   min-width: 0;
 }
@@ -492,18 +591,21 @@ main { padding: 14px 16px 60px; }
 .matrix-wrap::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
 .matrix-wrap::-webkit-scrollbar-corner { background: var(--page); }
 
+/* The pinned axes paint over the scrolling grid, so their background has to match what
+   now sits behind the matrix. With the card gone that is the page ground, not the old
+   raised-paper card fill. */
 table.matrix thead th {
   position: sticky;
   top: 0;
   z-index: 2;
-  background: var(--surface-1);
+  background: var(--page);
 }
 
 table.matrix th.row {
   position: sticky;
   left: 0;
   z-index: 1;
-  background: var(--surface-1);
+  background: var(--page);
 }
 
 table.matrix th.corner {
@@ -511,7 +613,7 @@ table.matrix th.corner {
   left: 0;
   top: 0;
   z-index: 3;
-  background: var(--surface-1);
+  background: var(--page);
 }
 
 .growing {
@@ -521,7 +623,13 @@ table.matrix th.corner {
   padding: 2px 0 0 2px;
 }
 
-.card.is-winner { border-color: var(--cheapest); box-shadow: 0 0 0 1px var(--cheapest); }
+/* The board-wide cheapest destination. Reserved yellow still marks it, now carried by the
+   block's own hairline thickened to read as 2px. The inset keeps it a rule rather than an
+   elevation, and avoids the 1px reflow a real 2px border would cause. */
+.card.is-winner {
+  border-top-color: var(--cheapest);
+  box-shadow: inset 0 1px 0 0 var(--cheapest);
+}
 
 .card-head {
   display: flex;
@@ -545,7 +653,10 @@ table.matrix th.corner {
   white-space: nowrap;
 }
 
-.card-head .tag {
+/* Provenance chip (EST / KIWI / LIVE). Used in the destination head, the table view and
+   the first-run key, so it is defined once, unscoped, instead of per context. */
+.tag {
+  display: inline-block;
   font-size: 11px;
   font-weight: 600;
   text-transform: uppercase;
@@ -557,14 +668,29 @@ table.matrix th.corner {
   vertical-align: 1px;
 }
 
-.card-head .tag.live { color: var(--good); border-color: var(--good); }
-.card-head .tag.real { color: var(--text-secondary); border-color: var(--text-muted); }
+.tag.live { color: var(--good); border-color: var(--good); }
+.tag.real { color: var(--text-secondary); border-color: var(--text-muted); }
+
 .card-head .toggle { border: none; background: none; color: var(--text-muted); padding: 0 4px; }
+
+/* Destinations land one at a time over the event stream, so a block fades up as it
+   arrives. State transition, not decoration: while the board is still filling, this is
+   what tells you which destination just appeared and that more are coming. The board is
+   rebuilt wholesale on every event, so app.js keeps a set of already-animated
+   destinations and only adds .is-new on a destination's first appearance. */
+@keyframes card-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: none; }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .card.is-new { animation: card-in 0.32s var(--ease) both; }
+}
 
 /* Pulse the cheapest cell after jumping to it, so the eye lands on the right square. */
 @keyframes locate-flash {
-  0%, 100% { box-shadow: 0 0 0 1px var(--surface-1), 0 0 0 4px var(--cheapest); }
-  50%      { box-shadow: 0 0 0 1px var(--surface-1), 0 0 0 9px var(--cheapest); }
+  0%, 100% { box-shadow: 0 0 0 1px var(--page), 0 0 0 4px var(--cheapest); }
+  50%      { box-shadow: 0 0 0 1px var(--page), 0 0 0 9px var(--cheapest); }
 }
 
 table.matrix td.flash { animation: locate-flash 0.4s ease-in-out 4; }
@@ -624,7 +750,7 @@ table.matrix td {
 td.void { background: none; }
 
 td.nodata {
-  background-color: var(--surface-1);
+  background-color: var(--page);
   background-image: repeating-linear-gradient(
     45deg, transparent, transparent 3px, var(--hatch) 3px, var(--hatch) 5px);
   border-color: var(--border);
@@ -666,12 +792,12 @@ td.week-diag { border-left-color: var(--axis); border-left-style: dotted; }
    the marker can never be mistaken for a price level. The board-wide cheapest gets a
    thicker ring than each destination's own cheapest. */
 td.best-here {
-  box-shadow: 0 0 0 1px var(--surface-1), 0 0 0 3px var(--cheapest);
+  box-shadow: 0 0 0 1px var(--page), 0 0 0 3px var(--cheapest);
   font-weight: 600;
 }
 
 td.best-board {
-  box-shadow: 0 0 0 1px var(--surface-1), 0 0 0 4px var(--cheapest),
+  box-shadow: 0 0 0 1px var(--page), 0 0 0 4px var(--cheapest),
               0 0 0 5px var(--text-primary);
   font-weight: 700;
 }
@@ -768,10 +894,10 @@ table.matrix td.cross-at {
 }
 
 /* Dim the board behind the open side panel so it reads as the focus, not as a
-   half-covered page. Non-blocking (box-shadow) — clicking another cell still works. */
+   half-covered page. Non-blocking (box-shadow), so clicking another cell still works. */
 #panel.open { transform: none; box-shadow: 0 0 0 100vmax rgba(0, 0, 0, 0.22); }
 
-/* Booking links are the panel's primary action — make them real tap targets. */
+/* Booking links are the panel's primary action, so make them real tap targets. */
 #panelbody a {
   display: inline-block;
   padding: 9px 14px;
@@ -821,10 +947,67 @@ table.matrix td.cross-at {
   color: var(--text-muted);
   font-size: 12px;
   line-height: 1.5;
-  max-width: 72ch;   /* readable measure — the footnote is prose, not a full-bleed strip */
+  max-width: 72ch;   /* readable measure, the footnote is prose, not a full-bleed strip */
   border-top: 1px solid var(--border);
   margin-top: 14px;
   padding-top: 10px;
+}
+
+/* ---------------------------------------------------------------- first run */
+
+/* Shown until the first search, then hidden for good (app.js). It carries the two things a
+   newcomer cannot infer by looking at the grid, and that both cost money to misread:
+   colour is ranked per destination, and EST and LIVE are different kinds of number. */
+.firstrun {
+  max-width: 74ch;
+  padding: 26px 0 10px;
+}
+
+/* Controlled, not a shout. Hierarchy here comes from weight and the hairlines below, not
+   from scale; the board is the loud thing on this page. */
+.firstrun h1 {
+  margin: 0 0 8px;
+  font-size: 26px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  line-height: 1.15;
+}
+
+.firstrun-lede {
+  margin: 0 0 22px;
+  max-width: 62ch;
+  font-size: 15px;
+  line-height: 1.5;
+  color: var(--text-secondary);
+}
+
+.firstrun-key { margin: 0; }
+
+/* One hairline above each entry: the same separator the board itself uses, so the
+   explanation is built the same way as the thing it explains. */
+.firstrun-key > div {
+  display: grid;
+  grid-template-columns: minmax(0, 15rem) minmax(0, 1fr);
+  gap: 2px 24px;
+  padding: 11px 0;
+  border-top: 1px solid var(--gridline);
+}
+
+.firstrun-key dt { font-size: 13px; font-weight: 600; }
+
+.firstrun-key dd {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+
+@media (max-width: 720px) {
+  .firstrun { padding: 18px 0 6px; }
+  .firstrun h1 { font-size: 22px; }
+  .firstrun-lede { margin-bottom: 16px; font-size: 14px; }
+  /* Single column: 15rem of label beside prose does not fit a phone. */
+  .firstrun-key > div { grid-template-columns: 1fr; gap: 4px; }
 }
 
 /* ---------------------------------------------------------------- table view */
@@ -862,14 +1045,8 @@ body.show-table .tableview { display: block; }
 .tableview th.num, .tableview td.num { text-align: right; }
 .tableview tbody tr:nth-child(even) td { background: color-mix(in oklab, var(--text-primary) 3.5%, transparent); }
 .tableview tbody tr:hover td { background: color-mix(in oklab, var(--text-primary) 9%, transparent); }
-.tableview td .tag {
-  font-size: 11px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.03em;
-  color: var(--text-muted);
-}
-.tableview td .tag.live { color: var(--good); }
+/* Inside a dense table row the chip's border reads as clutter; the text alone is enough. */
+.tableview td .tag { border: 0; padding: 0; }
 
 .empty { color: var(--text-muted); padding: 40px 0; text-align: center; }
 
@@ -957,10 +1134,11 @@ body.show-table .tableview { display: block; }
     padding: 10px max(10px, env(safe-area-inset-right)) max(48px, env(safe-area-inset-bottom))
              max(10px, env(safe-area-inset-left));
   }
-  .board { grid-template-columns: 1fr; gap: 8px; }
-  .card { padding: 8px; }
+  /* One destination per row, still separated by its own hairline rather than a gap. */
+  .board { grid-template-columns: 1fr; gap: 0; }
+  .card { padding: 9px 0 12px; }
 
-  /* The grid is no longer its own vertical scroll box — it grows to fit and the
+  /* The grid is no longer its own vertical scroll box: it grows to fit and the
      PAGE scrolls. It still scrolls sideways for the departure-date axis, and a
      vertical swipe now passes straight through to the page. */
   .matrix-wrap {
@@ -976,7 +1154,7 @@ body.show-table .tableview { display: block; }
   table.matrix td { width: 32px; height: 22px; font-size: 10px; line-height: 20px; }
 
   /* Side panel becomes a full-screen sheet; touch has no hover so the tooltip is dead
-     weight — the tap-to-open panel carries the detail. */
+     weight, because the tap-to-open panel carries the detail. */
   #panel { width: 100%; border-left: none; }
   #panel.open { box-shadow: none; }        /* full-screen sheet needs no scrim */
   #panelbody a { display: block; text-align: center; margin-top: 8px; }
@@ -1005,7 +1183,7 @@ body.show-table .tableview { display: block; }
 }
 
 /* Landscape phone: the wrapping control bar is tall relative to a short viewport, so
-   don't pin it — let it scroll away like it does on portrait mobile. */
+   don't pin it, let it scroll away like it does on portrait mobile. */
 @media (max-height: 480px) {
   header.controls { position: static; }
 }
