@@ -9,10 +9,10 @@ Things worth doing, not yet scheduled.
 | # | Feature | Size | Status |
 |---|---|---|---|
 | 1 | **Filter by airline** — bundled airline-name DB, refreshed periodically (and/or from what searches return) | M | todo |
-| 9 | **Filter by region** — collapsible continent → subregion → country tree | M–L | **backend done** (2026-09-07); tree UI todo |
+| 9 | **Filter by region** — collapsible continent → subregion → country tree | M–L | **done** (2026-09-08: tree UI in the Advanced panel) |
 | 11 | **Kids' ages** — per-child age (infant/child buckets), not just a count; changes the price. Must propagate to providers + `party_key` cache key + child-factor scaling | M–L | todo |
 | 6 | **Cabin class** selector (economy / premium / business) — thread through provider → API → UI | M | todo |
-| 4 | **One search model: period + trip length** — drop the "Dates mean" dropdown | M | **phase 1 done** (2026-09-07: dropdown gone, range default); anchors code removal + widen-as-extend = phase 2 |
+| 4 | **One search model: period + trip length** — drop the "Dates mean" dropdown | M | **done** (2026-09-07/08: dropdown gone, range default; anchors plumbing removed + widen reworked for the period model by the redesign pass) |
 | 7 | **Mobile: more compact** | M | todo |
 | 7.1 | — passengers shown in the bar, not behind Options | S | todo |
 | 7.2 | — denser matrices on small screens | S | todo |
