@@ -133,6 +133,77 @@ def build(mode: str) -> list[str]:
     return out
 
 
+# --- the diverging alternative -----------------------------------------------------------
+#
+# The sequential ramp above is dullest at its ends, because sRGB caps chroma hardest at
+# extreme lightness: measured, its cheapest step has the LOWEST chroma of all seven (0.086
+# against 0.142 in the middle). So the most obviously green cell is a mid-priced one, not
+# the cheapest, which is the opposite of what the board is for.
+#
+# This ramp puts vivid green at cheapest and vivid red at dearest, with the mid-price steps
+# receding toward the canvas (pale on the light surface, dark on the near-black one).
+#
+# The cost is real and is why the sequential version existed. Lightness is no longer
+# monotonic, so it cannot be checked the same way. A NAIVE symmetric diverging ramp is
+# disqualifying: with both ends at equal lightness they are identical in greyscale, and
+# cheapest-vs-dearest separation under deuteranopia collapses to 5.1 dE, meaning a
+# red-green colour-blind user cannot tell the best date from the worst. Measured.
+#
+# So the arms are deliberately ASYMMETRIC: the dear end sits at a different lightness from
+# the cheap end, which restores greyscale ranking and lifts end separation back to ~20 dE.
+# Still below the sequential ramp's 39.7, and that is the trade being made knowingly. It is
+# affordable only because colour was never the sole signal here: every cell prints its
+# price, the cheapest carries a reserved-yellow marker, and destinations are ordered
+# cheapest-first.
+DIV_HUE = [155, 152, 148, 85, 40, 28, 25]
+DIV_CHR = [0.17, 0.14, 0.10, 0.025, 0.10, 0.14, 0.18]
+DIV_L = {
+    # light: deep green -> cream middle -> clear red. Cream recedes into the warm canvas.
+    "light": [0.420, 0.545, 0.670, 0.880, 0.730, 0.665, 0.600],
+    # dark: bright green -> near-black middle -> bright red. The middle recedes again, this
+    # time by going dark, so the same "extremes pop, middle steps back" logic holds.
+    "dark": [0.740, 0.593, 0.447, 0.300, 0.373, 0.447, 0.520],
+}
+
+# Floors for the diverging ramp. Monotonic lightness is not one of them by design; the
+# ends-apart checks stand in for it.
+DIV_MIN_ENDS_DL = 0.12       # cheapest vs dearest must still rank in greyscale
+DIV_MIN_ENDS_DE_CVD = 15.0   # ... and must stay far apart under deuteranopia
+
+
+def build_diverging(mode: str) -> list[str]:
+    out = []
+    for Lv, Hv, Cv in zip(DIV_L[mode], DIV_HUE, DIV_CHR):
+        cap = max_chroma(Lv, Hv * RAD) * 0.92
+        out.append(to_hex(Lv, min(Cv, cap), Hv * RAD))
+    return out
+
+
+def check_diverging(mode: str, ramp: list[str]) -> bool:
+    inks = [ink_for(c) for c in ramp]
+    Ls = [hex_to_oklch(c)[0] for c in ramp]
+    labels = [contrast(c, k) for c, k in zip(ramp, inks)]
+    ends_dl = abs(Ls[0] - Ls[6])
+    ends_de = delta_e(ramp[0], ramp[6], "deutan")
+    worst_de = worst_adjacent_de(ramp)
+    ok = (min(labels) >= 4.5 and worst_de >= MIN_ADJACENT_DE
+          and ends_dl >= DIV_MIN_ENDS_DL and ends_de >= DIV_MIN_ENDS_DE_CVD)
+
+    print(f"\n=== {mode} (diverging) ===")
+    print("  fills:", ",".join(ramp))
+    print("  inks :", ",".join(inks))
+    print("  L    :", [round(x, 3) for x in Ls])
+    print(f"  label contrast: {[round(x, 2) for x in labels]}  (AA floor 4.5)")
+    print(f"  worst adjacent dE (any vision): {worst_de:.1f}  (floor {MIN_ADJACENT_DE})")
+    print(f"  cheapest vs dearest |dL|: {ends_dl:.3f}  (floor {DIV_MIN_ENDS_DL}) "
+          f"<- greyscale still ranks them")
+    print(f"  cheapest vs dearest dE deutan: {ends_de:.1f}  (floor {DIV_MIN_ENDS_DE_CVD})")
+    print("  CSS:")
+    for i, (f, k) in enumerate(zip(ramp, inks)):
+        print(f"    --q{i}: {f};  --qi{i}: {k};")
+    return ok
+
+
 # Floor for the weakest adjacent pair under ANY simulated vision (normal, protan, deutan).
 # Set to what the previous ramp actually achieved, so the gate means "never ship worse
 # separation than we already had". This check used to only PRINT the delta-E table while
@@ -185,6 +256,8 @@ def check(mode: str, ramp: list[str]) -> bool:
 
 
 if __name__ == "__main__":
-    good = all(check(m, build(m)) for m in ("light", "dark"))
-    print("\nOK" if good else "\nFAIL: a hard check did not pass")
+    seq = [check(m, build(m)) for m in ("light", "dark")]
+    div = [check_diverging(m, build_diverging(m)) for m in ("light", "dark")]
+    good = all(seq) and all(div)
+    print("\nOK (both ramps)" if good else "\nFAIL: a hard check did not pass")
     sys.exit(0 if good else 1)

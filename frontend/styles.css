@@ -141,21 +141,30 @@
   --ink-flipped: #fcfcfb;
   --cheapest: #f2b705;   /* reserved for the cheapest-cell marker, never used as a fill */
 
-  /* Price ramp on the light surface: q0 cheapest = deep green (L 0.40), through a gold
-     pivot at hue 82, to q6 dearest = coral-red (L 0.79). Lightness rises monotonically the
-     whole way (min step dL 0.064), so under any colour-vision deficiency the scale still
-     separates every step by tone. --qiN is the measured-contrast ink for step N.
-     Inks are off-white (#fcfcfb), never pure white; re-derived by data/emit_fare_ramp.py,
-     which holds every label at WCAG AA or better (lowest here: 4.82 on q2). The dearest
-     step is a coral-red, not the old pale pink: see that script for why a truer red costs
-     adjacent-step separation under colour-vision deficiency. */
-  --q0: #0f5535;  --qi0: #fcfcfb;
-  --q1: #156b38;  --qi1: #fcfcfb;
-  --q2: #1b8138;  --qi2: #fcfcfb;
-  --q3: #a0771d;  --qi3: #0b0b0b;
-  --q4: #d0784d;  --qi4: #0b0b0b;
-  --q5: #f97c65;  --qi5: #0b0b0b;
-  --q6: #fa9d9a;  --qi6: #0b0b0b;
+  /* DIVERGING price ramp (default): q0 cheapest = deep green, q3 mid = a cream that
+     recedes into the canvas, q6 dearest = clear red. Derived and gated by
+     data/emit_fare_ramp.py; --qiN is the measured-contrast ink for step N.
+
+     This replaced a sequential green-to-red ramp because sRGB caps chroma hardest at
+     extreme lightness, so that ramp was DULLEST at its ends: its cheapest step measured
+     chroma 0.086 against 0.142 in the middle, which made a MID-priced cell the most
+     obviously green thing on the board. Exactly backwards for a board about finding cheap.
+
+     Lightness is no longer monotonic, so it cannot carry the ranking alone. The two arms
+     are asymmetric on purpose: the dear end sits at a different lightness from the cheap
+     end, so greyscale still ranks them (|dL| 0.180) and deuteranopic cheap-vs-dear
+     separation stays at 20.0 dE. A naive SYMMETRIC diverging ramp measured 5.1 dE there,
+     i.e. a red-green colour-blind user could not tell the best date from the worst. That
+     is why this shape is lopsided, and why the script now gates on both numbers.
+
+     Set data-ramp="mono" on <html> to get the sequential ramp back. */
+  --q0: #115c35;  --qi0: #fcfcfb;
+  --q1: #1d8547;  --qi1: #fcfcfb;
+  --q2: #69a672;  --qi2: #0b0b0b;
+  --q3: #dfd7c5;  --qi3: #0b0b0b;
+  --q4: #de9277;  --qi4: #0b0b0b;
+  --q5: #dc6e62;  --qi5: #0b0b0b;
+  --q6: #d74745;  --qi6: #0b0b0b;
   --hatch: rgba(11, 11, 11, 0.05);
 }
 
@@ -174,15 +183,17 @@
     --ink-on-fill: #fcfcfb;
     --ink-flipped: #0b0b0b;
     --cheapest: #ffcf33;
-    /* Same ramp mirrored for the dark surface: cheap = the brightest green (L 0.83),
-       dearest = a deep muted red (L 0.40). Lightness falls monotonically throughout. */
-    --q0: #68e4a3;  --qi0: #0b0b0b;
-    --q1: #5bcc80;  --qi1: #0b0b0b;
-    --q2: #52b365;  --qi2: #0b0b0b;
-    --q3: #a87d1f;  --qi3: #0b0b0b;
-    --q4: #aa562a;  --qi4: #fcfcfb;
-    --q5: #a62712;  --qi5: #fcfcfb;
-    --q6: #881220;  --qi6: #fcfcfb;
+    /* Diverging, same shape on the near-black surface: bright green at cheapest, bright
+       red at dearest, and the mid steps receding by going DARK instead of pale. Same
+       principle as light mode, mirrored: extremes pop, mid-price steps back toward the
+       canvas. Ends still 0.220 apart in lightness and 20.8 dE under deuteranopia. */
+    --q0: #31c97a;  --qi0: #0b0b0b;
+    --q1: #279552;  --qi1: #0b0b0b;
+    --q2: #266333;  --qi2: #fcfcfb;
+    --q3: #342d1f;  --qi3: #fcfcfb;
+    --q4: #6b2a11;  --qi4: #fcfcfb;
+    --q5: #922b24;  --qi5: #fcfcfb;
+    --q6: #ba2b2e;  --qi6: #fcfcfb;
     --hatch: rgba(255, 255, 255, 0.06);
   }
 }
@@ -201,8 +212,47 @@
   --ink-on-fill: #fcfcfb;
   --ink-flipped: #0b0b0b;
   --cheapest: #ffcf33;
-  /* Same ramp mirrored for the dark surface: cheap = the brightest green (L 0.83),
-     dearest = a deep muted red (L 0.40). Lightness falls monotonically throughout. */
+  /* Diverging dark, as above (manual [data-theme='dark'] override). */
+  --q0: #31c97a;  --qi0: #0b0b0b;
+  --q1: #279552;  --qi1: #0b0b0b;
+  --q2: #266333;  --qi2: #fcfcfb;
+  --q3: #342d1f;  --qi3: #fcfcfb;
+  --q4: #6b2a11;  --qi4: #fcfcfb;
+  --q5: #922b24;  --qi5: #fcfcfb;
+  --q6: #ba2b2e;  --qi6: #fcfcfb;
+  --hatch: rgba(255, 255, 255, 0.06);
+}
+
+/* ---- revert switch 3: the previous SEQUENTIAL ramp -------------------------------------
+   document.documentElement.dataset.ramp = 'mono'
+
+   Source order and specificity matter here, so do not reorder these three blocks. The
+   light override is (0,2,0), which outranks the plain dark :root at (0,1,0); the dark
+   override that follows it is also (0,2,0) and wins only by coming later. The
+   [data-theme][data-ramp] block is (0,3,0) and beats both. */
+:root[data-ramp='mono'] {
+  --q0: #0f5535;  --qi0: #fcfcfb;
+  --q1: #156b38;  --qi1: #fcfcfb;
+  --q2: #1b8138;  --qi2: #fcfcfb;
+  --q3: #a0771d;  --qi3: #0b0b0b;
+  --q4: #d0784d;  --qi4: #0b0b0b;
+  --q5: #f97c65;  --qi5: #0b0b0b;
+  --q6: #fa9d9a;  --qi6: #0b0b0b;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root[data-ramp='mono']:where(:not([data-theme='light'])) {
+    --q0: #68e4a3;  --qi0: #0b0b0b;
+    --q1: #5bcc80;  --qi1: #0b0b0b;
+    --q2: #52b365;  --qi2: #0b0b0b;
+    --q3: #a87d1f;  --qi3: #0b0b0b;
+    --q4: #aa562a;  --qi4: #fcfcfb;
+    --q5: #a62712;  --qi5: #fcfcfb;
+    --q6: #881220;  --qi6: #fcfcfb;
+  }
+}
+
+:root[data-theme='dark'][data-ramp='mono'] {
   --q0: #68e4a3;  --qi0: #0b0b0b;
   --q1: #5bcc80;  --qi1: #0b0b0b;
   --q2: #52b365;  --qi2: #0b0b0b;
@@ -210,7 +260,6 @@
   --q4: #aa562a;  --qi4: #fcfcfb;
   --q5: #a62712;  --qi5: #fcfcfb;
   --q6: #881220;  --qi6: #fcfcfb;
-  --hatch: rgba(255, 255, 255, 0.06);
 }
 
 * { box-sizing: border-box; }
