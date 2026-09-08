@@ -12,6 +12,21 @@
         ],
         "createdAt": "2026-09-07T18:26:51.433Z",
         "reason": "CSS-triangle idiom (border-top + transparent border-left) drawing the stop-count corner wedge and legend wedge; documented as the design system's signature geometry in DESIGN.md Shapes. Not a decorative side border."
+      },
+      {
+        "rule": "overused-font",
+        "value": "geist",
+        "createdAt": "2026-09-08T21:06:31.452Z",
+        "reason": "Two Family Rule (DESIGN.md Typography): Geist + Geist Mono, self-hosted, no third-party font request. Chosen as a neutral invisible workhorse for a quiet instrument, not a display voice."
+      },
+      {
+        "rule": "repeating-stripes-gradient",
+        "value": "*",
+        "files": [
+          "frontend/styles.css"
+        ],
+        "createdAt": "2026-09-08T21:07:31.330Z",
+        "reason": "The 45-degree hatch on td.nodata and its legend swatch is the load-bearing 'no cached data' cell encoding, per DESIGN.md named rules. Not surface decoration."
       }
     ]
   }

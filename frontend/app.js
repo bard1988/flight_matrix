@@ -625,45 +625,6 @@ function syncSelection(ordered) {
   }
 }
 
-/* One cell per departure date, coloured by the cheapest fare available that day: the
-   matrix flattened onto its departure axis. This is what makes a collapsed row useful
-   rather than merely short, because "which day should I leave" is most of what the grid
-   gets scanned for. Same ramp as the grid, so the two read as one system. */
-function departureStrip(dest, domain) {
-  const wrap = document.createElement('div');
-  wrap.className = 'strip';
-
-  const cheapestByDeparture = new Map();
-  for (const cell of dest.allowed || []) {
-    const v = cellValue(cell);
-    if (v == null) continue;
-    const cur = cheapestByDeparture.get(cell.depart);
-    if (cur == null || v < cur.v) cheapestByDeparture.set(cell.depart, { v, cell });
-  }
-
-  for (const depart of axesFor(dest).departs) {
-    const hit = cheapestByDeparture.get(depart);
-    const i = document.createElement('i');
-    if (!hit) {
-      i.className = 'strip-cell strip-none';
-      i.title = `${weekday(depart)} ${shortDate(depart)}: no price`;
-    } else {
-      const idx = rampIndex(hit.v, domain);
-      i.className = 'strip-cell' + (idx === null ? ' unscaled' : ` q${idx}`);
-      i.title = `${weekday(depart)} ${shortDate(depart)}: from ` +
-        `${fmtMoney(hit.v, state.meta.currency)} (${hit.cell.nights} nights)`;
-    }
-    if (isWeekend(depart)) i.classList.add('strip-weekend');
-    wrap.appendChild(i);
-  }
-
-  // No caption here on purpose. It used to print "cheapest by departure day" beside every
-  // collapsed row, which on a twenty-destination board is the same sentence twenty times.
-  // It is stated once in the legend instead, and every cell carries the full figure in its
-  // title.
-  return wrap;
-}
-
 /* One row in the ranked list: the destination's essence in a line — name, country, the
    cheapest fare and the ceiling, and the cheapest date pair. Clicking it loads that grid
    into the detail pane (and, on a phone, slides the pane in over the list). */
@@ -674,7 +635,6 @@ function listRow(dest, isSel) {
   b.className = 'lrow';
   b.dataset.dest = dest.destination;
   if (isSel) b.classList.add('is-sel');
-  if (state.globalBest && state.globalBest.dest === dest.destination) b.classList.add('is-winner');
   b.setAttribute('aria-current', isSel ? 'true' : 'false');
 
   const best = dest.shownBest ? cellValue(dest.shownBest) : null;
@@ -708,7 +668,6 @@ function renderCard(dest, domain) {
   const card = document.createElement('section');
   card.className = 'card';
   card.dataset.dest = dest.destination;
-  if (state.globalBest && state.globalBest.dest === dest.destination) card.classList.add('is-winner');
   if (!animatedDests.has(dest.destination)) {
     card.classList.add('is-new');
     animatedDests.add(dest.destination);
@@ -1403,11 +1362,9 @@ function rememberScroll(dest, wrap) {
   scrollOffsets.set(dest, { x: wrap.scrollLeft, y: wrap.scrollTop });
 }
 
-/* ---------------------------------------------------------------- bulk fill */
+/* ------------------------------------------------ apply a live-priced cell */
 
-const fillState = new Map(); // IATA -> {running, progress, total, source, id}
-
-/** Apply one live-priced cell into the board model. */
+/** Fold one Google-Flights-priced cell into the board model. */
 function applyCell(dest, msg) {
   const stored = state.destinations.get(dest.destination);
   if (!stored) return;
@@ -1426,67 +1383,6 @@ function applyCell(dest, msg) {
   cell.verified = true;
   if (msg.airline) cell.airline = msg.airline;
   if (msg.stops != null) cell.transfers = msg.stops;
-}
-
-function startFill(dest) {
-  const meta = state.meta;
-  const code = dest.destination;
-  if (fillState.get(code)?.running) return;
-
-  fetch('/api/fill', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      origin: meta.origin,
-      destination: code,
-      depart_date: meta.depart_dates[Math.floor(meta.depart_dates.length / 2)],
-      return_date: meta.return_dates[Math.floor(meta.return_dates.length / 2)],
-      adults: meta.adults,
-      children: meta.children,
-      currency: meta.currency,
-      nonstop_only: meta.nonstop_only,
-    }),
-  })
-    .then((r) => r.json())
-    .then((data) => {
-      const source = new EventSource(`/api/fill/${data.fill_id}/stream`);
-      fillState.set(code, { running: true, progress: 0, total: data.pending, source, id: data.fill_id });
-      render();
-
-      let sinceRender = 0;
-      source.onmessage = (event) => {
-        const msg = JSON.parse(event.data);
-        const st = fillState.get(code);
-        if (msg.type === 'fill_start') {
-          if (st) st.total = msg.total_cells;
-        } else if (msg.type === 'fill_cell') {
-          if (st) st.progress = msg.progress;
-          if (msg.ok) applyCell(dest, msg);
-          // Repaint periodically rather than per cell; a full grid is ~200 events.
-          if (++sinceRender >= 12) {
-            sinceRender = 0;
-            recomputeBest(code);
-            render();
-          }
-        } else if (msg.type === 'fill_done') {
-          $('progress').textContent = `${dest.city}: ${msg.note}`;
-        } else if (msg.type === 'error') {
-          $('errors').textContent = msg.message;
-        }
-      };
-
-      const finish = () => {
-        source.close();
-        fillState.set(code, { running: false, progress: 0, total: 0 });
-        recomputeBest(code);
-        render();
-      };
-      source.addEventListener('end', finish);
-      source.onerror = finish;
-    })
-    .catch((err) => {
-      $('errors').textContent = `Fill failed: ${err}`;
-    });
 }
 
 /* ------------------------------------------------- auto-upgrade Kiwi -> Google */
@@ -1679,16 +1575,6 @@ function fillOpenDestination(dest) {
     .catch(() => { openFillSource = null; openFillId = null; });
 }
 
-function stopFill(code) {
-  const st = fillState.get(code);
-  if (!st) return;
-  if (st.id) fetch(`/api/fill/${st.id}/cancel`, { method: 'POST' }).catch(() => {});
-  if (st.source) st.source.close();
-  fillState.set(code, { running: false, progress: 0, total: 0 });
-  recomputeBest(code);
-  render();
-}
-
 function recomputeBest(code) {
   const stored = state.destinations.get(code);
   if (!stored || !stored.cells.length) return;
@@ -1727,7 +1613,11 @@ function startSearch() {
   $('tabletoggle').setAttribute('aria-pressed', 'false');
   $('tableview').replaceChildren();
   $('errors').textContent = '';
-  $('empty').hidden = true;
+  // Until the first destination lands the board area would be blank; hold a placeholder
+  // there so the wait reads as work in progress, not a broken page.
+  $('empty').hidden = false;
+  $('empty').classList.add('is-searching');
+  $('empty').textContent = 'Finding cheap destinations…';
   $('boardtools').hidden = true;   // no results yet
   // Orientation is a first-run thing; once you've searched, you know. The date hint is
   // part of that same orientation (the field labels and the first-run lede already say
@@ -1843,6 +1733,8 @@ function consume(searchId) {
       state.destinations.set(msg.destination, msg);
       seen += 1;
       $('progress').textContent = `${seen} of ${expected} destinations…`;
+      $('empty').hidden = true;
+      $('empty').classList.remove('is-searching');
       render();
     } else if (msg.type === 'destination_empty') {
       seen += 1;
@@ -1867,13 +1759,9 @@ function consume(searchId) {
       $('errors').textContent = msg.message;
     } else if (msg.type === 'done') {
       $('growing').hidden = true;
+      $('empty').classList.remove('is-searching');
       if (msg.destinations) {
-        const cov = [...state.destinations.values()].map(
-          (d) => (100 * d.coverage.populated) / d.coverage.valid
-        );
-        const mean = cov.reduce((a, b) => a + b, 0) / (cov.length || 1);
-        $('progress').textContent =
-          `${msg.destinations} destinations, cheapest first`;
+        $('progress').textContent = `${msg.destinations} destinations, cheapest first`;
       } else {
         $('progress').textContent = '';
         $('empty').hidden = false;
@@ -2389,6 +2277,13 @@ syncReturnDate();
 if (urlBoard.size) {
   $('progress').textContent =
     'Your saved search is loaded. Press Search to price these dates.';
+}
+
+/* A shared link normally prefills and waits (a reload is not a request for fresh, expensive
+   prices). `&run=1` opts a link into running on load — the form the "share this exact
+   board, priced now" case wants. */
+if (urlBoard.size && new URLSearchParams(location.search).get('run') === '1') {
+  requestAnimationFrame(() => $('go').click());
 }
 
 /* Health only supplies defaults for fields the URL left unset. It is raced against a
