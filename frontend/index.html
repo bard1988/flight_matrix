@@ -121,6 +121,16 @@
   </div>
 
   <div class="controls-adv" id="advfilters">
+    <div class="adv-group region-group">
+      <span class="adv-group-label">
+        Regions
+        <button type="button" id="regionclear" class="region-clear" hidden>clear</button>
+      </span>
+      <div class="region-tree" id="regiontree" role="group" aria-label="Restrict destinations by region">
+        <span class="region-loading">loading…</span>
+      </div>
+    </div>
+
     <div class="adv-group">
       <span class="adv-group-label">Preferred days</span>
       <div class="adv-fields">

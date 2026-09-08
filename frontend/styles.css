@@ -534,6 +534,74 @@ body.opts-open .controls-adv {
 
 .controls-adv .check { padding-bottom: 0; }
 
+/* ---------------------------------------------------------------- region tree */
+
+.region-group { flex: 0 1 300px; }
+
+.region-clear {
+  border: none;
+  background: none;
+  color: var(--good);
+  font: inherit;
+  font-size: 11px;
+  text-transform: none;
+  letter-spacing: 0;
+  cursor: pointer;
+  padding: 0 0 0 8px;
+}
+
+.region-tree {
+  max-height: 224px;
+  overflow-y: auto;
+  border: 1px solid var(--axis);
+  border-radius: 6px;
+  padding: 4px 2px;
+  background: var(--surface-1);
+  font-size: 13px;
+  font-family: var(--sans);
+}
+
+.region-loading { color: var(--text-muted); padding: 6px 8px; display: block; }
+
+.rhead { display: flex; align-items: center; gap: 2px; }
+.rhead > label { flex: 1; font-weight: 600; }
+.rhead label,
+.rleaf {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 4px;
+  cursor: pointer;
+  border-radius: 4px;
+}
+.rleaf { padding-left: 22px; color: var(--text-secondary); font-weight: 400; }
+.rhead label:hover,
+.rleaf:hover { background: var(--page); }
+
+.rtoggle {
+  border: none;
+  background: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  width: 18px;
+  flex: 0 0 auto;
+  padding: 2px 0;
+  font-size: 11px;
+  line-height: 1;
+}
+
+.rchildren { padding-left: 14px; }
+
+.rcount {
+  margin-left: auto;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text-muted);
+  font-weight: 400;
+}
+
+.region-tree input[type='checkbox'] { flex: 0 0 auto; margin: 0; }
+
 /* Cells ruled out by a constraint stay visible but recede, so you can see what you
    excluded and what it would have cost. */
 table.matrix td.excluded { opacity: 0.22; }

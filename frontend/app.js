@@ -23,6 +23,7 @@ const state = {
   // rates rather than re-running the whole search.
   fx: null,                // { eur: 1, usd: 1.08, ... } in units per 1 EUR
   displayCurrency: null,   // what the dropdown shows; defaults to meta.currency
+  regions: new Set(),      // ISO country codes selected in the region tree (search filter)
 };
 
 // Rough offline fallback, only used if the FX fetch fails. Does not need to be exact.
@@ -481,6 +482,7 @@ function render() {
   syncExpandAll(ordered);
   renderHeadline(ordered);
   renderTable(ordered);
+  refreshRegionCounts();
   $('footnote').hidden = ordered.length === 0;
   $('legend').hidden = ordered.length === 0;
 }
@@ -1651,6 +1653,7 @@ function startSearch() {
     // Sent with the search so the destination budget is spent inside the filter, not on
     // the cheapest destinations anywhere which are then hidden.
     destination_filter: $('destfilter').value.trim(),
+    country_codes: [...state.regions],
     // In range mode the two dates bound a period and the nights box says what to look for
     // inside it, so the nights constraint drives the search instead of filtering it after.
     nights_min: $('nmin').value === '' ? null : Number($('nmin').value),
@@ -1824,10 +1827,12 @@ const SEARCH_INPUTS = [
 // whatever the dropdown shows.
 
 function searchSignature() {
-  return SEARCH_INPUTS.map((id) => {
+  const parts = SEARCH_INPUTS.map((id) => {
     const el = $(id);
     return el.type === 'checkbox' ? String(el.checked) : el.value;
-  }).join('|');
+  });
+  parts.push('r:' + [...state.regions].sort().join(','));
+  return parts.join('|');
 }
 
 /** Highlight Search when the form no longer matches the board on screen. */
@@ -1845,6 +1850,126 @@ for (const id of SEARCH_INPUTS.concat(['nmin', 'nmax'])) {
   const el = $(id);
   el.addEventListener('change', markSearchStale);
   el.addEventListener('input', markSearchStale);
+}
+
+/* ---------------------------------------------------------------- region tree */
+/* Collapsible continent -> subregion -> country. Checking a node checks everything
+   under it; the selected country codes become the search's `country_codes` filter,
+   spent inside the selection at discovery (composes with "Only destinations"). */
+
+function buildRegionTree() {
+  fetch('/api/regions')
+    .then((r) => r.json())
+    .then((data) => renderRegionTree(data.tree || []))
+    .catch(() => {
+      $('regiontree').innerHTML = '<span class="region-loading">regions unavailable</span>';
+    });
+}
+
+function renderRegionTree(tree) {
+  const root = $('regiontree');
+  root.replaceChildren();
+  for (const cont of tree) {
+    const contCodes = cont.subregions.flatMap((s) => s.countries.map((c) => c.code));
+    const subs = cont.subregions.map((sub) =>
+      regionBranch(sub.name, sub.countries.map((c) => c.code),
+        sub.countries.map((c) => regionLeaf(c.code, c.name))));
+    root.appendChild(regionBranch(cont.continent, contCodes, subs));
+  }
+  root.addEventListener('change', onRegionChange);
+  $('regionclear').addEventListener('click', () => {
+    state.regions.clear();
+    afterRegionChange();
+  });
+  refreshRegionCounts();
+}
+
+function regionBranch(label, codes, children) {
+  const wrap = document.createElement('div');
+  wrap.className = 'rnode';
+  const head = document.createElement('div');
+  head.className = 'rhead';
+  const toggle = document.createElement('button');
+  toggle.type = 'button';
+  toggle.className = 'rtoggle';
+  toggle.setAttribute('aria-expanded', 'false');
+  toggle.textContent = '›';
+  const lab = document.createElement('label');
+  const cb = document.createElement('input');
+  cb.type = 'checkbox';
+  cb.dataset.codes = codes.join(',');
+  lab.append(cb, ' ', label, spanCount());
+  head.append(toggle, lab);
+  const kids = document.createElement('div');
+  kids.className = 'rchildren';
+  kids.hidden = true;
+  kids.append(...children);
+  toggle.addEventListener('click', () => {
+    kids.hidden = !kids.hidden;
+    toggle.setAttribute('aria-expanded', String(!kids.hidden));
+    toggle.textContent = kids.hidden ? '›' : '˅';
+  });
+  wrap.append(head, kids);
+  return wrap;
+}
+
+function regionLeaf(code, name) {
+  const lab = document.createElement('label');
+  lab.className = 'rleaf';
+  const cb = document.createElement('input');
+  cb.type = 'checkbox';
+  cb.value = code;
+  cb.dataset.codes = code;
+  lab.append(cb, ' ', name, spanCount(code));
+  return lab;
+}
+
+function spanCount(code) {
+  const s = document.createElement('span');
+  s.className = 'rcount';
+  if (code) s.dataset.code = code;
+  return s;
+}
+
+function onRegionChange(e) {
+  const cb = e.target;
+  if (cb.type !== 'checkbox') return;
+  for (const c of (cb.dataset.codes || '').split(',').filter(Boolean)) {
+    cb.checked ? state.regions.add(c) : state.regions.delete(c);
+  }
+  afterRegionChange();
+}
+
+/** Re-sync every checkbox to `state.regions`, then the clear button, counts and stale mark. */
+function afterRegionChange() {
+  for (const cb of $('regiontree').querySelectorAll('input[type=checkbox]')) {
+    const codes = (cb.dataset.codes || '').split(',').filter(Boolean);
+    const on = codes.filter((c) => state.regions.has(c)).length;
+    cb.checked = on > 0 && on === codes.length;
+    cb.indeterminate = on > 0 && on < codes.length;
+  }
+  $('regionclear').hidden = state.regions.size === 0;
+  refreshRegionCounts();
+  markSearchStale();
+}
+
+/** Post-search: how many loaded destinations sit under each node. */
+function refreshRegionCounts() {
+  const tree = $('regiontree');
+  if (!tree || !tree.querySelector('.rnode')) return;
+  const byCode = {};
+  for (const d of state.destinations.values()) {
+    const c = (d.country || '').toUpperCase();
+    if (c) byCode[c] = (byCode[c] || 0) + 1;
+  }
+  const has = state.destinations.size > 0;
+  for (const s of tree.querySelectorAll('.rcount')) {
+    const codes = s.dataset.code
+      ? [s.dataset.code]
+      : (s.closest('.rhead').querySelector('input').dataset.codes || '').split(',').filter(Boolean);
+    const n = codes.reduce((a, c) => a + (byCode[c] || 0), 0);
+    s.textContent = has && n ? String(n) : '';
+  }
 }
 
 /* The two dates bound a PERIOD; Nights is the trip length to look for inside it.
@@ -1933,6 +2058,7 @@ $('depart').addEventListener('change', syncReturnDate);
 $('depart').addEventListener('input', syncReturnDate);
 
 loadFx();
+buildRegionTree();
 
 // Default period: ~3 weeks starting a month out, looking for a 5-9 night trip inside it.
 $('depart').value = isoToday(30);
