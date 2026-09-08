@@ -816,7 +816,7 @@ function renderCard(dest, domain) {
         // In range mode most blanks are simply trip lengths outside what was asked for,
         // not gaps in the data, so say which it is.
         const nights = Math.round((new Date(ret) - new Date(depart)) / 86400000);
-        const outsideAsk = meta.date_mode === 'range' && meta.nights_span
+        const outsideAsk = meta.nights_span
           && !meta.nights_span.includes(nights);
         td.className = outsideAsk ? 'notasked' : 'nodata';
         td.title = outsideAsk
@@ -1172,100 +1172,6 @@ async function verifyCell(dest, cell) {
     );
     render();
   }
-}
-
-/** Departure date x trip length, for range mode. */
-function renderNightsGrid(dest, domain, byKey, meta) {
-  const nights = meta.nights_span && meta.nights_span.length
-    ? meta.nights_span
-    : [...new Set(dest.cells.map((c) => c.nights))].sort((a, b) => a - b);
-
-  const table = document.createElement('table');
-  table.className = 'matrix';
-
-  const thead = document.createElement('thead');
-  const headRow = document.createElement('tr');
-  headRow.innerHTML = '<th class="corner" title="rows are departure dates, columns are trip lengths">depart ↓ nights →</th>';
-  nights.forEach((n, colIndex) => {
-    const th = document.createElement('th');
-    th.className = 'col';
-    th.scope = 'col';
-    th.dataset.c = String(colIndex);
-    th.innerHTML = `${n}<br>${n === 1 ? 'night' : 'nights'}`;
-    headRow.appendChild(th);
-  });
-  thead.appendChild(headRow);
-  table.appendChild(thead);
-
-  const tbody = document.createElement('tbody');
-  meta.depart_dates.forEach((depart, rowIndex) => {
-    // Only show a departure date that actually has a price for one of these lengths.
-    const row = nights.map((n) => {
-      const ret = addDays(depart, n);
-      return byKey.get(depart + '|' + ret) || null;
-    });
-    if (!row.some(Boolean)) return;
-
-    const tr = document.createElement('tr');
-    const th = document.createElement('th');
-    th.className = 'row' + (isWeekend(depart) ? ' weekend' : '');
-    th.scope = 'row';
-    th.dataset.r = String(rowIndex);
-    th.innerHTML = `${weekday(depart)} ${shortDate(depart)}`;
-    tr.appendChild(th);
-
-    row.forEach((cell, colIndex) => {
-      const td = document.createElement('td');
-      td.dataset.c = String(colIndex);
-      td.dataset.r = String(rowIndex);
-      if (!cell) {
-        td.className = 'nodata';
-        td.title = 'No price for this departure and trip length.';
-        tr.appendChild(td);
-        return;
-      }
-      const value = cellValue(cell);
-      const idx = rampIndex(value, domain);
-      td.className =
-        'priced ' + (idx === null ? 'unscaled' : `q${idx}`) +
-        (cellAllowed(cell) ? '' : ' excluded') +
-        (cell.verified ? ' verified' : '');
-
-      const isCardBest = dest.shownBest && cell.depart === dest.shownBest.depart && cell.ret === dest.shownBest.ret;
-      const isBoardBest = state.globalBest &&
-        state.globalBest.dest === dest.destination &&
-        state.globalBest.depart === cell.depart && state.globalBest.ret === cell.ret;
-      if (isBoardBest) td.classList.add('best-board');
-      else if (isCardBest) td.classList.add('best-here');
-
-      const wrap = document.createElement('span');
-      wrap.className = 'cellwrap';
-      wrap.textContent = fmtCompact(value);
-      if (cell.transfers != null && cell.transfers > 0) {
-        const wedge = document.createElement('span');
-        wedge.className = 'stopdot' + (cell.transfers > 1 ? ' many' : '');
-        wrap.appendChild(wedge);
-      }
-      td.appendChild(wrap);
-
-      td.addEventListener('mousemove', (e) => showTooltip(e, tooltipFor(dest, cell)));
-      td.addEventListener('mouseleave', hideTooltip);
-      wireCell(td, () => {
-        pinCross(table, rowIndex, colIndex);
-        verifyCell(dest, cell);
-      }, cellAria(dest, cell));
-      tr.appendChild(td);
-    });
-    tbody.appendChild(tr);
-  });
-  table.appendChild(tbody);
-
-  table.addEventListener('mouseover', (e) => {
-    const td = e.target.closest('td[data-c]');
-    if (td) highlightCross(table, Number(td.dataset.r), Number(td.dataset.c), false);
-  });
-  table.addEventListener('mouseleave', () => restorePinned(table));
-  return table;
 }
 
 function addDays(iso, n) {
@@ -1741,7 +1647,6 @@ function startSearch() {
     destination_filter: $('destfilter').value.trim(),
     // In range mode the two dates bound a period and the nights box says what to look for
     // inside it, so the nights constraint drives the search instead of filtering it after.
-    date_mode: 'range',
     nights_min: $('nmin').value === '' ? null : Number($('nmin').value),
     nights_max: $('nmax').value === '' ? null : Number($('nmax').value),
     depart_hour_from: $('dephfrom').value === '' ? null : Number($('dephfrom').value),
@@ -1944,7 +1849,6 @@ function syncDateMode() {
   $('retlabel').textContent = 'Travel until';
   $('datehint').textContent =
     'the two dates bound a period; Nights is the trip length to look for inside it';
-  document.body.classList.add('range-mode');
   if ($('nmin').value === '' && $('nmax').value === '') {
     $('nmin').value = '5';
     $('nmax').value = '9';

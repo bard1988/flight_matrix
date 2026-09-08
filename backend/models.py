@@ -13,11 +13,6 @@ def parse_date(value: str) -> date:
     return datetime.strptime(value[:10], ISO).date()
 
 
-def window(anchor: date, days: int) -> list[date]:
-    """The inclusive +-`days` window around `anchor`, oldest first."""
-    return [anchor + timedelta(days=offset) for offset in range(-days, days + 1)]
-
-
 def utcnow() -> datetime:
     return datetime.now(timezone.utc)
 
@@ -47,9 +42,7 @@ class SearchRequest:
     max_destinations: int = 20
     nonstop_only: bool = False
     max_price: float | None = None
-    # How far either side of each anchor date the grid reaches. Starts at +-7 and grows
-    # when the user scrolls past the edge of a matrix.
-    window_days: int = 7
+
     # Restrict which destinations are searched at all: matches IATA code, city or country.
     # Applied during discovery, so the destination budget is spent inside the filter rather
     # than on the cheapest destinations anywhere and then hidden.
@@ -61,10 +54,9 @@ class SearchRequest:
     country_codes: list[str] = field(default_factory=list)
 
     # The two date fields bound a PERIOD ("travel from" .. "travel until"); the trip is
-    # nights_min..nights_max long, somewhere inside it. `date_mode` is retained for one
-    # release for request back-compat; "anchors" is no longer produced by the UI and its
-    # code paths are slated for removal.
-    date_mode: str = "range"
+    # nights_min..nights_max long, somewhere inside it. There is no longer a date_mode:
+    # the old "anchors" mode (a +-window around each of two anchor dates) was retired when
+    # the UI stopped producing it, and its last remnants went with it.
     nights_min: int | None = None
     nights_max: int | None = None
 
@@ -106,9 +98,6 @@ class SearchRequest:
             or self.return_hours_range()
         )
 
-    @property
-    def is_range(self) -> bool:
-        return self.date_mode == "range"
 
     def nights_span(self) -> list[int]:
         """Trip lengths to search, shortest first. The two date fields bound a period, not
@@ -148,11 +137,6 @@ class SearchRequest:
         2-adult-3-children search and quote roughly two fifths of the true price."""
         return f"{self.adults}a{self.children}c"
 
-    def depart_window(self, days: int | None = None) -> list[date]:
-        return window(parse_date(self.depart_date), self.window_days if days is None else days)
-
-    def return_window(self, days: int | None = None) -> list[date]:
-        return window(parse_date(self.return_date), self.window_days if days is None else days)
 
     def scale(self, single_ticket_price: float, child_factor: float) -> float:
         """Cached prices are for one ticket with no child fare. Extrapolate a family total."""
@@ -327,7 +311,7 @@ class DestinationMatrix:
     ) -> dict[str, Any]:
         populated, valid = self.coverage(
             depart_dates, return_dates,
-            nights=request.nights_span() if request.is_range else None,
+            nights=request.nights_span(),
         )
         best = self.best(request, child_factor)
         return {

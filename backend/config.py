@@ -78,11 +78,11 @@ DEFAULT_ADULTS = 2
 DEFAULT_CHILDREN = 0
 DEFAULT_MAX_DESTINATIONS = 20
 
-# Flexibility window: +-7 days on both legs to start => 15 x 15 = 225 cells. Scrolling a
-# matrix past its edge grows the window by WINDOW_STEP, up to MAX_WINDOW_DAYS.
-WINDOW_DAYS = 7
-WINDOW_STEP = int(os.environ.get("FM_WINDOW_STEP", "7"))
-MAX_WINDOW_DAYS = int(os.environ.get("FM_MAX_WINDOW_DAYS", "28"))
+# There is no flexibility "window" any more. The two date fields bound the travel period
+# outright, so the axes come from that period plus the nights range (see
+# SearchRequest.range_axes). WINDOW_DAYS / WINDOW_STEP / MAX_WINDOW_DAYS were the old
+# anchor-plus-window model and are gone; the widen control now extends the period itself,
+# capped client-side.
 
 # Children are priced as `child_factor` of an adult ticket when scaling the cached
 # single-ticket price into a family estimate. 1.0 is correct for the low cost carriers

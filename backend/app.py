@@ -52,10 +52,8 @@ class SearchBody(BaseModel):
     max_destinations: int = Field(default=config.DEFAULT_MAX_DESTINATIONS, ge=1, le=60)
     nonstop_only: bool = False
     max_price: float | None = None
-    window_days: int = Field(default=config.WINDOW_DAYS, ge=1, le=config.MAX_WINDOW_DAYS)
     destination_filter: str = Field(default="", max_length=60)
     country_codes: list[str] = Field(default_factory=list, max_length=260)
-    date_mode: str = Field(default="range", pattern="^(anchors|range)$")
     nights_min: int | None = Field(default=None, ge=0, le=60)
     nights_max: int | None = Field(default=None, ge=0, le=60)
     # Time-of-day windows as local hours. Search parameters, not display filters.
@@ -80,10 +78,8 @@ class SearchBody(BaseModel):
             max_destinations=self.max_destinations,
             nonstop_only=self.nonstop_only,
             max_price=self.max_price,
-            window_days=self.window_days,
             destination_filter=self.destination_filter,
             country_codes=[c.strip().upper() for c in self.country_codes if c and c.strip()],
-            date_mode=self.date_mode,
             nights_min=self.nights_min,
             nights_max=self.nights_max,
             depart_hours=self._pair(self.depart_hour_from, self.depart_hour_to),
@@ -109,7 +105,6 @@ def health() -> dict[str, Any]:
         "ok": True,
         "token_configured": bool(config.TRAVELPAYOUTS_TOKEN) or os.environ.get("FM_DEMO") == "1",
         "demo": os.environ.get("FM_DEMO") == "1",
-        "window_days": config.WINDOW_DAYS,
         "child_factor": config.CHILD_FACTOR,
         "kiwi_proxy": kiwi_proxy_status(),
         "defaults": {

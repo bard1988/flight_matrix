@@ -637,24 +637,18 @@ class KiwiProvider:
         # counts from arrival. See _return_column.
         columns = [r for r in return_dates if r >= depart_dates[0]]
 
-        # In range mode only a narrow band of trip lengths is wanted, so for each return
-        # date ask only about the departures that can produce one.
+        # Only a narrow band of trip lengths is wanted, so for each return date ask only
+        # about the departures that can produce one. (This used to branch on
+        # request.is_range, with an else-arm that spanned everything up to
+        # KIWI_NIGHTS_CEILING for the retired anchors mode. There is only one mode now.)
         spans: dict[date, list[date]] = {}
-        if request.is_range:
-            nights = request.nights_span()
-            lo_n, hi_n = nights[0], nights[-1]
-            for r in columns:
-                window = [d for d in depart_dates if lo_n <= (r - d).days <= hi_n]
-                if window:
-                    spans[r] = window
-            columns = [r for r in columns if r in spans]
-        else:
-            for r in columns:
-                window = [d for d in depart_dates
-                          if 0 <= (r - d).days <= config.KIWI_NIGHTS_CEILING]
-                if window:
-                    spans[r] = window
-            columns = [r for r in columns if r in spans]
+        nights = request.nights_span()
+        lo_n, hi_n = nights[0], nights[-1]
+        for r in columns:
+            window = [d for d in depart_dates if lo_n <= (r - d).days <= hi_n]
+            if window:
+                spans[r] = window
+        columns = [r for r in columns if r in spans]
 
         # Only guards a runaway window; keeps the returns nearest the one actually asked for.
         if config.KIWI_MAX_COLUMNS and len(columns) > config.KIWI_MAX_COLUMNS:

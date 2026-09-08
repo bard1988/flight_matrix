@@ -61,9 +61,8 @@ def destination_matches(needle: str, code: str, city: str, country: str) -> bool
 
 
 def date_axes(request: SearchRequest) -> tuple[list[date], list[date]]:
-    if request.is_range:
-        return request.range_axes()
-    return request.depart_window(), request.return_window()
+    """The two date fields bound a period; the axes fall out of it and the nights range."""
+    return request.range_axes()
 
 
 def fill_one(
@@ -164,13 +163,11 @@ def _check_headline(request: SearchRequest, matrix: DestinationMatrix, provider:
 
 
 def _prune_to_nights(request: SearchRequest, matrix: DestinationMatrix) -> None:
-    """In range mode keep only the trip lengths that were actually asked for.
+    """Keep only the trip lengths that were actually asked for.
 
     Verified cells accumulate across searches and are overlaid by date, so without this a
     "3-4 nights" board picks up stray 9- and 14-night cells from earlier work.
     """
-    if not request.is_range:
-        return
     wanted = set(request.nights_span())
     for key in [k for k, cell in matrix.cells.items() if cell.nights not in wanted]:
         del matrix.cells[key]
@@ -261,11 +258,7 @@ def build(
             "currency": request.currency,
             "child_factor": config.CHILD_FACTOR,
             "nonstop_only": request.nonstop_only,
-            "window_days": request.window_days,
-            "window_step": config.WINDOW_STEP,
-            "max_window_days": config.MAX_WINDOW_DAYS,
-            "date_mode": request.date_mode,
-            "nights_span": request.nights_span() if request.is_range else None,
+            "nights_span": request.nights_span(),
         }
     )
 
