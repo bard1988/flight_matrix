@@ -62,6 +62,11 @@
           <input id="children" type="number" min="0" max="8" value="0" />
         </div>
       </div>
+      <!-- Promoted out of "Advanced > Flight times". It is a search input (it re-runs the
+           search, unlike Currency), and it is the only control that avoids the
+           self-transfer combinations the footnote warns about, which is poor placement for
+           a warning that material. Also: a stop count was never a "flight time". -->
+      <label class="check" title="Exclude connections, including the self-transfer combinations that are booked as separate tickets"><input type="checkbox" id="nonstop" /> Nonstop</label>
     </div>
 
     <!-- Run it, stop it, or refine it. Advanced sits here rather than with the display
@@ -129,7 +134,6 @@
             <select id="rethfrom"></select><select id="rethto"></select>
           </span>
         </div>
-        <label class="check"><input type="checkbox" id="nonstop" /> Nonstop only</label>
       </div>
     </div>
 

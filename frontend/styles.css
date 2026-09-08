@@ -309,7 +309,7 @@ header.controls {
   display: flex;
   flex-wrap: wrap;
   align-items: flex-end;
-  gap: 10px 30px;
+  gap: 10px 22px;
   padding: 11px 16px;
 }
 
@@ -400,14 +400,18 @@ header.controls {
   box-shadow: inset 0 -1px 0 0 var(--text-primary);
 }
 
-.field input[type='date'] { min-width: 138px; }
+.field input[type='date'] { min-width: 124px; }
 
-/* Field widths, keyed by what they hold. */
-.field-xs input,
-.field-xs select { width: 68px; min-width: 0; }
-.field-sm input { width: 84px; min-width: 0; }
-.field-date { min-width: 138px; }
-.field-nights { min-width: 132px; }
+/* Field widths, sized to what they actually hold. These were set when inputs were boxed,
+   and a box needs slack to not look cramped; an underline does not, so they were carrying
+   ~100px of dead width between them. That mattered once Nonstop and Expand joined the bar:
+   at 1600px the row wrapped to two lines, over the 80px header cap. Measured after: one
+   line down to 1280px. A single-digit Adults field does not need 68px. */
+.field-xs input { width: 50px; min-width: 0; }
+.field-xs select { width: 68px; min-width: 0; }   /* "ILS" plus the native arrow */
+.field-sm input { width: 62px; min-width: 0; }    /* a 3-letter airport code */
+.field-date { min-width: 124px; }
+.field-nights { min-width: 116px; }
 
 /* Adults + Children sit together as one "travellers" unit. */
 .field-group {
@@ -447,7 +451,7 @@ button.primary.stale {
 }
 
 .nights { display: flex; gap: 3px; }
-.nights input { width: 62px; min-width: 0; }
+.nights input { width: 52px; min-width: 0; }
 
 /* -------------------------------------------------- filters (progressive disclosure) */
 

@@ -615,7 +615,7 @@ function syncExpandAll(ordered) {
   btn.hidden = ordered.length === 0;
   if (!ordered.length) return;
   const allOpen = ordered.every((d) => isExpanded(d.destination));
-  btn.textContent = allOpen ? 'Collapse all' : 'Expand all';
+  btn.textContent = allOpen ? 'Collapse' : 'Expand';
   btn.title = allOpen
     ? 'Collapse every destination to a single row'
     : 'Show every destination’s full date grid';
