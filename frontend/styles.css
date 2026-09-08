@@ -450,10 +450,13 @@ button.primary.stale {
   color: #0b0b0b;
 }
 
-/* Sits with the date fields rather than the action buttons, and is sized to its short
-   label so it costs the bar as little width as possible. */
+/* Sits immediately after "Travel until", so it needs to land on the same baseline as the
+   inputs rather than centring against fields that carry a label above them. flex-end plus
+   a matching bottom edge is what makes it read as attached to the dates instead of
+   floating between groups. Sized to its short label to cost the bar minimal width. */
 .widen {
-  align-self: center;
+  align-self: flex-end;
+  margin-bottom: 1px;
   padding: 4px 8px;
   font-size: 12px;
   white-space: nowrap;
