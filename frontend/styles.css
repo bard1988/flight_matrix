@@ -150,8 +150,14 @@
   --gridline: #e1e0d9;
   --axis: #c3c2b7;
   --border: rgba(11, 11, 11, 0.1);
-  --good: #0ca30c;
-  --critical: #d03b3b;
+  /* Semantic text colours, per theme. These used to be single values shared by both, which
+     cannot work: the two canvases sit at opposite ends of lightness, so one green cannot
+     clear 4.5 against #f4f3ef AND #0d0d0d. Measured, the old --good (#0ca30c) came out at
+     3.02 on the light canvas, which is what made every "live" chip on a light board fail.
+     --warning stays single-valued because it is only ever a BACKGROUND carrying #0b0b0b
+     text, or a decorative dot that ships with words; it is never text itself. */
+  --good: #0a7d0a;      /* 4.79 on canvas, 5.18 on chrome */
+  --critical: #c0261f;  /* 5.35 worst case in light */
   --warning: #fab219;
   --ink-on-fill: #0b0b0b;
   --ink-flipped: #fcfcfb;
@@ -201,6 +207,9 @@
     --gridline: #2c2c2a;
     --axis: #383835;
     --border: rgba(255, 255, 255, 0.1);
+    /* Lighter on near-black: the light-theme values measure 3.6-4.1 here. */
+    --good: #0ca30c;      /* 5.19 on chrome, 5.79 on canvas */
+    --critical: #ff8078;  /* 7.14 worst case in dark */
     --ink-on-fill: #fcfcfb;
     --ink-flipped: #0b0b0b;
     --cheapest: #ffcf33;
@@ -223,6 +232,9 @@
   --gridline: #2c2c2a;
   --axis: #383835;
   --border: rgba(255, 255, 255, 0.1);
+  /* Lighter on near-black: the light-theme values measure 3.6-4.1 here. */
+  --good: #0ca30c;      /* 5.19 on chrome, 5.79 on canvas */
+  --critical: #ff8078;  /* 7.14 worst case in dark */
   --ink-on-fill: #fcfcfb;
   --ink-flipped: #0b0b0b;
   --cheapest: #ffcf33;
@@ -349,6 +361,32 @@ header.controls {
   border-radius: 0;
   padding: 4px 2px;
   min-width: 72px;
+}
+
+/* A select with a transparent background renders its native dropdown on the browser's
+   default LIGHT canvas, while the <option> text inherits our light-on-dark colour. In dark
+   mode that was off-white text on a near-white popup, i.e. invisible. `color-scheme: dark`
+   does not rescue it once background and color have been authored, because the popup then
+   honours the authored values.
+   The fix is an explicit opaque ground on both the control and its options, matching
+   whatever they sit on: indistinguishable from transparent when closed, correct when open.
+   Selects appear in two places, so both grounds are named. */
+.field select,
+.field select option {
+  background-color: var(--surface-1);
+  color: var(--text-primary);
+}
+
+.controls-adv .field select,
+.controls-adv .field select option { background-color: var(--page); }
+
+/* The browser's default placeholder grey is #757575 in both themes, i.e. theme-blind, and
+   it measured 4.37-4.49 on the light grounds and 3.78-4.22 on the dark ones: under AA
+   everywhere. --text-muted is theme-aware and clears it on every ground a field sits on.
+   opacity is pinned because Firefox dims placeholders by default on top of the colour. */
+.field input::placeholder {
+  color: var(--text-muted);
+  opacity: 1;
 }
 
 .field input:hover,
