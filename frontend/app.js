@@ -478,6 +478,7 @@ function render() {
   }
 
   state.lastOrdered = ordered;
+  syncExpandAll(ordered);
   renderHeadline(ordered);
   renderTable(ordered);
   $('footnote').hidden = ordered.length === 0;
@@ -528,7 +529,7 @@ function renderHeadline(ordered) {
       // render() is synchronous, so the rebuilt card is queryable immediately after.
       if (!isExpanded(dest.destination)) {
         expanded.add(dest.destination);
-        autoExpandDone = true;
+        userToggled = true;
         render();
       }
       const card = $('board').querySelector(`.card[data-dest="${dest.destination}"]`);
@@ -564,20 +565,66 @@ const animatedDests = new Set();
 /* Which destinations show their full grid. Survives the wholesale board rebuild that every
    stream event triggers, exactly like animatedDests and scrollOffsets. */
 const expanded = new Set();
-let autoExpandDone = false;
+let userToggled = false;
 
 function isExpanded(code) {
   return expanded.has(code);
 }
 
-/* Open the cheapest destination once, on the first render that has anything to show.
-   A board of nothing but collapsed lines hides the thing the product is for, and seeding
-   exactly once keeps it predictable: the winner changing later does not reshuffle what is
-   open, and the first manual toggle takes over for good. */
+/* How many destinations open by default.
+ *
+ * Three, not one and not all. The task has two phases: compare destinations, which needs
+ * ordered headline numbers rather than grids, then choose dates for a candidate or two,
+ * which needs the grid. Opening everything serves neither, because twenty grids cannot be
+ * compared, only scrolled past. Opening nothing hides the thing that makes this board
+ * different from a ranked price list, which is several date grids side by side.
+ *
+ * Three is the number of columns the board lays out at desktop widths
+ * (minmax(420px, 1fr)), so the default is exactly one row of real grids with strips below.
+ * A fixed count rather than one derived from the measured column count: deriving it would
+ * make the default reshuffle itself on every window resize. */
+const AUTO_EXPAND_COUNT = 3;
+
+/* Until the user touches a disclosure, the open set IS the cheapest AUTO_EXPAND_COUNT,
+ * recomputed on every render. The moment they toggle anything, this stops entirely and the
+ * set is theirs.
+ *
+ * Two simpler versions were tried and measured first, and both were wrong:
+ *   - Seed once on the first render. Destinations stream in one at a time, so that render
+ *     holds exactly ONE of them and slice(0, 3) could only ever open that one.
+ *   - Top up across renders and latch at three. That opens whichever three ARRIVED first,
+ *     which is not the cheapest three, because the ordering churns as prices land. It
+ *     measured 3 open with only 1 of them in the top row.
+ *
+ * Recomputing does mean grids open and close while the search streams. That is acceptable
+ * because the board is already reflowing hard during a search: cards are re-sorted by price
+ * on every event, so they jump position anyway. The payoff is that when the stream settles,
+ * the open grids are the right ones, with no stale choice to notice and undo. */
 function seedExpanded(ordered) {
-  if (autoExpandDone || !ordered.length) return;
-  expanded.add(ordered[0].destination);
-  autoExpandDone = true;
+  if (userToggled || !ordered.length) return;
+  expanded.clear();
+  for (const dest of ordered.slice(0, AUTO_EXPAND_COUNT)) expanded.add(dest.destination);
+}
+
+/* One control for the whole board, because doing this per destination is twenty clicks.
+   The label states what pressing it will DO rather than naming a mode, and it flips to
+   "Collapse all" only when everything is already open, so the common case (some closed)
+   always offers the expanding action. */
+function syncExpandAll(ordered) {
+  const btn = $('expandall');
+  btn.hidden = ordered.length === 0;
+  if (!ordered.length) return;
+  const allOpen = ordered.every((d) => isExpanded(d.destination));
+  btn.textContent = allOpen ? 'Collapse all' : 'Expand all';
+  btn.title = allOpen
+    ? 'Collapse every destination to a single row'
+    : 'Show every destination’s full date grid';
+  btn.onclick = () => {
+    userToggled = true;          // the user is driving now
+    if (allOpen) expanded.clear();
+    else for (const d of ordered) expanded.add(d.destination);
+    render();
+  };
 }
 
 /* One cell per departure date, coloured by the cheapest fare available that day: the
@@ -669,7 +716,7 @@ function renderCard(dest, domain) {
     else expanded.add(dest.destination);
     // Any manual toggle ends the one-time auto-expand, so the winner changing as prices
     // stream in cannot reopen something the user just closed.
-    autoExpandDone = true;
+    userToggled = true;
     render();
   };
   head.appendChild(toggle);
@@ -1635,6 +1682,7 @@ function startSearch() {
   $('errors').textContent = '';
   $('empty').hidden = true;
   $('headline').hidden = true;   // no winner until something comes back
+  $('expandall').hidden = true;  // nothing to expand yet either
   // Orientation is a first-run thing; once you've searched, you know. The date hint is
   // part of that same orientation (the field labels and the first-run lede already say
   // it), and it was costing a permanent line in the status strip above every board.
@@ -1646,7 +1694,7 @@ function startSearch() {
   scrollOffsets.clear();
   animatedDests.clear();        // a new board: let every destination animate in again
   expanded.clear();             // and let the new winner be the one that opens
-  autoExpandDone = false;
+  userToggled = false;
   state.searchSignature = searchSignature();
   // Deliberately NOT disabled: a long search used to leave the button dead while it also
   // looked amber/clickable, so changing a setting mid-search trapped you. Pressing Search
