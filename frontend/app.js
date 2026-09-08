@@ -15,7 +15,7 @@ const state = {
   source: null,
   searchId: null,
   globalBest: null,
-  filter: '',              // destination filter, applied to the already-loaded board
+  chipHidden: new Set(),   // country codes toggled OFF via the results chips (empty = all shown)
   // Day-of-week / trip-length constraints, applied as a view over loaded cells.
   constraints: { dep: new Set(), ret: new Set(), min: null, max: null },
   // Currency is a display concern once the board is loaded: the board is priced in
@@ -46,7 +46,7 @@ const REDUCE_MOTION = window.matchMedia('(prefers-reduced-motion: reduce)');
 // query key -> element id. Everything a fresh search needs to reproduce this board.
 const URL_FIELDS = {
   from: 'origin', depart: 'depart', ret: 'ret', adults: 'adults', children: 'children',
-  places: 'dests', currency: 'currency', only: 'destfilter',
+  places: 'dests', currency: 'currency',
   maxprice: 'maxprice', nmin: 'nmin', nmax: 'nmax',
   dephfrom: 'dephfrom', dephto: 'dephto', rethfrom: 'rethfrom', rethto: 'rethto',
 };
@@ -372,18 +372,9 @@ function buildDowPicker(hostId, key) {
 
 /* ------------------------------------------------------------------- render */
 
-/** Does this destination match the filter box? Matches city, IATA code or country. */
+/** Is this destination visible? Hidden only if its country chip is toggled off. */
 function matchesFilter(dest) {
-  const q = state.filter;
-  if (!q) return true;
-  // Codes match exactly, names by substring - mirrors the server. Substring-matching a
-  // 2-letter code against country names over-matches ("IT" is inside Lithuania).
-  const code = (dest.destination || '').toLowerCase();
-  const country = (dest.country || '').toLowerCase();
-  if ((q.length === 2 || q.length === 3) && (q === code || q === country)) return true;
-  return [dest.city, dest.country_name]
-    .filter(Boolean)
-    .some((field) => String(field).toLowerCase().includes(q));
+  return !state.chipHidden.has((dest.country || '').toUpperCase());
 }
 
 function render() {
@@ -453,10 +444,12 @@ function render() {
   }
 
   const total = state.destinations.size;
-  $('filtercount').hidden = !state.filter;
-  $('filtercount').textContent = state.filter
-    ? `showing ${ordered.length} of ${total}${ordered.length ? '' : ', nothing matches'}`
+  const filtered = state.chipHidden.size > 0;
+  $('filtercount').hidden = !filtered;
+  $('filtercount').textContent = filtered
+    ? `showing ${ordered.length} of ${total}`
     : '';
+  renderBoardChips();
 
   // A keyboard user navigating the grid loses focus when the board is rebuilt (every
   // streamed destination, every verify fold-back). Remember which cell had it and put it
@@ -483,6 +476,7 @@ function render() {
   renderHeadline(ordered);
   renderTable(ordered);
   refreshRegionCounts();
+  $('boardtools').hidden = state.destinations.size === 0;
   $('footnote').hidden = ordered.length === 0;
   $('legend').hidden = ordered.length === 0;
 }
@@ -1650,9 +1644,8 @@ function startSearch() {
     max_destinations: Number($('dests').value),
     nonstop_only: $('nonstop').checked,
     max_price: $('maxprice').value ? Number($('maxprice').value) : null,
-    // Sent with the search so the destination budget is spent inside the filter, not on
-    // the cheapest destinations anywhere which are then hidden.
-    destination_filter: $('destfilter').value.trim(),
+    // Search scope: the Destinations tree. Empty = everywhere. The budget is spent inside
+    // the selection at discovery, not on the cheapest destinations anywhere.
     country_codes: [...state.regions],
     // In range mode the two dates bound a period and the nights box says what to look for
     // inside it, so the nights constraint drives the search instead of filtering it after.
@@ -1866,21 +1859,30 @@ function buildRegionTree() {
     });
 }
 
+// For the tag summary: highest-level groups first, so "all of Southern Europe" reads as
+// one tag rather than ten country tags.
+const regionMeta = { groups: [], name: {} };  // groups: [{label, codes, rank}], name: code->name
+
 function renderRegionTree(tree) {
   const root = $('regiontree');
   root.replaceChildren();
+  regionMeta.groups = [];
+  regionMeta.name = {};
   for (const cont of tree) {
     const contCodes = cont.subregions.flatMap((s) => s.countries.map((c) => c.code));
-    const subs = cont.subregions.map((sub) =>
-      regionBranch(sub.name, sub.countries.map((c) => c.code),
-        sub.countries.map((c) => regionLeaf(c.code, c.name))));
+    regionMeta.groups.push({ label: cont.continent, codes: contCodes, rank: 0 });
+    const subs = cont.subregions.map((sub) => {
+      const codes = sub.countries.map((c) => c.code);
+      regionMeta.groups.push({ label: sub.name, codes, rank: 1 });
+      for (const c of sub.countries) regionMeta.name[c.code] = c.name;
+      return regionBranch(sub.name, codes, sub.countries.map((c) => regionLeaf(c.code, c.name)));
+    });
     root.appendChild(regionBranch(cont.continent, contCodes, subs));
   }
   root.addEventListener('change', onRegionChange);
-  $('regionclear').addEventListener('click', () => {
-    state.regions.clear();
-    afterRegionChange();
-  });
+  $('regionclear').addEventListener('click', () => { state.regions.clear(); afterRegionChange(); });
+  wireDestCombo();
+  afterRegionChange();
   refreshRegionCounts();
 }
 
@@ -1940,7 +1942,7 @@ function onRegionChange(e) {
   afterRegionChange();
 }
 
-/** Re-sync every checkbox to `state.regions`, then the clear button, counts and stale mark. */
+/** Re-sync every checkbox to `state.regions`, then tags, clear button, counts, stale mark. */
 function afterRegionChange() {
   for (const cb of $('regiontree').querySelectorAll('input[type=checkbox]')) {
     const codes = (cb.dataset.codes || '').split(',').filter(Boolean);
@@ -1949,8 +1951,90 @@ function afterRegionChange() {
     cb.indeterminate = on > 0 && on < codes.length;
   }
   $('regionclear').hidden = state.regions.size === 0;
+  renderDestTags();
   refreshRegionCounts();
   markSearchStale();
+}
+
+/* -------------------------------------------------- Destinations combobox (tags + popover) */
+
+function wireDestCombo() {
+  const control = $('destcontrol');
+  const input = $('regionsearch');
+  control.addEventListener('mousedown', (e) => {
+    if (e.target.closest('.dest-tag-x')) return;   // let the × handler run
+    if (e.target !== input) e.preventDefault();     // don't steal focus from a click on chrome
+    openDestPop();
+    input.focus();
+  });
+  input.addEventListener('focus', openDestPop);
+  input.addEventListener('input', (e) => { openDestPop(); filterRegionTree(e.target.value.trim().toLowerCase()); });
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') { closeDestPop(); input.blur(); }
+    // Backspace on an empty input removes the last tag.
+    if (e.key === 'Backspace' && input.value === '' && state.regions.size) {
+      const last = [...destTagList()].pop();
+      if (last) { for (const c of last.codes) state.regions.delete(c); afterRegionChange(); }
+    }
+  });
+  document.addEventListener('mousedown', (e) => {
+    if (!e.target.closest('#destcombo')) closeDestPop();
+  });
+}
+
+function openDestPop() {
+  $('destpop').hidden = false;
+  $('destcombo').classList.add('open');
+  $('regionsearch').setAttribute('aria-expanded', 'true');
+}
+function closeDestPop() {
+  $('destpop').hidden = true;
+  $('destcombo').classList.remove('open');
+  $('regionsearch').setAttribute('aria-expanded', 'false');
+  const input = $('regionsearch');
+  if (input.value) { input.value = ''; filterRegionTree(''); }
+}
+
+/** Collapse the selection to the fewest tags: a fully-selected continent or subregion
+    becomes one tag; leftover countries get their own. */
+function destTagList() {
+  const sel = state.regions;
+  if (!sel.size) return [];
+  const covered = new Set();
+  const tags = [];
+  for (const g of regionMeta.groups) {            // rank 0 (continents) come first
+    if (g.codes.length && g.codes.every((c) => sel.has(c)) && !g.codes.some((c) => covered.has(c))) {
+      tags.push({ label: g.label, codes: g.codes });
+      for (const c of g.codes) covered.add(c);
+    }
+  }
+  for (const c of sel) {
+    if (!covered.has(c)) tags.push({ label: regionMeta.name[c] || c, codes: [c] });
+  }
+  return tags;
+}
+
+function renderDestTags() {
+  const host = $('desttags');
+  const tags = destTagList();
+  host.replaceChildren(...tags.map((t) => {
+    const el = document.createElement('span');
+    el.className = 'dest-tag';
+    el.append(t.label);
+    const x = document.createElement('button');
+    x.type = 'button';
+    x.className = 'dest-tag-x';
+    x.setAttribute('aria-label', `Remove ${t.label}`);
+    x.textContent = '×';
+    x.addEventListener('click', () => {
+      for (const c of t.codes) state.regions.delete(c);
+      afterRegionChange();
+    });
+    el.append(x);
+    return el;
+  }));
+  $('destcombo').classList.toggle('has-tags', tags.length > 0);
+  $('regionsearch').placeholder = tags.length ? '' : 'Everywhere';
 }
 
 /** Post-search: how many loaded destinations sit under each node. */
@@ -2007,10 +2091,89 @@ $('clearconstraints').addEventListener('click', () => {
   if (state.meta) render();
 });
 
-$('destfilter').addEventListener('input', (e) => {
-  state.filter = e.target.value.trim().toLowerCase();
-  if (state.meta) render();
-});
+/* Typeahead over the Destinations tree: type a country / region / continent name and
+   the tree collapses to the matches, auto-expanding the branches that contain them.
+   Wired from wireDestCombo(); this is just the filter itself. */
+function filterRegionTree(q) {
+  const tree = $('regiontree');
+  for (const node of tree.querySelectorAll('.rnode')) {
+    const head = node.querySelector(':scope > .rhead');
+    const kids = node.querySelector(':scope > .rchildren');
+    const label = head.querySelector('label').textContent.toLowerCase();
+    const selfMatch = !q || label.includes(q);
+    const kidMatch = kids && [...kids.querySelectorAll('.rleaf, .rhead > label')]
+      .some((el) => el.textContent.toLowerCase().includes(q));
+    node.hidden = !(selfMatch || kidMatch);
+    if (kids) {
+      const open = !!q && kidMatch;
+      kids.hidden = q ? !open : true;
+      const tog = head.querySelector('.rtoggle');
+      if (tog) {
+        tog.setAttribute('aria-expanded', String(!kids.hidden));
+        tog.textContent = kids.hidden ? '›' : '˅';
+      }
+    }
+  }
+  for (const leaf of tree.querySelectorAll('.rleaf')) {
+    leaf.hidden = q ? !leaf.textContent.toLowerCase().includes(q) : false;
+  }
+}
+
+/* ------------------------------------------------- results filter: country chips */
+
+/** One chip per country on the board. Click a country to show/hide it. Click a country's
+    NAME with nothing else hidden isolates it (show only that one). "All" resets. */
+function renderBoardChips() {
+  const host = $('boardchips');
+  const counts = new Map();      // code -> { name, n }
+  for (const d of state.destinations.values()) {
+    const code = (d.country || '').toUpperCase();
+    if (!code) continue;
+    const e = counts.get(code) || { name: d.country_name || code, n: 0 };
+    e.n += 1;
+    counts.set(code, e);
+  }
+  if (counts.size < 2) { host.hidden = true; host.replaceChildren(); return; }
+
+  const allCodes = [...counts.keys()];
+  const chips = [];
+
+  // "All" — pressed when nothing is hidden. Click toggles show-all / show-none, so
+  // "All off" then one country = only that country.
+  const all = document.createElement('button');
+  all.type = 'button';
+  all.className = 'chip chip-all';
+  all.setAttribute('aria-pressed', String(state.chipHidden.size === 0));
+  all.textContent = 'All';
+  all.addEventListener('click', () => {
+    if (state.chipHidden.size === 0) allCodes.forEach((c) => state.chipHidden.add(c));
+    else state.chipHidden.clear();
+    render();
+  });
+  chips.push(all);
+
+  const rows = [...counts.entries()].sort((a, b) => b[1].n - a[1].n || a[1].name.localeCompare(b[1].name));
+  for (const [code, { name, n }] of rows) {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'chip';
+    b.setAttribute('aria-pressed', String(!state.chipHidden.has(code)));
+    b.dataset.code = code;
+    b.innerHTML = `${name} <span class="chip-n">${n}</span>`;
+    b.addEventListener('click', () => {
+      if (state.chipHidden.size === 0) {
+        // Nothing hidden yet: isolate this one.
+        allCodes.forEach((c) => { if (c !== code) state.chipHidden.add(c); });
+      } else {
+        state.chipHidden.has(code) ? state.chipHidden.delete(code) : state.chipHidden.add(code);
+      }
+      render();
+    });
+    chips.push(b);
+  }
+  host.replaceChildren(...chips);
+  host.hidden = false;
+}
 
 /* Currency: with a board loaded, just convert the displayed numbers, no re-search.
    With no board yet, it's simply the currency the next search will fetch in. */

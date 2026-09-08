@@ -26,6 +26,10 @@
 <body>
 
 <header class="controls">
+  <button id="themetoggle" class="theme-btn" type="button" aria-label="Switch between light and dark">
+    <svg class="i-sun" viewBox="0 0 24 24" aria-hidden="true" width="16" height="16"><circle cx="12" cy="12" r="4.5" fill="currentColor"/><g stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M19.1 4.9L17 7M7 17l-2.1 2.1"/></g></svg>
+    <svg class="i-moon" viewBox="0 0 24 24" aria-hidden="true" width="16" height="16"><path fill="currentColor" d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5Z"/></svg>
+  </button>
   <div class="controls-primary">
     <!-- The compact lockup: mark plus wordmark, no tagline. The full lockup cannot go in
          this row at any height the row allows, since its tagline caps come out at 24/346
@@ -52,6 +56,27 @@
       <div class="field field-sm">
         <label for="origin">From</label>
         <input id="origin" value="TLV" maxlength="3" autocapitalize="characters" />
+      </div>
+      <div class="field field-dest">
+        <label for="regionsearch">Destinations</label>
+        <div class="dest-combo" id="destcombo">
+          <div class="dest-control" id="destcontrol">
+            <span class="dest-tags" id="desttags"></span>
+            <input type="text" id="regionsearch" class="dest-input" autocomplete="off"
+                   placeholder="Everywhere" aria-label="Search countries, regions and continents"
+                   role="combobox" aria-expanded="false" aria-controls="regiontree" />
+            <span class="dest-caret" aria-hidden="true">▾</span>
+          </div>
+          <div class="dest-pop" id="destpop" hidden>
+            <div class="dest-pop-head">
+              <span>Search these places (or leave blank for everywhere)</span>
+              <button type="button" id="regionclear" class="region-clear" hidden>clear all</button>
+            </div>
+            <div class="region-tree" id="regiontree" role="tree" aria-label="Restrict the search to these places">
+              <span class="region-loading">loading…</span>
+            </div>
+          </div>
+        </div>
       </div>
       <div class="field field-date">
         <label for="depart" id="departlabel">Travel from</label>
@@ -95,42 +120,9 @@
       </button>
     </div>
 
-    <span class="spacer"></span>
-
-    <!-- Display, not filters. Every one of these changes how the board is RENDERED rather
-         than which fares it contains, which is why Currency and Per person moved out of
-         the Advanced panel: currency relabels a loaded board without re-searching (see
-         the note by the change handler in app.js) and Per person just divides by the
-         passenger count. Both were buried two levels down under "Advanced > Results". -->
-    <div class="bar-group bar-display">
-      <div class="field field-xs">
-        <label for="currency">Currency</label>
-        <select id="currency">
-          <option value="ils">ILS</option>
-          <option value="eur">EUR</option>
-          <option value="usd">USD</option>
-          <option value="gbp">GBP</option>
-        </select>
-      </div>
-      <label class="check" title="Divide every price by the number of travellers"><input type="checkbox" id="perperson" /> Per person</label>
-      <!-- Label and handler are set by syncExpandAll(); hidden until a board exists. -->
-      <button type="button" id="expandall" hidden>Expand all</button>
-      <button id="tabletoggle" title="Accessible table of every priced cell">Table view</button>
-      <button id="themetoggle" title="Toggle light and dark">Theme</button>
-    </div>
   </div>
 
   <div class="controls-adv" id="advfilters">
-    <div class="adv-group region-group">
-      <span class="adv-group-label">
-        Regions
-        <button type="button" id="regionclear" class="region-clear" hidden>clear</button>
-      </span>
-      <div class="region-tree" id="regiontree" role="group" aria-label="Restrict destinations by region">
-        <span class="region-loading">loading…</span>
-      </div>
-    </div>
-
     <div class="adv-group">
       <span class="adv-group-label">Preferred days</span>
       <div class="adv-fields">
@@ -173,11 +165,6 @@
         <div class="field field-sm">
           <label for="maxprice">Max total</label>
           <input id="maxprice" type="number" min="0" step="100" placeholder="any" />
-        </div>
-        <div class="field">
-          <label for="destfilter">Only destinations</label>
-          <input id="destfilter" type="search" placeholder="city, code or country" autocomplete="off"
-                 title="Set before Search to restrict the search itself (e.g. IT = Italy only); type after a search to narrow what is shown" />
         </div>
         <label class="check" title="After the board loads, re-price its cheapest cells live on Google Flights"><input type="checkbox" id="autoverify" checked /> Auto cross-check</label>
       </div>
@@ -236,9 +223,29 @@
     </p>
   </section>
 
-  <!-- The board's focal point. Twenty destination blocks are all visually equal, so the
-       page had nothing to look at first and the answer to "so where IS cheap" was left to
-       the reader. Filled by renderHeadline(); hidden whenever the board is empty. -->
+  <!-- How the board is displayed, not what it contains. Sits with the board because
+       that's where you're looking when you reach for these. Shown once a board exists. -->
+  <div class="board-tools" id="boardtools" hidden>
+    <label class="bt-currency">Currency
+      <select id="currency">
+        <option value="ils">ILS</option>
+        <option value="eur">EUR</option>
+        <option value="usd">USD</option>
+        <option value="gbp">GBP</option>
+      </select>
+    </label>
+    <label class="check"><input type="checkbox" id="perperson" /> Per person</label>
+    <span class="bt-spacer"></span>
+    <button type="button" id="expandall" hidden></button>
+    <button id="tabletoggle" title="Accessible table of every priced cell">Table view</button>
+  </div>
+
+  <!-- Results filter: one chip per country on the board, click to show/hide. Filled by
+       renderBoardChips() after a search; hidden when there is nothing to filter. -->
+  <div class="board-chips" id="boardchips" role="group" aria-label="Filter the board by country" hidden></div>
+
+  <!-- The board's focal point: the cheapest finds. Below the filter chips so it always
+       reflects what's actually shown. Filled by renderHeadline(); hidden when empty. -->
   <section class="headline" id="headline" hidden aria-label="Cheapest finds"></section>
 
   <div class="board" id="board"></div>

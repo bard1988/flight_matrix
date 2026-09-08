@@ -320,13 +320,47 @@ header.controls {
   gap: 8px 10px;
 }
 
-/* Display settings sit after the flexible spacer, where proximity cannot group anything,
-   so they get a hairline to mark them as a different KIND of control: these change how
-   the board is drawn, not which fares are in it. */
-.bar-display {
-  padding-left: 18px;
-  border-left: 1px solid var(--border);
+/* Theme toggle: a small sun/moon in the header's top-right corner, out of the control
+   flow entirely so it never competes with the search inputs for the row. */
+.theme-btn {
+  position: absolute;
+  top: 8px;
+  right: 10px;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: none;
+  color: var(--text-muted);
+  cursor: pointer;
 }
+.theme-btn:hover { color: var(--text-primary); background: var(--page); }
+.theme-btn .i-sun { display: none; }
+.theme-btn .i-moon { display: block; }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) .theme-btn .i-sun { display: block; }
+  :root:not([data-theme='light']) .theme-btn .i-moon { display: none; }
+}
+:root[data-theme='dark'] .theme-btn .i-sun { display: block; }
+:root[data-theme='dark'] .theme-btn .i-moon { display: none; }
+
+/* Board display controls: a quiet strip above the board, shown once results exist. */
+.board-tools {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin: 0 0 12px;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+.board-tools .bt-spacer { flex: 1 1 auto; }
+.board-tools select { font: inherit; margin-left: 4px; }
+.bt-currency { display: inline-flex; align-items: center; }
 
 /* Holds the inlined compact lockup, in the control row itself rather than a masthead of
    its own: a brand row tall enough for the tagline costs ~112px of every screen, and the
@@ -536,7 +570,96 @@ body.opts-open .controls-adv {
 
 /* ---------------------------------------------------------------- region tree */
 
-.region-group { flex: 0 1 300px; }
+/* Destinations: a multi-select combobox in the trip group. The control shows the current
+   selection as removable tags; clicking or focusing it drops the tree popover. */
+.field-dest { flex: 1 1 210px; min-width: 190px; }
+.dest-combo { position: relative; }
+
+.dest-pop-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 4px 6px 6px;
+  font-size: 11px;
+  color: var(--text-muted);
+  border-bottom: 1px solid var(--gridline);
+  margin-bottom: 4px;
+}
+
+.dest-control {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  min-height: 34px;
+  padding: 3px 26px 3px 6px;
+  background: var(--page);
+  border: 1px solid var(--axis);
+  border-radius: 6px;
+  cursor: text;
+}
+.dest-combo.open .dest-control { outline: 2px solid var(--text-primary); outline-offset: 1px; }
+
+.dest-tags { display: contents; }
+
+.dest-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  background: var(--text-primary);
+  color: var(--surface-1);
+  border-radius: 4px;
+  padding: 2px 4px 2px 7px;
+  white-space: nowrap;
+}
+.dest-tag-x {
+  border: none;
+  background: none;
+  color: inherit;
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0 2px;
+  opacity: 0.75;
+}
+.dest-tag-x:hover { opacity: 1; }
+
+.dest-input {
+  flex: 1 1 60px;
+  min-width: 60px;
+  border: none;
+  background: none;
+  font: inherit;
+  font-family: var(--sans);
+  color: var(--text-primary);
+  padding: 3px 2px;
+  outline: none;
+}
+
+.dest-caret {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--text-muted);
+  font-size: 10px;
+  pointer-events: none;
+}
+
+.dest-pop {
+  position: absolute;
+  z-index: 40;
+  left: 0;
+  right: 0;
+  top: calc(100% + 4px);
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.18);
+  padding: 4px;
+}
 
 .region-clear {
   border: none;
@@ -551,11 +674,9 @@ body.opts-open .controls-adv {
 }
 
 .region-tree {
-  max-height: 224px;
+  max-height: 260px;
   overflow-y: auto;
-  border: 1px solid var(--axis);
-  border-radius: 6px;
-  padding: 4px 2px;
+  padding: 2px;
   background: var(--surface-1);
   font-size: 13px;
   font-family: var(--sans);
@@ -812,6 +933,38 @@ main {
   padding: 14px 16px 60px;
   background: var(--canvas);
 }
+
+/* Results filter: one chip per country on the board. */
+.board-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0 0 14px;
+}
+
+.chip {
+  font: inherit;
+  font-size: 12px;
+  font-family: var(--sans);
+  border: 1px solid var(--axis);
+  border-radius: 999px;
+  background: var(--surface-1);
+  color: var(--text-secondary);
+  padding: 3px 10px;
+  cursor: pointer;
+  line-height: 1.5;
+}
+.chip[aria-pressed='true'] {
+  background: var(--text-primary);
+  border-color: var(--text-primary);
+  color: var(--surface-1);
+}
+.chip[aria-pressed='false'] { opacity: 0.55; text-decoration: line-through; }
+.chip:hover { border-color: var(--text-muted); }
+.chip-n { font-family: var(--mono); font-size: 11px; opacity: 0.7; }
+
+.chip-all { font-weight: 600; }
+.chip-all[aria-pressed='false'] { text-decoration: none; opacity: 1; border-style: dashed; }
 
 .board {
   display: grid;
