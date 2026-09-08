@@ -754,18 +754,18 @@ function renderCard(dest, domain) {
 
   head.appendChild(fillBtn);
 
-  // Scrolling only works once the grid overflows its card, which a fresh 15x15 does not.
-  // So widening also gets an explicit control; after one widening, scrolling takes over.
-  const meta2 = state.meta;
-  const canGrow = (meta2.window_days || 7) < (meta2.max_window_days || 28);
-  if (canGrow) {
-    const grow = document.createElement('button');
-    grow.className = 'fillbtn';
-    grow.textContent = `± ${(meta2.window_days || 7) + (meta2.window_step || 7)}d`;
-    grow.title = 'Widen the date window for every destination (or scroll a grid past its edge)';
-    grow.onclick = extendWindow;
-    head.appendChild(grow);
-  }
+  /* The "± Nd" widen control used to live here and has been removed, not fixed. It was
+     built for the old model, where the two date fields were ANCHORS and the grid spread
+     window_days either side of them. Under the current model those fields bound the period
+     outright, so board.date_axes() takes the range_axes() branch and never reads
+     window_days at all: the button's entire purpose had already evaporated.
+     It was also actively destructive, measured: on a 19x19 board over Oct 8 to Nov 5 with
+     10-14 nights, pressing it produced a 6x6 grid and dropped 40 of 54 priced cells. The
+     extend request sends the axis MIDPOINTS as its two dates and carries no nights range,
+     so the backend rebuilt the axes from a five-day midpoint span using the default 5-9
+     nights while the user's fields still read 10-14.
+     Widening the period is now simply editing "Travel until", which is strictly more
+     expressive than a symmetric window ever was. */
   card.appendChild(head);
 
   const byKey = new Map(dest.cells.map((c) => [c.depart + '|' + c.ret, c]));
@@ -908,7 +908,8 @@ function finishCard(card, dest, table) {
   // Scrolling to any edge asks for a wider window. Restore the scroll offset after the
   // re-render so growing the grid does not yank the view back to the corner.
   wrap.addEventListener('scroll', () => rememberScroll(dest.destination, wrap), { passive: true });
-  wrap.addEventListener('wheel', (e) => onWheel(e, wrap), { passive: true });
+  // No wheel handler any more: its only job was to widen the date window on deliberate
+  // overscroll, and that path is gone with the widen control. The grid scrolls natively.
   card.appendChild(wrap);
 
   const saved = scrollOffsets.get(dest.destination);
@@ -1345,117 +1346,13 @@ function locateBest(card, dest) {
   }
 }
 
-/* ------------------------------------------------------- scroll to widen dates */
+/* ------------------------------------------------------- matrix scroll memory */
 
 const scrollOffsets = new Map(); // IATA -> {x, y}
-const EDGE_PX = 4;               // how close to an edge counts as "at the edge"
-const OVERSCROLL_TRIGGER = 160;  // px of continued scrolling past the edge before widening
-let extending = false;
-let overscroll = 0;
-let overscrollTimer = null;
 
 /** Keep the last scroll position so a re-render does not jump back to the corner. */
 function rememberScroll(dest, wrap) {
   scrollOffsets.set(dest, { x: wrap.scrollLeft, y: wrap.scrollTop });
-}
-
-/** Widen only on *deliberate* overscroll: the grid always overflows now, so merely
- *  reaching an edge is normal browsing and must not trigger a fetch. The user has to keep
- *  pushing past the edge, which is the familiar "pull for more" gesture. */
-function onWheel(event, wrap) {
-  if (extending || !state.meta) return;
-  const atRight = wrap.scrollLeft + wrap.clientWidth >= wrap.scrollWidth - EDGE_PX;
-  const atLeft = wrap.scrollLeft <= EDGE_PX;
-  const atBottom = wrap.scrollTop + wrap.clientHeight >= wrap.scrollHeight - EDGE_PX;
-  const atTop = wrap.scrollTop <= EDGE_PX;
-
-  const pushingX = (event.deltaX > 0 && atRight) || (event.deltaX < 0 && atLeft);
-  const pushingY = (event.deltaY > 0 && atBottom) || (event.deltaY < 0 && atTop);
-  if (!pushingX && !pushingY) {
-    overscroll = 0;
-    return;
-  }
-
-  overscroll += Math.abs(event.deltaX) + Math.abs(event.deltaY);
-  clearTimeout(overscrollTimer);
-  overscrollTimer = setTimeout(() => { overscroll = 0; }, 700);
-
-  const meta = state.meta;
-  const remaining = Math.max(0, OVERSCROLL_TRIGGER - overscroll);
-  if (remaining > 0) {
-    if ((meta.window_days || 7) < (meta.max_window_days || 28)) {
-      $('growing').hidden = false;
-      $('growing').textContent = 'keep scrolling for more dates…';
-    }
-    return;
-  }
-  overscroll = 0;
-  $('growing').hidden = true;
-  extendWindow();
-}
-
-function extendWindow() {
-  const meta = state.meta;
-  const current = meta.window_days || 7;
-  const next = Math.min(current + (meta.window_step || 7), meta.max_window_days || 28);
-  if (extending || next <= current) return;
-  extending = true;
-
-  const codes = [...state.destinations.keys()];
-  $('growing').hidden = false;
-  $('growing').textContent = `widening to ±${next} days…`;
-
-  fetch('/api/extend', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      origin: meta.origin,
-      depart_date: meta.depart_dates[Math.floor(meta.depart_dates.length / 2)],
-      return_date: meta.return_dates[Math.floor(meta.return_dates.length / 2)],
-      destinations: codes,
-      window_days: next,
-      adults: meta.adults,
-      children: meta.children,
-      currency: meta.currency,
-      nonstop_only: meta.nonstop_only,
-    }),
-  })
-    .then((r) => r.json())
-    .then((data) => {
-      const source = new EventSource(`/api/extend/${data.extend_id}/stream`);
-      let done = 0;
-      let pending = codes.length;
-      source.onmessage = (event) => {
-        const msg = JSON.parse(event.data);
-        if (msg.type === 'axes') {
-          meta.depart_dates = msg.depart_dates;
-          meta.return_dates = msg.return_dates;
-          meta.window_days = msg.window_days;
-          syncDateMode();
-          pending = msg.pending;
-          render();
-        } else if (msg.type === 'destination') {
-          state.destinations.set(msg.destination, msg);
-          done += 1;
-          $('growing').textContent = `widening to ±${next} days… ${done}/${pending}`;
-          render();
-        } else if (msg.type === 'destination_error') {
-          done += 1;
-        }
-      };
-      const finish = () => {
-        source.close();
-        extending = false;
-        $('growing').hidden = true;
-        render();
-      };
-      source.addEventListener('end', finish);
-      source.onerror = finish;
-    })
-    .catch(() => {
-      extending = false;
-      $('growing').hidden = true;
-    });
 }
 
 /* ---------------------------------------------------------------- bulk fill */
