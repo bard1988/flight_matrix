@@ -479,6 +479,7 @@ function render() {
 
   state.lastOrdered = ordered;
   syncExpandAll(ordered);
+  syncWiden();
   renderHeadline(ordered);
   renderTable(ordered);
   $('footnote').hidden = ordered.length === 0;
@@ -1346,6 +1347,127 @@ function locateBest(card, dest) {
   }
 }
 
+/* --------------------------------------------------------- widen the period */
+
+/* Widen the travel period by a week at each end and re-price what is on the board.
+ *
+ * This is the rebuilt "± 7d". The original was written for the old model, where the two
+ * date fields were anchors and the grid spread window_days around them; under the period
+ * model there is no window to widen, so it now does the thing it always meant: push
+ * "Travel from" a week earlier and "Travel until" a week later.
+ *
+ * It goes through /api/extend rather than a fresh search on purpose. Extend re-prices the
+ * destinations already on the board instead of discovering the cheapest ones again, so
+ * widening the dates cannot silently swap the cities out from under you. It also skips
+ * discovery, which is the slow part.
+ *
+ * The date inputs are updated to the new period and the search signature is refreshed with
+ * them, otherwise the board would immediately read as stale against its own controls. */
+const WIDEN_STEP_DAYS = 7;
+const MAX_PERIOD_DAYS = 60;      // a 60-day period is already ~55x55 cells per destination
+let widening = false;
+
+function periodBounds() {
+  const meta = state.meta;
+  if (!meta || !meta.depart_dates.length || !meta.return_dates.length) return null;
+  return { start: meta.depart_dates[0], end: meta.return_dates[meta.return_dates.length - 1] };
+}
+
+function periodDays(bounds) {
+  return Math.round(
+    (new Date(bounds.end + 'T00:00:00') - new Date(bounds.start + 'T00:00:00')) / 86400000
+  );
+}
+
+/** Show the widen control only when there is a board and room left to grow. */
+function syncWiden() {
+  const btn = $('widen');
+  const bounds = periodBounds();
+  const canGrow = !!bounds && periodDays(bounds) + 2 * WIDEN_STEP_DAYS <= MAX_PERIOD_DAYS;
+  btn.hidden = !bounds || !canGrow;
+  if (btn.hidden) return;
+  btn.disabled = widening;
+  btn.title =
+    `Widen the travel period by ${WIDEN_STEP_DAYS} days at each end ` +
+    `(${bounds.start} to ${bounds.end} now) and re-price these destinations`;
+}
+
+function widenPeriod() {
+  const meta = state.meta;
+  const bounds = periodBounds();
+  if (widening || !bounds) return;
+  if (periodDays(bounds) + 2 * WIDEN_STEP_DAYS > MAX_PERIOD_DAYS) return;
+
+  const start = addDays(bounds.start, -WIDEN_STEP_DAYS);
+  const end = addDays(bounds.end, WIDEN_STEP_DAYS);
+  widening = true;
+  syncWiden();
+  $('growing').hidden = false;
+  $('growing').textContent = `widening to ${start} - ${end}…`;
+
+  const codes = [...state.destinations.keys()];
+  fetch('/api/extend', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      origin: meta.origin,
+      depart_date: start,
+      return_date: end,
+      destinations: codes,
+      // Carried deliberately: without these the backend falls back to its 5-9 default and
+      // rebuilds the axes for a trip length nobody asked for.
+      nights_min: state.constraints.min,
+      nights_max: state.constraints.max,
+      adults: meta.adults,
+      children: meta.children,
+      currency: meta.currency,
+      nonstop_only: meta.nonstop_only,
+    }),
+  })
+    .then((r) => r.json())
+    .then((data) => {
+      if (!data.extend_id) throw new Error('extend failed');
+      const source = new EventSource(`/api/extend/${data.extend_id}/stream`);
+      let done = 0;
+      let pending = codes.length;
+      source.onmessage = (event) => {
+        const msg = JSON.parse(event.data);
+        if (msg.type === 'axes') {
+          meta.depart_dates = msg.depart_dates;
+          meta.return_dates = msg.return_dates;
+          // Keep the controls honest about what is on screen, and re-baseline the
+          // signature so the widened board does not accuse itself of being stale.
+          $('depart').value = start;
+          $('ret').value = end;
+          state.searchSignature = searchSignature();
+          markSearchStale();
+          pending = msg.pending;
+          render();
+        } else if (msg.type === 'destination') {
+          state.destinations.set(msg.destination, msg);
+          done += 1;
+          $('growing').textContent = `widening to ${start} - ${end}… ${done}/${pending}`;
+          render();
+        } else if (msg.type === 'destination_error') {
+          done += 1;
+        }
+      };
+      const finish = () => {
+        source.close();
+        widening = false;
+        $('growing').hidden = true;
+        render();
+      };
+      source.addEventListener('end', finish);
+      source.onerror = finish;
+    })
+    .catch(() => {
+      widening = false;
+      $('growing').hidden = true;
+      render();
+    });
+}
+
 /* ------------------------------------------------------- matrix scroll memory */
 
 const scrollOffsets = new Map(); // IATA -> {x, y}
@@ -1580,6 +1702,7 @@ function startSearch() {
   $('empty').hidden = true;
   $('headline').hidden = true;   // no winner until something comes back
   $('expandall').hidden = true;  // nothing to expand yet either
+  $('widen').hidden = true;      // nor a period to widen
   // Orientation is a first-run thing; once you've searched, you know. The date hint is
   // part of that same orientation (the field labels and the first-run lede already say
   // it), and it was costing a permanent line in the status strip above every board.
@@ -1750,6 +1873,7 @@ function consume(searchId) {
 
 $('go').addEventListener('click', startSearch);
 $('stop').addEventListener('click', stopSearch);
+$('widen').addEventListener('click', widenPeriod);
 $('perperson').addEventListener('change', (e) => {
   state.perPerson = e.target.checked;
   if (state.meta) render();

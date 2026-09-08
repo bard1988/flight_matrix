@@ -265,13 +265,30 @@ def verify(body: VerifyBody) -> dict[str, Any]:
 
 
 class ExtendBody(BaseModel):
-    """Re-fetch the listed destinations over a wider date window."""
+    """Re-price the listed destinations over a WIDER TRAVEL PERIOD.
+
+    depart_date and return_date are the widened period bounds, not anchors and not the
+    midpoints of the existing grid. The axes are derived from them together with the nights
+    range, exactly as a fresh search would derive them, so the result is the same grid the
+    user would get by editing the two date fields and pressing Search.
+
+    nights_min and nights_max are carried for a reason: without them nights_span() falls
+    back to its 5-9 default, and the widened board comes back built for a trip length the
+    user never asked for. That, plus sending midpoints as the bounds, is what made the old
+    widen control shrink a 19x19 board to 6x6.
+
+    The point of this endpoint over a plain re-search is that it skips destination
+    discovery: the same destinations are re-priced over the new period rather than the
+    cheapest ones being chosen again, so widening does not silently change which cities are
+    on the board.
+    """
 
     origin: str
     depart_date: str
     return_date: str
     destinations: list[str] = Field(default_factory=list, max_length=40)
-    window_days: int = Field(default=14, ge=1, le=config.MAX_WINDOW_DAYS)
+    nights_min: int | None = Field(default=None, ge=0, le=60)
+    nights_max: int | None = Field(default=None, ge=0, le=60)
     adults: int = Field(default=2, ge=1, le=9)
     children: int = Field(default=0, ge=0, le=8)
     currency: str = config.DEFAULT_CURRENCY
@@ -282,7 +299,7 @@ class ExtendBody(BaseModel):
             origin=self.origin.upper(), depart_date=self.depart_date,
             return_date=self.return_date, adults=self.adults, children=self.children,
             currency=self.currency.lower(), nonstop_only=self.nonstop_only,
-            window_days=self.window_days,
+            nights_min=self.nights_min, nights_max=self.nights_max,
         )
 
 
@@ -300,7 +317,6 @@ def start_extend(body: ExtendBody) -> dict[str, Any]:
             provider = _make_provider()
             channel.put({
                 "type": "axes",
-                "window_days": request.window_days,
                 "depart_dates": [d.isoformat() for d in depart_dates],
                 "return_dates": [d.isoformat() for d in return_dates],
                 "pending": len(body.destinations),
@@ -322,7 +338,7 @@ def start_extend(body: ExtendBody) -> dict[str, Any]:
             channel.put(_SENTINEL)
 
     threading.Thread(target=worker, daemon=True).start()
-    return {"extend_id": extend_id, "window_days": request.window_days}
+    return {"extend_id": extend_id}
 
 
 @app.get("/api/extend/{extend_id}/stream")

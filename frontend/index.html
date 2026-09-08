@@ -52,6 +52,10 @@
           <input id="nmax" type="number" min="0" max="60" placeholder="max" />
         </span>
       </div>
+      <!-- Widens the travel period a week at each end and re-prices the same destinations.
+           It sits beside the date fields because that is what it edits; label and state are
+           set by syncWiden(), and it stays hidden until there is a board to widen. -->
+      <button type="button" id="widen" class="widen" hidden>± 7d</button>
       <div class="field-group" role="group" aria-label="Travellers">
         <div class="field field-xs">
           <label for="adults">Adults</label>

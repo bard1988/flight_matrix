@@ -450,6 +450,15 @@ button.primary.stale {
   color: #0b0b0b;
 }
 
+/* Sits with the date fields rather than the action buttons, and is sized to its short
+   label so it costs the bar as little width as possible. */
+.widen {
+  align-self: center;
+  padding: 4px 8px;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
 .nights { display: flex; gap: 3px; }
 .nights input { width: 52px; min-width: 0; }
 
