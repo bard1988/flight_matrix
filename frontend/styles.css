@@ -66,20 +66,26 @@
   --ease: cubic-bezier(0.16, 1, 0.3, 1);
 
   /* ---- grid geometry: two reversible switches -------------------------------------
-     FLUSH (default) makes the matrix one continuous field of colour. TILES restores the
-     previous look, where every fare floated as its own rounded chip.
+     DEFAULT is a square grid whose cells are separated by a 1px hairline of canvas: the
+     field still reads as one continuous heatmap, but every individual cell is delineated.
+     A fully flush version (gap 0) was tried first and lost the cell boundaries entirely,
+     which made a run of same-priced days read as one long smear. 1px is the smallest
+     separation that draws the boundary back without returning to floating chips.
 
-       document.documentElement.dataset.grid = 'tiles'   // back to spaced chips
-       document.documentElement.dataset.cell = '9'       // back to 9px in a 26px cell
+     TILES restores the older look, where each fare floated as its own rounded chip on a
+     2px gap.
+
+       document.documentElement.dataset.grid = 'tiles'   // spaced rounded chips
+       document.documentElement.dataset.cell = '9'       // 9px in a 26px cell
 
      Both are plain attributes on <html>, so either can be flipped live in devtools with
-     no rebuild, and reverting for good means deleting one override block below.
+     no rebuild, and retiring one for good means deleting an override block below.
 
-     The cheapest-cell marker has to change with the geometry, not just the spacing: the
+     The cheapest-cell marker has to change with the geometry, not merely the spacing: the
      spaced version rings the cell from OUTSIDE (a 1px canvas gap then yellow), which needs
-     4-5px of clearance and would paint over its neighbours once the gap is gone. Flush
-     therefore marks from the inside instead. */
-  --cell-gap: 0px;
+     4-5px of clearance and would paint over its neighbours at a 1px gap. The default
+     therefore marks from the inside. */
+  --cell-gap: 1px;
   --cell-radius: 0px;
   --cell-w: 28px;
   --cell-h: 20px;
@@ -926,7 +932,8 @@ table.matrix td.flash { animation: locate-flash 0.4s ease-in-out 4; }
 
 table.matrix {
   border-collapse: separate;
-  border-spacing: var(--cell-gap);   /* 0 = one continuous field; see the grid switch */
+  /* 1px of canvas between cells: one field, but every cell still has an edge. */
+  border-spacing: var(--cell-gap);
   font-variant-numeric: tabular-nums;
 }
 
