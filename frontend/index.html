@@ -49,27 +49,27 @@
       </svg>
     <!-- fm-logo:end --></span>
 
-    <!-- The trip itself: where from, when, how long, how many people. Everything in this
-         group defines the search; nothing in it is a preference. Grouped so the bar reads
-         as three things rather than twelve. -->
+    <!-- The whole search in four fields. Everything else is a refinement and lives in
+         Options: precise dates, exact nights, travellers, stops, price cap, weekdays,
+         flight times, how many destinations. -->
     <div class="bar-group">
       <div class="field field-sm">
         <label for="origin">From</label>
         <input id="origin" value="TLV" maxlength="3" autocapitalize="characters" />
       </div>
       <div class="field field-dest">
-        <label for="regionsearch">Destinations</label>
+        <label for="regionsearch">To</label>
         <div class="dest-combo" id="destcombo">
           <div class="dest-control" id="destcontrol">
             <span class="dest-tags" id="desttags"></span>
             <input type="text" id="regionsearch" class="dest-input" autocomplete="off"
-                   placeholder="Everywhere" aria-label="Search countries, regions and continents"
+                   placeholder="Anywhere" aria-label="Search countries, regions and continents"
                    role="combobox" aria-expanded="false" aria-controls="regiontree" />
             <span class="dest-caret" aria-hidden="true">▾</span>
           </div>
           <div class="dest-pop" id="destpop" hidden>
             <div class="dest-pop-head">
-              <span>Search these places (or leave blank for everywhere)</span>
+              <span>Search these places</span>
               <button type="button" id="regionclear" class="region-clear" hidden>clear all</button>
             </div>
             <div class="region-tree" id="regiontree" role="tree" aria-label="Restrict the search to these places">
@@ -78,62 +78,77 @@
           </div>
         </div>
       </div>
-      <div class="field field-date">
-        <label for="depart" id="departlabel">Travel from</label>
-        <input id="depart" type="date" />
+      <div class="field field-where">
+        <label for="whenselect">When</label>
+        <select id="whenselect"></select>
       </div>
-      <div class="field field-date">
-        <label for="ret" id="retlabel">Travel until</label>
-        <input id="ret" type="date" />
+      <div class="field field-trip">
+        <label for="tripselect">Trip length</label>
+        <select id="tripselect">
+          <option value="2,3">Weekend</option>
+          <option value="3,4">Long weekend</option>
+          <option value="6,8" selected>About a week</option>
+          <option value="12,16">About two weeks</option>
+          <option value="20,30">About a month</option>
+          <option value="3,21">Flexible</option>
+        </select>
       </div>
-      <div class="field field-nights">
-        <label for="nmin">Nights</label>
-        <span class="nights">
-          <input id="nmin" type="number" min="0" max="60" placeholder="min" />
-          <input id="nmax" type="number" min="0" max="60" placeholder="max" />
+      <div class="field field-pax">
+        <label for="adults">Travellers</label>
+        <span class="pax">
+          <span class="pax-cell"><input id="adults" type="number" min="1" max="9" value="2" aria-label="Adults" /><i>adults</i></span>
+          <span class="pax-cell"><input id="children" type="number" min="0" max="8" value="0" aria-label="Children (2&#8211;11)" /><i>kids</i></span>
         </span>
       </div>
-      <div class="field-group" role="group" aria-label="Travellers">
-        <div class="field field-xs">
-          <label for="adults">Adults</label>
-          <input id="adults" type="number" min="1" max="9" value="2" />
-        </div>
-        <div class="field field-xs">
-          <label for="children">Children</label>
-          <input id="children" type="number" min="0" max="8" value="0" />
-        </div>
-      </div>
-      <!-- Promoted out of "Advanced > Flight times". It is a search input (it re-runs the
-           search, unlike Currency), and it is the only control that avoids the
-           self-transfer combinations the footnote warns about, which is poor placement for
-           a warning that material. Also: a stop count was never a "flight time". -->
-      <label class="check" title="Exclude connections, including the self-transfer combinations that are booked as separate tickets"><input type="checkbox" id="nonstop" /> Nonstop</label>
     </div>
 
-    <!-- Run it, stop it, or refine it. Advanced sits here rather than with the display
-         controls because everything behind it changes which fares come back. -->
     <div class="bar-group bar-actions">
       <button id="go" class="primary">Search</button>
       <button id="stop" hidden title="Stop the running search and keep what has loaded">Stop</button>
       <button type="button" id="optsbtn" class="opts-toggle" aria-expanded="false" aria-controls="advfilters">
-        Advanced<span class="opts-chevron" aria-hidden="true">›</span>
+        Options<span class="opts-chevron" aria-hidden="true">›</span>
       </button>
     </div>
-
   </div>
 
   <div class="controls-adv" id="advfilters">
     <div class="adv-group">
+      <span class="adv-group-label">Stops &amp; budget</span>
+      <div class="adv-fields">
+        <label class="check" title="Exclude connections, including self-transfer combinations booked as separate tickets"><input type="checkbox" id="nonstop" /> Nonstop only</label>
+        <div class="field field-sm">
+          <label for="maxprice">Max total</label>
+          <input id="maxprice" type="number" min="0" step="100" placeholder="any" />
+        </div>
+      </div>
+    </div>
+
+    <div class="adv-group">
+      <span class="adv-group-label">Exact dates &amp; nights</span>
+      <div class="adv-fields">
+        <div class="field field-date">
+          <label for="depart" id="departlabel">Travel from</label>
+          <input id="depart" type="date" />
+        </div>
+        <div class="field field-date">
+          <label for="ret" id="retlabel">Travel until</label>
+          <input id="ret" type="date" />
+        </div>
+        <div class="field field-nights">
+          <label for="nmin">Nights (min / max)</label>
+          <span class="nights">
+            <input id="nmin" type="number" min="0" max="60" placeholder="min" />
+            <input id="nmax" type="number" min="0" max="60" placeholder="max" />
+          </span>
+        </div>
+      </div>
+    </div>
+
+    <div class="adv-group">
       <span class="adv-group-label">Preferred days</span>
       <div class="adv-fields">
-        <div class="field">
-          <label>Depart on</label>
-          <div class="dow" id="dowdep"></div>
-        </div>
-        <div class="field">
-          <label>Return on</label>
-          <div class="dow" id="dowret"></div>
-        </div>
+        <div class="field"><label>Depart on</label><div class="dow" id="dowdep"></div></div>
+        <div class="field"><label>Return on</label><div class="dow" id="dowret"></div></div>
       </div>
     </div>
 
@@ -142,15 +157,11 @@
       <div class="adv-fields">
         <div class="field">
           <label for="dephfrom">Depart between</label>
-          <span class="hours">
-            <select id="dephfrom"></select><select id="dephto"></select>
-          </span>
+          <span class="hours"><select id="dephfrom"></select><select id="dephto"></select></span>
         </div>
         <div class="field">
           <label for="rethfrom">Return between</label>
-          <span class="hours">
-            <select id="rethfrom"></select><select id="rethto"></select>
-          </span>
+          <span class="hours"><select id="rethfrom"></select><select id="rethto"></select></span>
         </div>
       </div>
     </div>
@@ -162,11 +173,7 @@
           <label for="dests">Places</label>
           <input id="dests" type="number" min="1" max="60" value="20" />
         </div>
-        <div class="field field-sm">
-          <label for="maxprice">Max total</label>
-          <input id="maxprice" type="number" min="0" step="100" placeholder="any" />
-        </div>
-        <label class="check" title="After the board loads, re-price its cheapest cells live on Google Flights"><input type="checkbox" id="autoverify" checked /> Auto cross-check</label>
+        <label class="check" title="Price fares live on Google Flights in the background: the board's cheapest cells once it loads, and the whole trip-length band of whichever destination you open"><input type="checkbox" id="autoverify" checked /> Live prices from Google Flights</label>
       </div>
     </div>
 
@@ -187,17 +194,15 @@
       <!-- The scoping caveat in five words. The full explanation lives in the first-run
            panel; this has to survive for anyone arriving on a bookmarked URL, who never
            sees that panel, because reading the ramp across destinations costs real money. -->
-      <span class="legend-scope" title="A green cell is that destination's own cheapest, not the cheapest on the board. Compare destinations by price, not colour.">colour ranks within each destination</span>
+      <span class="legend-scope" title="A green cell is that destination's own cheapest, not the cheapest on the board. Compare destinations by price, not colour.">colour ranks within this grid</span>
       <span>cheap</span>
       <span class="swatches">
         <i style="background:var(--q0)"></i><i style="background:var(--q1)"></i><i style="background:var(--q2)"></i><i style="background:var(--q3)"></i><i style="background:var(--q4)"></i><i style="background:var(--q5)"></i><i style="background:var(--q6)"></i>
       </span>
       <span>expensive</span>
       <span class="muted"><span class="legend-best"></span> cheapest here</span>
-      <span class="muted"><span class="legend-locate">◎</span> jump to it</span>
       <span class="muted"><span class="nodata"></span> no price</span>
       <span class="muted"><span class="legend-wedge"></span> has stops</span>
-      <span class="muted"><span class="legend-strip"><i></i><i></i><i></i></span> collapsed row: cheapest by departure day</span>
     </span>
   </span>
   </div>
@@ -216,16 +221,26 @@
        legend, which is the version that survives a bookmarked URL anyway; EST vs LIVE is
        now left to the tag titles and the footnote. Hidden for good on the first search. -->
   <section class="firstrun" id="firstrun">
-    <h1>Search once, then just pick</h1>
+    <h1>Where's cheap, and when</h1>
     <p class="firstrun-lede">
-      One search fills a grid of every destination against every departure and return date.
-      Read it, take the pair you want, and stop searching one date at a time.
+      Pick where you're leaving from, roughly when, and how long. One search ranks every
+      destination by its cheapest fare — open any one to see the full calendar of dates.
     </p>
   </section>
 
-  <!-- How the board is displayed, not what it contains. Sits with the board because
-       that's where you're looking when you reach for these. Shown once a board exists. -->
+  <!-- One slim toolbar once a board exists: how many results, a country filter, the
+       expand-all switch, currency, and the table view. -->
   <div class="board-tools" id="boardtools" hidden>
+    <button type="button" id="listtoggle" class="bt-listtoggle" aria-pressed="false"
+            title="Hide the destination list and widen the grid">Hide list</button>
+    <span class="bt-count" id="btcount"></span>
+    <div class="ctry-combo" id="ctrycombo">
+      <button type="button" class="ctry-btn" id="ctrybtn" aria-expanded="false" aria-controls="ctrypop">
+        <span id="ctrylabel">All countries</span><span class="ctry-caret" aria-hidden="true">▾</span>
+      </button>
+      <div class="ctry-pop" id="ctrypop" role="group" aria-label="Show only these countries" hidden></div>
+    </div>
+    <span class="bt-spacer"></span>
     <label class="bt-currency">Currency
       <select id="currency">
         <option value="ils">ILS</option>
@@ -234,22 +249,20 @@
         <option value="gbp">GBP</option>
       </select>
     </label>
-    <label class="check"><input type="checkbox" id="perperson" /> Per person</label>
-    <span class="bt-spacer"></span>
-    <button type="button" id="expandall" hidden></button>
-    <button id="tabletoggle" title="Accessible table of every priced cell">Table view</button>
+    <label class="check bt-pp"><input type="checkbox" id="perperson" /> Per person</label>
+    <button id="tabletoggle" aria-pressed="false"
+            title="Switch this destination between the colour grid and a sortable table">Table</button>
   </div>
 
-  <!-- Results filter: one chip per country on the board, click to show/hide. Filled by
-       renderBoardChips() after a search; hidden when there is nothing to filter. -->
-  <div class="board-chips" id="boardchips" role="group" aria-label="Filter the board by country" hidden></div>
-
-  <!-- The board's focal point: the cheapest finds. Below the filter chips so it always
-       reflects what's actually shown. Filled by renderHeadline(); hidden when empty. -->
-  <section class="headline" id="headline" hidden aria-label="Cheapest finds"></section>
-
-  <div class="board" id="board"></div>
-  <div class="tableview" id="tableview"></div>
+  <!-- Master–detail: a ranked list of destinations on the left, the selected one's full
+       date grid on the right. On a phone the list is the whole screen and picking a row
+       slides the grid in over it (body.detail-open), with a back control in the grid head. -->
+  <div class="board-split" id="board">
+    <aside class="dlist" id="dlist" aria-label="Destinations, cheapest first"></aside>
+    <section class="ddetail" id="ddetail"></section>
+    <!-- The Table toggle swaps this in for the grid pane; the list stays put. -->
+    <div class="tableview" id="tableview"></div>
+  </div>
   <p class="empty" id="empty" hidden></p>
 
   <p class="note" id="footnote" hidden>

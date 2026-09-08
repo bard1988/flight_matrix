@@ -15,7 +15,8 @@ const state = {
   source: null,
   searchId: null,
   globalBest: null,
-  chipHidden: new Set(),   // country codes toggled OFF via the results chips (empty = all shown)
+  selected: null,          // IATA of the destination whose grid is shown in the detail pane
+  countries: new Set(),    // ISO codes the results are narrowed to (empty = all countries)
   // Day-of-week / trip-length constraints, applied as a view over loaded cells.
   constraints: { dep: new Set(), ret: new Set(), min: null, max: null },
   // Currency is a display concern once the board is loaded: the board is priced in
@@ -139,10 +140,17 @@ function seedGridTabstop(table) {
 
 /* ------------------------------------------------------------------ helpers */
 
+/* Local calendar date as YYYY-MM-DD. Never via toISOString(): that converts to UTC first,
+   so local midnight rolls back to the previous day in any timezone east of Greenwich, and
+   the date fields end up a day early. */
+function isoLocal(d) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
 function isoToday(offsetDays) {
   const d = new Date();
   d.setDate(d.getDate() + offsetDays);
-  return d.toISOString().slice(0, 10);
+  return isoLocal(d);
 }
 
 /* Convert an amount between currencies using the loaded FX table. `state.fx[x]` is
@@ -374,12 +382,10 @@ function buildDowPicker(hostId, key) {
 
 /** Is this destination visible? Hidden only if its country chip is toggled off. */
 function matchesFilter(dest) {
-  return !state.chipHidden.has((dest.country || '').toUpperCase());
+  return state.countries.size === 0 || state.countries.has((dest.country || '').toUpperCase());
 }
 
 function render() {
-  const board = $('board');
-
   const visible = [...state.destinations.values()].filter(matchesFilter);
 
   // Cheapest cell among the destinations actually on screen, so the yellow marker always
@@ -443,15 +449,14 @@ function render() {
     $('constraintnote').classList.remove('warn');
   }
 
-  const total = state.destinations.size;
-  const filtered = state.chipHidden.size > 0;
-  $('filtercount').hidden = !filtered;
-  $('filtercount').textContent = filtered
-    ? `showing ${ordered.length} of ${total}`
-    : '';
-  renderBoardChips();
+  syncCountryFilter(ordered);
+  syncSelection(ordered);
+  const selDest = ordered.find((d) => d.destination === state.selected) || null;
 
-  // A keyboard user navigating the grid loses focus when the board is rebuilt (every
+  // Once the board is settled, quietly live-price whichever destination is open.
+  if (selDest && !state.source) fillOpenDestination(selDest);
+
+  // A keyboard user navigating the grid loses focus when the detail pane is rebuilt (every
   // streamed destination, every verify fold-back). Remember which cell had it and put it
   // back on the equivalent cell afterwards.
   const af = document.activeElement;
@@ -459,25 +464,30 @@ function render() {
     ? { dest: af.closest('.card') && af.closest('.card').dataset.dest, r: af.dataset.r, c: af.dataset.c }
     : null;
 
-  seedExpanded(ordered);
-
-  // Each card gets its own colour scale, computed from just its own cells.
-  board.replaceChildren(...ordered.map((dest) => renderCard(dest, scaleDomain(dest.allowed))));
+  // Left: the ranked list, one tight row per destination. Right: the selected one's grid.
+  $('dlist').replaceChildren(...ordered.map((dest) => listRow(dest, dest === selDest)));
+  const detail = $('ddetail');
+  if (selDest) {
+    detail.replaceChildren(renderCard(selDest, scaleDomain(selDest.allowed)));
+  } else {
+    detail.replaceChildren();
+  }
+  document.body.classList.toggle('has-board', ordered.length > 0);
 
   if (keep && keep.dest) {
-    const cell = board.querySelector(
+    const cell = detail.querySelector(
       `.card[data-dest="${keep.dest}"] td[data-r="${keep.r}"][data-c="${keep.c}"][role="button"]`
     );
     if (cell) { cell.tabIndex = 0; cell.focus({ preventScroll: true }); ensureVisible(cell); }
   }
 
   state.lastOrdered = ordered;
-  syncExpandAll(ordered);
-  renderHeadline(ordered);
-  renderTable(ordered);
+  // The table view is the selected destination's grid as text, nothing else.
+  renderTable(selDest ? [selDest] : ordered);
   refreshRegionCounts();
   $('boardtools').hidden = state.destinations.size === 0;
   $('footnote').hidden = ordered.length === 0;
+  // The detail pane always has a grid on screen, so the colour key is always relevant here.
   $('legend').hidden = ordered.length === 0;
 }
 
@@ -490,50 +500,68 @@ function render() {
  *
  * Buttons rather than divs with click handlers: these are the most likely thing on the page
  * to be reached by keyboard, and a real button gets focus, Enter and Space for free. */
-function renderHeadline(ordered) {
-  const host = $('headline');
-  const top = ordered.filter((d) => d.shownBest).slice(0, 3);
-  host.hidden = top.length === 0;
-  if (!top.length) {
-    host.replaceChildren();
-    return;
+/* Multi-select country filter in the toolbar. Empty selection = show all. */
+function syncCountryFilter(ordered) {
+  const total = state.destinations.size;
+  $('btcount').textContent = total
+    ? (state.countries.size
+        ? `${ordered.length} of ${total} destinations`
+        : `${total} destination${total === 1 ? '' : 's'}`)
+    : '';
+
+  const counts = new Map();       // code -> { name, n }
+  for (const d of state.destinations.values()) {
+    const c = (d.country || '').toUpperCase();
+    if (!c) continue;
+    const e = counts.get(c) || { name: d.country_name || c, n: 0 };
+    e.n += 1;
+    counts.set(c, e);
+  }
+  // Drop any selected country that's no longer on the board.
+  for (const c of [...state.countries]) if (!counts.has(c)) state.countries.delete(c);
+
+  const rows = [...counts.entries()].sort((a, b) => a[1].name.localeCompare(b[1].name));
+  const want = rows.map(([c, e]) => c + e.n).join('|');
+  const pop = $('ctrypop');
+  if (pop.dataset.opts !== want) {
+    pop.dataset.opts = want;
+    pop.replaceChildren(...rows.map(([code, { name, n }]) => {
+      const lab = document.createElement('label');
+      const cb = document.createElement('input');
+      cb.type = 'checkbox';
+      cb.value = code;
+      cb.checked = state.countries.has(code);
+      cb.addEventListener('change', () => {
+        cb.checked ? state.countries.add(code) : state.countries.delete(code);
+        render();
+      });
+      lab.append(cb, ' ', name, Object.assign(document.createElement('span'),
+        { className: 'ctry-n', textContent: n }));
+      return lab;
+    }));
+  } else {
+    for (const cb of pop.querySelectorAll('input')) cb.checked = state.countries.has(cb.value);
   }
 
-  const cur = state.meta.currency;
-  const trip = (cell) =>
-    `${weekday(cell.depart)} ${shortDate(cell.depart)} to ${weekday(cell.ret)} ` +
-    `${shortDate(cell.ret)}, ${cell.nights} night${cell.nights === 1 ? '' : 's'}`;
-
-  host.replaceChildren(...top.map((dest, i) => {
-    const cell = dest.shownBest;
-    const b = document.createElement('button');
-    b.type = 'button';
-    b.className = i === 0 ? 'headline-item is-lead' : 'headline-item';
-    b.innerHTML =
-      `<span class="headline-city">${dest.city}</span>` +
-      `<span class="headline-price">${fmtMoney(cellValue(cell), cur)}</span>` +
-      `<span class="headline-when">${trip(cell)}</span>` +
-      (cell.verified ? '<span class="tag live">live</span>' : '<span class="tag">est</span>');
-    b.title = `Show ${dest.city} on the board`;
-    // The visible spans are flex items with no whitespace between them, so the derived
-    // accessible name would run together as "Larnaca352Fri Oct 9". State it properly.
-    b.setAttribute('aria-label',
-      `${dest.city}, ${fmtMoney(cellValue(cell), cur)}, ${trip(cell)}, ` +
-      `${cell.verified ? 'live price' : 'estimate'}. Show it on the board.`);
-    b.addEventListener('click', () => {
-      // There is nothing to jump to while the destination is collapsed, so open it first.
-      // render() is synchronous, so the rebuilt card is queryable immediately after.
-      if (!isExpanded(dest.destination)) {
-        expanded.add(dest.destination);
-        userToggled = true;
-        render();
-      }
-      const card = $('board').querySelector(`.card[data-dest="${dest.destination}"]`);
-      if (card) locateBest(card, dest);
-    });
-    return b;
-  }));
+  const picked = rows.filter(([c]) => state.countries.has(c)).map(([, e]) => e.name);
+  $('ctrylabel').textContent =
+    picked.length === 0 ? 'All countries'
+      : picked.length <= 2 ? picked.join(', ')
+      : `${picked.length} countries`;
+  $('ctrycombo').hidden = rows.length < 2;
 }
+
+$('ctrybtn').addEventListener('click', () => {
+  const open = $('ctrypop').hidden;
+  $('ctrypop').hidden = !open;
+  $('ctrybtn').setAttribute('aria-expanded', String(open));
+});
+document.addEventListener('mousedown', (e) => {
+  if (!e.target.closest('#ctrycombo')) {
+    $('ctrypop').hidden = true;
+    $('ctrybtn').setAttribute('aria-expanded', 'false');
+  }
+});
 
 // How much to trust the headline price. The board is built from a price calendar, which is
 // a precomputed index that goes stale per date pair - TLV-CTA quoted 783 for a pair that a
@@ -558,10 +586,6 @@ function headlineChip(dest) {
    destination animates once, when it first lands. Cleared by resetForSearch. */
 const animatedDests = new Set();
 
-/* Which destinations show their full grid. Survives the wholesale board rebuild that every
-   stream event triggers, exactly like animatedDests and scrollOffsets. */
-const expanded = new Set();
-
 /* Per-destination date axes, for destinations that have been widened on their own.
  *
  * The board starts with ONE set of axes for everything, which is what makes the same date
@@ -580,66 +604,25 @@ function axesFor(dest) {
   if (own) return own;
   return { departs: state.meta.depart_dates, returns: state.meta.return_dates };
 }
-let userToggled = false;
-
+/* Master–detail: exactly one destination's grid is on screen at a time, in the detail
+ * pane. `isExpanded` is what renderCard checks to take its full-grid path, so the selected
+ * destination "is expanded" and every other one is a list row. Until the user picks a row,
+ * the selection tracks the cheapest destination (so the detail pane is never empty once a
+ * board exists); after they pick, it is theirs. */
 function isExpanded(code) {
-  return expanded.has(code);
+  return code === state.selected;
 }
 
-/* How many destinations open by default.
- *
- * Three, not one and not all. The task has two phases: compare destinations, which needs
- * ordered headline numbers rather than grids, then choose dates for a candidate or two,
- * which needs the grid. Opening everything serves neither, because twenty grids cannot be
- * compared, only scrolled past. Opening nothing hides the thing that makes this board
- * different from a ranked price list, which is several date grids side by side.
- *
- * Three is the number of columns the board lays out at desktop widths
- * (minmax(420px, 1fr)), so the default is exactly one row of real grids with strips below.
- * A fixed count rather than one derived from the measured column count: deriving it would
- * make the default reshuffle itself on every window resize. */
-const AUTO_EXPAND_COUNT = 3;
-
-/* Until the user touches a disclosure, the open set IS the cheapest AUTO_EXPAND_COUNT,
- * recomputed on every render. The moment they toggle anything, this stops entirely and the
- * set is theirs.
- *
- * Two simpler versions were tried and measured first, and both were wrong:
- *   - Seed once on the first render. Destinations stream in one at a time, so that render
- *     holds exactly ONE of them and slice(0, 3) could only ever open that one.
- *   - Top up across renders and latch at three. That opens whichever three ARRIVED first,
- *     which is not the cheapest three, because the ordering churns as prices land. It
- *     measured 3 open with only 1 of them in the top row.
- *
- * Recomputing does mean grids open and close while the search streams. That is acceptable
- * because the board is already reflowing hard during a search: cards are re-sorted by price
- * on every event, so they jump position anyway. The payoff is that when the stream settles,
- * the open grids are the right ones, with no stale choice to notice and undo. */
-function seedExpanded(ordered) {
-  if (userToggled || !ordered.length) return;
-  expanded.clear();
-  for (const dest of ordered.slice(0, AUTO_EXPAND_COUNT)) expanded.add(dest.destination);
-}
-
-/* One control for the whole board, because doing this per destination is twenty clicks.
-   The label states what pressing it will DO rather than naming a mode, and it flips to
-   "Collapse all" only when everything is already open, so the common case (some closed)
-   always offers the expanding action. */
-function syncExpandAll(ordered) {
-  const btn = $('expandall');
-  btn.hidden = ordered.length === 0;
-  if (!ordered.length) return;
-  const allOpen = ordered.every((d) => isExpanded(d.destination));
-  btn.textContent = allOpen ? 'Collapse' : 'Expand';
-  btn.title = allOpen
-    ? 'Collapse every destination to a single row'
-    : 'Show every destination’s full date grid';
-  btn.onclick = () => {
-    userToggled = true;          // the user is driving now
-    if (allOpen) expanded.clear();
-    else for (const d of ordered) expanded.add(d.destination);
-    render();
-  };
+/* Keep the selection pointed at something real. Before the user has chosen, follow the
+   cheapest destination as the stream re-sorts; once chosen, only correct it if that
+   destination has dropped off the board (e.g. a country filter hid it). */
+let userPickedDest = false;
+function syncSelection(ordered) {
+  const stillThere = ordered.some((d) => d.destination === state.selected);
+  if (userPickedDest && stillThere) return;
+  if (!userPickedDest || !stillThere) {
+    state.selected = ordered.length ? ordered[0].destination : null;
+  }
 }
 
 /* One cell per departure date, coloured by the cheapest fare available that day: the
@@ -681,6 +664,45 @@ function departureStrip(dest, domain) {
   return wrap;
 }
 
+/* One row in the ranked list: the destination's essence in a line — name, country, the
+   cheapest fare and the ceiling, and the cheapest date pair. Clicking it loads that grid
+   into the detail pane (and, on a phone, slides the pane in over the list). */
+function listRow(dest, isSel) {
+  const meta = state.meta;
+  const b = document.createElement('button');
+  b.type = 'button';
+  b.className = 'lrow';
+  b.dataset.dest = dest.destination;
+  if (isSel) b.classList.add('is-sel');
+  if (state.globalBest && state.globalBest.dest === dest.destination) b.classList.add('is-winner');
+  b.setAttribute('aria-current', isSel ? 'true' : 'false');
+
+  const best = dest.shownBest ? cellValue(dest.shownBest) : null;
+  const priced = (dest.allowed || []).map(cellValue).filter((v) => v != null);
+  const hi = priced.length ? Math.max(...priced) : null;
+  const range = best != null && hi != null && hi > best
+    ? `<span class="lrow-range">&ndash;&#8202;${fmtMoney(hi, meta.currency)}</span>` : '';
+  const bc = dest.shownBest;
+  const when = bc
+    ? `${weekday(bc.depart)} ${shortDate(bc.depart)} &rarr; ${weekday(bc.ret)} ${shortDate(bc.ret)} ` +
+      `&middot; ${bc.nights}n`
+    : 'no fare yet';
+
+  b.innerHTML =
+    `<span class="lrow-city">${dest.city}` +
+      `${dest.country_name ? `<span class="lrow-country">${dest.country_name}</span>` : ''}</span>` +
+    `<span class="lrow-price">${best != null ? fmtMoney(best, meta.currency) : '&mdash;'}${range}</span>` +
+    `<span class="lrow-when">${when}</span>`;
+
+  b.addEventListener('click', () => {
+    userPickedDest = true;
+    state.selected = dest.destination;
+    document.body.classList.add('detail-open');
+    render();
+  });
+  return b;
+}
+
 function renderCard(dest, domain) {
   const meta = state.meta;
   const card = document.createElement('section');
@@ -695,67 +717,41 @@ function renderCard(dest, domain) {
   const head = document.createElement('div');
   head.className = 'card-head';
   const best = dest.shownBest ? cellValue(dest.shownBest) : null;
-  // Say plainly whether the headline number is a live price or still an estimate:
-  // verifying a cell often makes it worse, so a card can bounce back up the board as its
-  // best falls through to the next unverified estimate.
-  const bestTag = dest.shownBest && dest.shownBest.verified
-    ? '<span class="tag live">live</span>'
-    : dest.shownBest && dest.shownBest.is_total
-      ? `<span class="tag real">${(dest.shownBest.source || 'real')}</span>`
-      : '<span class="tag">est</span>';
+  const bc = dest.shownBest;
+  const when = bc
+    ? `${weekday(bc.depart)} ${shortDate(bc.depart)} &rarr; ${weekday(bc.ret)} ${shortDate(bc.ret)}` +
+      ` &middot; ${bc.nights} night${bc.nights === 1 ? '' : 's'}`
+    : '';
+  // The essence of a matrix in two numbers: what the cheapest date pair costs, and the
+  // ceiling across every priced pair. A deal-hunter scanning the list wants the spread
+  // before deciding which grids are worth opening.
+  const priced = (dest.allowed || []).map(cellValue).filter((v) => v != null);
+  const hi = priced.length ? Math.max(...priced) : null;
+  const range = best != null && hi != null && hi > best
+    ? `<span class="card-range">–&#8202;${fmtMoney(hi, meta.currency)}</span>` : '';
   head.innerHTML =
-    `<h2>${dest.city}</h2>` +
-    `<span class="code">${dest.destination}${dest.country ? ' · ' + dest.country : ''}</span>` +
-    `<span class="cov" title="${dest.coverage.populated} of ${dest.coverage.valid} date pairs priced">${dest.coverage.populated}/${dest.coverage.valid}</span>` +
+    `<h2>${dest.city}${dest.country_name ? ` <span class="card-country">${dest.country_name}</span>` : ''}</h2>` +
+    `<span class="card-when">${when}</span>` +
     headlineChip(dest) +
-    `<span class="best">${best != null ? fmtMoney(best, meta.currency) : ''} ${bestTag}</span>`;
+    `<span class="best">${best != null ? fmtMoney(best, meta.currency) : ''}${range}</span>`;
 
-  /* Collapsed by default. Twenty full matrices, each with its own scrollbar, is a wall of
-     grids: the page cannot be taken in, and it gets worse the more destinations you ask
-     for. Collapsed, a destination is one line plus a strip showing WHICH departure days
-     are cheap, which is the question a grid answers by being scanned. Expand the ones
-     worth the detail.
-     The toggle sits first among the controls because it governs everything after it. */
-  const open = isExpanded(dest.destination);
-  card.classList.add(open ? 'is-open' : 'is-collapsed');
-  const toggle = document.createElement('button');
-  toggle.className = 'fillbtn disclose';
-  toggle.type = 'button';
-  toggle.textContent = open ? '−' : '+';   // minus / plus
-  toggle.title = open ? `Collapse ${dest.city}` : `Show ${dest.city}'s full date grid`;
-  toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
-  toggle.setAttribute('aria-label',
-    open ? `Collapse ${dest.city}` : `Show ${dest.city}'s full date grid`);
-  toggle.onclick = () => {
-    if (isExpanded(dest.destination)) expanded.delete(dest.destination);
-    else expanded.add(dest.destination);
-    // Any manual toggle ends the one-time auto-expand, so the winner changing as prices
-    // stream in cannot reopen something the user just closed.
-    userToggled = true;
-    render();
-  };
-  head.appendChild(toggle);
+  /* This card is always the detail pane now: the one selected destination's full grid. The
+     leading control is a "back" affordance — it only matters on a phone, where the grid
+     covers the list; on desktop the list stays beside it and CSS hides the button. */
+  card.classList.add('is-open');
+  const back = document.createElement('button');
+  back.className = 'fillbtn detail-back';
+  back.type = 'button';
+  back.textContent = '‹ All';
+  back.title = 'Back to the destination list';
+  back.setAttribute('aria-label', 'Back to the destination list');
+  back.onclick = () => { document.body.classList.remove('detail-open'); };
+  head.appendChild(back);
 
-  if (!open) {
-    card.appendChild(head);
-    card.appendChild(departureStrip(dest, domain));
-    return card;
-  }
-
-  // Bulk live fill: ~1 minute for a whole grid, and it replaces every estimate with a
-  // real price for the actual passenger mix. This is the answer to sparse cached data.
-  const fillBtn = document.createElement('button');
-  fillBtn.className = 'fillbtn';
-  const state_ = fillState.get(dest.destination);
-  if (state_ && state_.running) {
-    fillBtn.textContent = `${state_.progress}/${state_.total} ✕`;
-    fillBtn.title = 'Click to stop filling';
-    fillBtn.onclick = () => stopFill(dest.destination);
-  } else {
-    fillBtn.textContent = 'Fill live';
-    fillBtn.title = 'Price every cell live for your real passenger mix (about a minute)';
-    fillBtn.onclick = () => startFill(dest);
-  }
+  // No bulk "price every date" here: the cached estimates are close enough to shortlist on,
+  // and clicking any single cell fetches its real live price on demand. Stripping the button
+  // keeps the grid to one job — show the shape of the calendar.
+  //
   // Jump to this matrix's cheapest cell. On a wide window the winner is usually scrolled
   // out of view, and hunting for a yellow ring in a 57x57 grid is exactly the chore this
   // board exists to remove.
@@ -766,8 +762,6 @@ function renderCard(dest, domain) {
   locate.setAttribute('aria-label', `Jump to ${dest.city}'s cheapest date pair`);
   locate.onclick = () => locateBest(card, dest);
   head.appendChild(locate);
-
-  head.appendChild(fillBtn);
 
   /* Widen THIS destination's dates by a week at each end. Per destination because that is
      how the need arises: you narrow to a candidate and want more dates for it, and one
@@ -836,6 +830,8 @@ function renderCard(dest, domain) {
       const td = document.createElement('td');
       if (ret < depart) {
         td.className = 'void';                       // return before departure
+        td.textContent = '–';
+        td.title = 'Return is before departure';
         tr.appendChild(td);
         return;
       }
@@ -857,7 +853,7 @@ function renderCard(dest, domain) {
         td.dataset.r = String(rowIndex);
         wireCell(td, () => {
           pinCross(table, rowIndex, colIndex);
-          verifyCell(dest, { depart, ret });
+          verifyCell(dest, { depart, ret, nights });
         }, `${dest.city}, ${weekday(depart)} ${shortDate(depart)} to ${weekday(ret)} ${shortDate(ret)}. No price yet. Press Enter to fetch it live.`);
         tr.appendChild(td);
         return;
@@ -866,10 +862,12 @@ function renderCard(dest, domain) {
       const value = cellValue(cell);
       const idx = rampIndex(value, domain);
       // Excluded cells stay visible but recede, so you can still see what you ruled out
-      // and how much it would have cost.
+      // and how much it would have cost. A cell we actually priced live is never dimmed,
+      // even if its trip length falls outside what was asked for: the user clicked it and
+      // spent a request on it, so its real number gets shown plainly.
       td.className =
         'priced ' + (idx === null ? 'unscaled' : `q${idx}`) +
-        (cellAllowed(cell) ? '' : ' excluded') +
+        (cellAllowed(cell) || cell.verified ? '' : ' excluded') +
         (cell.verified ? ' verified' : '') +
         // A constant trip length runs along a diagonal, so mark the whole-week ones
         // as a faint guide for reading trip length off the grid.
@@ -947,6 +945,12 @@ function finishCard(card, dest, table) {
       wrap.scrollLeft = saved.x;
       wrap.scrollTop = saved.y;
     });
+  } else {
+    // First time this destination's grid is shown: jump to its cheapest cell and flash it,
+    // exactly like pressing locate. locateBest calls rememberScroll, so from here on the
+    // `saved` branch above restores wherever the user last left this grid. No flash while
+    // the search is still streaming and the selection keeps flipping to the new cheapest.
+    requestAnimationFrame(() => locateBest(card, dest, { quiet: true, flash: !state.source }));
   }
   return card;
 }
@@ -956,15 +960,19 @@ function finishCard(card, dest, table) {
 const tableSort = { key: 'total', dir: 1 };   // price, ascending
 
 function renderTable(ordered) {
+  renderTable._list = ordered;
   const host = $('tableview');
   if (!ordered || !ordered.length) {
     host.replaceChildren();
     return;
   }
   const cur = state.meta.currency;
+  // In the master–detail UI the table is the current destination's grid as text, so its
+  // own name is not a column. It only earns one when several destinations are listed.
+  const single = ordered.length === 1;
   const cols = [
-    { key: 'dest', label: 'Destination', cell: (r) => `${r.dest.city} (${r.dest.destination})`,
-      cmp: (a, b) => a.dest.city.localeCompare(b.dest.city) },
+    ...(single ? [] : [{ key: 'dest', label: 'Destination', cell: (r) => `${r.dest.city} (${r.dest.destination})`,
+      cmp: (a, b) => a.dest.city.localeCompare(b.dest.city) }]),
     { key: 'depart', label: 'Depart', cell: (r) => `${weekday(r.cell.depart)} ${shortDate(r.cell.depart)}`,
       cmp: (a, b) => a.cell.depart.localeCompare(b.cell.depart) },
     { key: 'return', label: 'Return', cell: (r) => `${weekday(r.cell.ret)} ${shortDate(r.cell.ret)}`,
@@ -982,9 +990,14 @@ function renderTable(ordered) {
 
   const rows = [];
   for (const dest of ordered) {
-    for (const cell of dest.cells) rows.push({ dest, cell, value: cellValue(cell) });
+    for (const cell of dest.cells) {
+      const value = cellValue(cell);
+      if (value == null) continue;   // an unpriced date pair is a blank row, not a fare
+      rows.push({ dest, cell, value });
+    }
   }
-  const active = cols.find((c) => c.key === tableSort.key) || cols[4];
+  const active = cols.find((c) => c.key === tableSort.key)
+    || cols.find((c) => c.key === 'total');
   rows.sort((a, b) => active.cmp(a, b) * tableSort.dir || a.value - b.value);
 
   const head = cols.map((c) => {
@@ -1004,11 +1017,11 @@ function renderTable(ordered) {
 /* Click a heading to sort; same column again flips direction. */
 $('tableview').addEventListener('click', (e) => {
   const th = e.target.closest('th[data-sort]');
-  if (!th || !state.lastOrdered) return;
+  if (!th || !renderTable._list) return;
   const key = th.dataset.sort;
   tableSort.dir = tableSort.key === key ? -tableSort.dir : 1;
   tableSort.key = key;
-  renderTable(state.lastOrdered);
+  renderTable(renderTable._list);
 });
 
 /* ------------------------------------------------------------------- verify */
@@ -1205,7 +1218,7 @@ async function verifyCell(dest, cell) {
 function addDays(iso, n) {
   const d = new Date(iso + 'T00:00:00');
   d.setDate(d.getDate() + n);
-  return d.toISOString().slice(0, 10);
+  return isoLocal(d);
 }
 
 /* ---------------------------------------------------------------- cross-hair */
@@ -1243,8 +1256,10 @@ function restorePinned(table) {
 
 /* --------------------------------------------------------------- locate best */
 
-/** Scroll a card's grid so its cheapest cell is centred, and flash it. */
-function locateBest(card, dest) {
+/** Scroll a card's grid so its cheapest cell is centred, and flash it. `quiet` is the
+ *  auto-locate on first opening a destination: same move and flash, but no status line and
+ *  no smooth animation (there is no gesture to follow). */
+function locateBest(card, dest, { quiet = false, flash = true } = {}) {
   const wrap = card.querySelector('.matrix-wrap');
   const target = card.querySelector('td.best-board') || card.querySelector('td.best-here');
   if (!wrap || !target) return;
@@ -1254,17 +1269,21 @@ function locateBest(card, dest) {
   wrap.scrollTo({
     left: Math.max(0, target.offsetLeft - wrap.clientWidth / 2 + target.offsetWidth / 2),
     top: Math.max(0, target.offsetTop - wrap.clientHeight / 2 + target.offsetHeight / 2),
-    behavior: REDUCE_MOTION.matches ? 'auto' : 'smooth',
+    behavior: quiet || REDUCE_MOTION.matches ? 'auto' : 'smooth',
   });
   rememberScroll(dest.destination, wrap);
 
-  target.classList.remove('flash');
-  void target.offsetWidth;          // restart the animation if it is already running
-  target.classList.add('flash');
-  setTimeout(() => target.classList.remove('flash'), 1600);
+  if (flash) {
+    target.classList.remove('flash');
+    void target.offsetWidth;        // restart the animation if it is already running
+    target.classList.add('flash');
+    setTimeout(() => target.classList.remove('flash'), 1600);
+  }
 
-  // Keyboard path: the locate button hands focus to the cheapest cell, so the next
-  // Enter prices it.
+  if (quiet) return;
+
+  // Keyboard path: the locate BUTTON hands focus to the cheapest cell, so the next Enter
+  // prices it. Not on the auto-locate: the user may still be in the search bar or the list.
   if (target.getAttribute('role') === 'button') {
     target.tabIndex = 0;
     target.focus({ preventScroll: true });
@@ -1562,6 +1581,104 @@ function stopAutoVerify() {
   $('growing').hidden = true;
 }
 
+/* ------------------------------------------- live-price the OPEN destination's grid
+
+   With one destination on screen at a time, pricing its whole trip-length band on Google
+   Flights is cheap: one grid is ~40-120 cells, seconds of work, versus the thousands a
+   whole-board fill would be. Kicked off when a destination becomes the selected one, once
+   per destination per search, gated on the same "Auto-refresh" toggle. Moving to another
+   destination cancels the one in flight. */
+const OPEN_FILL_CAP = 120;
+const openFilled = new Set();     // destinations whose band fill has been started this search
+let openFillSource = null;
+let openFillId = null;
+let openFillFor = null;           // destination the active/last fill belongs to
+
+/** Every (departure, return) pair in this destination's asked trip-length band that is not
+ *  already a live price, priced-estimate cells first (cheapest first) then blanks. */
+function bandCells(dest) {
+  const meta = state.meta;
+  const { departs, returns } = axesFor(dest);
+  const span = meta.nights_span && meta.nights_span.length ? new Set(meta.nights_span) : null;
+  const byKey = new Map(dest.cells.map((c) => [c.depart + '|' + c.ret, c]));
+  const out = [];
+  for (const depart of departs) {
+    for (const ret of returns) {
+      if (ret < depart) continue;
+      const nights = Math.round((new Date(ret) - new Date(depart)) / 86400000);
+      if (span && !span.has(nights)) continue;
+      const c = byKey.get(depart + '|' + ret);
+      if (c && c.verified) continue;
+      out.push({ depart, ret, sort: c && cellValue(c) != null ? cellValue(c) : Infinity });
+    }
+  }
+  out.sort((a, b) => a.sort - b.sort);
+  return out.slice(0, OPEN_FILL_CAP).map((c) => ({
+    destination: dest.destination, depart_date: c.depart, return_date: c.ret,
+  }));
+}
+
+function stopOpenFill() {
+  if (openFillId) fetch(`/api/fill/${openFillId}/cancel`, { method: 'POST' }).catch(() => {});
+  if (openFillSource) openFillSource.close();
+  openFillSource = null;
+  openFillId = null;
+}
+
+function fillOpenDestination(dest) {
+  if (!dest || !state.meta || !$('autoverify').checked) return;
+  const code = dest.destination;
+  if (openFillFor === code) return;      // already handled this selection
+  stopOpenFill();
+  openFillFor = code;
+  if (openFilled.has(code)) return;      // already done once this search
+  openFilled.add(code);
+
+  const cells = bandCells(dest);
+  if (!cells.length) return;
+
+  const meta = state.meta;
+  const city = dest.city;
+  fetch('/api/autoverify', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      origin: meta.origin, adults: meta.adults, children: meta.children,
+      currency: meta.currency, nonstop_only: meta.nonstop_only, cells,
+    }),
+  })
+    .then((r) => r.json())
+    .then((data) => {
+      if (!data.fill_id || openFillFor !== code) return;
+      openFillId = data.fill_id;
+      const source = new EventSource(`/api/fill/${data.fill_id}/stream`);
+      openFillSource = source;
+      let since = 0;
+      source.onmessage = (event) => {
+        const msg = JSON.parse(event.data);
+        if (msg.type === 'fill_cell') {
+          const d = state.destinations.get(msg.destination);
+          if (msg.ok && d) { applyCell(d, msg); recomputeBest(msg.destination); }
+          $('growing').hidden = false;
+          $('growing').textContent =
+            `pricing ${city} on Google Flights… ${msg.progress}/${msg.total_cells}`;
+          if (++since >= 5) { since = 0; if (state.selected === code) render(); }
+        } else if (msg.type === 'fill_done') {
+          $('growing').hidden = true;
+        }
+      };
+      const finish = () => {
+        source.close();
+        if (openFillSource === source) stopOpenFill();
+        $('growing').hidden = true;
+        if (state.selected === code) render();
+      };
+      source.addEventListener('end', finish);
+      source.onerror = finish;
+    })
+    .catch(() => { openFillSource = null; openFillId = null; });
+}
+
 function stopFill(code) {
   const st = fillState.get(code);
   if (!st) return;
@@ -1603,26 +1720,32 @@ function startSearch() {
   }
   state.destinations.clear();
   state.meta = null;
-  $('board').replaceChildren();
+  $('dlist').replaceChildren();
+  $('ddetail').replaceChildren();
+  document.body.classList.remove('detail-open', 'has-board', 'show-table');
+  $('tabletoggle').textContent = 'Table';
+  $('tabletoggle').setAttribute('aria-pressed', 'false');
   $('tableview').replaceChildren();
   $('errors').textContent = '';
   $('empty').hidden = true;
-  $('headline').hidden = true;   // no winner until something comes back
-  $('expandall').hidden = true;  // nothing to expand yet either
+  $('boardtools').hidden = true;   // no results yet
   // Orientation is a first-run thing; once you've searched, you know. The date hint is
   // part of that same orientation (the field labels and the first-run lede already say
   // it), and it was costing a permanent line in the status strip above every board.
   $('firstrun').hidden = true;
   $('datehint').hidden = true;
   stopAutoVerify();             // a new search invalidates any in-flight cross-check
+  stopOpenFill();
+  openFilled.clear();
+  openFillFor = null;
   $('growing').hidden = true;   // clear any stale rate-limit / widening notice
   $('note').hidden = true;
   scrollOffsets.clear();
   animatedDests.clear();        // a new board: let every destination animate in again
-  expanded.clear();             // and let the new winner be the one that opens
+  state.selected = null;        // and let the new cheapest be the one that opens
+  userPickedDest = false;
   destAxes.clear();             // every destination back on the board's own axes
   widening.clear();
-  userToggled = false;
   state.searchSignature = searchSignature();
   // Deliberately NOT disabled: a long search used to leave the button dead while it also
   // looked amber/clickable, so changing a setting mid-search trapped you. Pressing Search
@@ -1750,15 +1873,15 @@ function consume(searchId) {
         );
         const mean = cov.reduce((a, b) => a + b, 0) / (cov.length || 1);
         $('progress').textContent =
-          `${msg.destinations} destinations, cheapest first · ${mean.toFixed(0)}% of cells priced`;
+          `${msg.destinations} destinations, cheapest first`;
       } else {
         $('progress').textContent = '';
         $('empty').hidden = false;
         $('empty').textContent = msg.note || 'Nothing came back for this window.';
       }
-      // The backend warns when the window is far enough out that the cache is sparse.
-      $('note').textContent = msg.note || '';
-      $('note').hidden = !msg.note;
+      // The backend's sparse-cache warning is deliberately not surfaced: every estimate is
+      // clickable for a live price, so a "many cells are blank" banner just adds anxiety.
+      $('note').hidden = true;
       // Board is up; now upgrade its cheapest cells to live Google prices in the background.
       if (msg.destinations) startAutoVerify();
     }
@@ -1771,6 +1894,7 @@ function consume(searchId) {
     $('go').textContent = 'Search';
     $('stop').hidden = true;
     markSearchStale();   // settings may have been changed while the search ran
+    if (state.meta) render();   // paint the settled board and kick off the open-grid fill
   };
   source.addEventListener('end', finish);
   source.onerror = finish;
@@ -2119,62 +2243,6 @@ function filterRegionTree(q) {
   }
 }
 
-/* ------------------------------------------------- results filter: country chips */
-
-/** One chip per country on the board. Click a country to show/hide it. Click a country's
-    NAME with nothing else hidden isolates it (show only that one). "All" resets. */
-function renderBoardChips() {
-  const host = $('boardchips');
-  const counts = new Map();      // code -> { name, n }
-  for (const d of state.destinations.values()) {
-    const code = (d.country || '').toUpperCase();
-    if (!code) continue;
-    const e = counts.get(code) || { name: d.country_name || code, n: 0 };
-    e.n += 1;
-    counts.set(code, e);
-  }
-  if (counts.size < 2) { host.hidden = true; host.replaceChildren(); return; }
-
-  const allCodes = [...counts.keys()];
-  const chips = [];
-
-  // "All" — pressed when nothing is hidden. Click toggles show-all / show-none, so
-  // "All off" then one country = only that country.
-  const all = document.createElement('button');
-  all.type = 'button';
-  all.className = 'chip chip-all';
-  all.setAttribute('aria-pressed', String(state.chipHidden.size === 0));
-  all.textContent = 'All';
-  all.addEventListener('click', () => {
-    if (state.chipHidden.size === 0) allCodes.forEach((c) => state.chipHidden.add(c));
-    else state.chipHidden.clear();
-    render();
-  });
-  chips.push(all);
-
-  const rows = [...counts.entries()].sort((a, b) => b[1].n - a[1].n || a[1].name.localeCompare(b[1].name));
-  for (const [code, { name, n }] of rows) {
-    const b = document.createElement('button');
-    b.type = 'button';
-    b.className = 'chip';
-    b.setAttribute('aria-pressed', String(!state.chipHidden.has(code)));
-    b.dataset.code = code;
-    b.innerHTML = `${name} <span class="chip-n">${n}</span>`;
-    b.addEventListener('click', () => {
-      if (state.chipHidden.size === 0) {
-        // Nothing hidden yet: isolate this one.
-        allCodes.forEach((c) => { if (c !== code) state.chipHidden.add(c); });
-      } else {
-        state.chipHidden.has(code) ? state.chipHidden.delete(code) : state.chipHidden.add(code);
-      }
-      render();
-    });
-    chips.push(b);
-  }
-  host.replaceChildren(...chips);
-  host.hidden = false;
-}
-
 /* Currency: with a board loaded, just convert the displayed numbers, no re-search.
    With no board yet, it's simply the currency the next search will fetch in. */
 $('currency').addEventListener('change', (e) => {
@@ -2188,7 +2256,21 @@ $('autoverify').addEventListener('change', (e) => {
   if (e.target.checked) startAutoVerify();
   else stopAutoVerify();
 });
-$('tabletoggle').addEventListener('click', () => document.body.classList.toggle('show-table'));
+/* One pane, two ways to read it: the colour grid or a sortable table of the same fares.
+   The button names the view you'd switch TO. */
+$('tabletoggle').addEventListener('click', () => {
+  const table = document.body.classList.toggle('show-table');
+  $('tabletoggle').textContent = table ? 'Matrix' : 'Table';
+  $('tabletoggle').setAttribute('aria-pressed', String(table));
+});
+
+/* Desktop: fold the ranked list away and let the grid have the whole width. No effect on a
+   phone, where the list and the grid already occupy the screen one at a time. */
+$('listtoggle').addEventListener('click', () => {
+  const collapsed = document.body.classList.toggle('list-collapsed');
+  $('listtoggle').setAttribute('aria-pressed', String(collapsed));
+  $('listtoggle').textContent = collapsed ? 'Show list' : 'Hide list';
+});
 
 /* Mobile: the options bar is collapsed by default behind this toggle, so it stops
    filling the screen. No effect on desktop, where the whole row just wraps. */
@@ -2223,14 +2305,71 @@ $('depart').addEventListener('input', syncReturnDate);
 loadFx();
 buildRegionTree();
 
-// Default period: ~3 weeks starting a month out, looking for a 5-9 night trip inside it.
-$('depart').value = isoToday(30);
-$('ret').value = isoToday(51);
-$('nmin').value = '5';
-$('nmax').value = '9';
+/* "When" is a plain month picker plus an "anytime" span. It just writes the two exact
+   date fields (which still drive everything); Options exposes those directly for anyone
+   who wants a precise window. */
+function buildWhenOptions() {
+  const sel = $('whenselect');
+  const now = new Date();
+  const opts = [new Option('Anytime (next 3 months)', 'flex')];
+  // Airlines load schedules ~11-12 months out; past that the board comes back empty.
+  for (let i = 0; i < 13; i++) {
+    const d = new Date(now.getFullYear(), now.getMonth() + i, 1);
+    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+    opts.push(new Option(d.toLocaleDateString(undefined, { month: 'long', year: 'numeric' }), key));
+  }
+  sel.replaceChildren(...opts);
+}
+
+/** Reflect a preset's day-of-week choice in the picker and the constraint state. */
+function setDow(key, days) {
+  const set = state.constraints[key];
+  set.clear();
+  for (const d of days) set.add(d);
+  const host = $(key === 'dep' ? 'dowdep' : 'dowret');
+  [...host.children].forEach((btn, i) => btn.classList.toggle('on', set.has(i)));
+}
+
+function applyWhen() {
+  const v = $('whenselect').value;
+  if (v === 'flex') {
+    $('depart').value = isoToday(21);
+    $('ret').value = isoToday(21 + 90);
+  } else {
+    const [y, m] = v.split('-').map(Number);
+    const first = new Date(y, m - 1, 1);
+    const last = new Date(y, m, 0);
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    $('depart').value = isoLocal(first < today ? today : first);
+    $('ret').value = isoLocal(last);
+  }
+  syncReturnDate();
+}
+
+function applyTrip() {
+  const [lo, hi] = $('tripselect').value.split(',');
+  $('nmin').value = lo;
+  $('nmax').value = hi;
+  // A "weekend" means leaving Wed/Thu and back Sun/Mon; the longer presets have no
+  // natural shape, so they clear the day filter.
+  const weekendish = $('tripselect').value === '2,3' || $('tripselect').value === '3,4';
+  setDow('dep', weekendish ? [3, 4] : []);       // Wed, Thu
+  setDow('ret', weekendish ? [0, 1] : []);       // Sun, Mon
+}
+
+buildWhenOptions();
+$('whenselect').addEventListener('change', () => { applyWhen(); markSearchStale(); });
+$('tripselect').addEventListener('change', () => {
+  applyTrip();
+  markSearchStale();
+  if (state.meta) render();   // the day-of-week part is a view filter
+});
+
+applyWhen();
+applyTrip();
 
 // A shared/bookmarked board carries its search in the query string; it wins over the
-// isoToday and server defaults, and auto-runs on load.
+// defaults and prefills the form.
 const urlBoard = boardFromUrl(new URLSearchParams(location.search));
 syncDateMode();
 syncReturnDate();

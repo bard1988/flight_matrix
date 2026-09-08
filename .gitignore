@@ -20,3 +20,5 @@ graphify-out/.needs_update
 graphify-out/.graphify_*.tmp
 graphify-out/.graphify_chunk_*.json
 .localvenv/
+.wtvenv/
+.impeccable/

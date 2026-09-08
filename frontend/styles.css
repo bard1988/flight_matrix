@@ -360,7 +360,71 @@ header.controls {
 }
 .board-tools .bt-spacer { flex: 1 1 auto; }
 .board-tools select { font: inherit; margin-left: 4px; }
-.bt-currency { display: inline-flex; align-items: center; }
+.bt-currency { display: inline-flex; align-items: center; gap: 4px; }
+.bt-count { font-weight: 600; color: var(--text-primary); }
+
+/* Toolbar country filter: a compact multi-select dropdown. */
+.ctry-combo { position: relative; }
+.ctry-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font: inherit;
+  font-size: 13px;
+  color: var(--text-primary);
+  background: var(--surface-1);
+  border: 1px solid var(--axis);
+  border-radius: 6px;
+  padding: 3px 9px;
+  cursor: pointer;
+}
+.ctry-caret { color: var(--text-muted); font-size: 10px; }
+.ctry-pop {
+  position: absolute;
+  z-index: 40;
+  top: calc(100% + 4px);
+  left: 0;
+  min-width: 200px;
+  max-height: 300px;
+  overflow-y: auto;
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.18);
+  padding: 4px;
+}
+.ctry-pop label {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 5px 7px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 13px;
+}
+.ctry-pop label:hover { background: var(--page); }
+.ctry-n { margin-left: auto; font-family: var(--mono); font-size: 11px; color: var(--text-muted); }
+
+/* Simple search bar: four fields, generous. */
+.field-where select { min-width: 168px; }
+.field-trip select { min-width: 132px; }
+.controls-primary { align-items: flex-end; }
+.bar-group { align-items: flex-end; }
+
+@media (max-width: 720px) {
+  .controls-primary > .bar-group { flex: 1 1 100%; gap: 8px 10px; }
+  .bar-group > .field { flex: 1 1 100%; }
+  .bar-group > .field-where,
+  .bar-group > .field-trip,
+  .bar-group > .field-pax { flex: 1 1 calc(50% - 5px); }
+  .bar-actions { display: flex; gap: 8px; }
+  .bar-actions > #go { flex: 2 1 0; }
+  .bar-actions > .opts-toggle { flex: 1 1 0; justify-content: center; }
+  .board-tools { flex-wrap: wrap; gap: 8px 12px; font-size: 14px; }
+  .board-tools .bt-spacer { display: none; }
+  .card-head .best { font-size: 18px; }
+  .card-head .card-when { flex-basis: 100%; }
+}
 
 /* Holds the inlined compact lockup, in the control row itself rather than a masthead of
    its own: a brand row tall enough for the tagline costs ~112px of every screen, and the
@@ -469,6 +533,13 @@ header.controls {
   gap: 8px;
 }
 
+/* Travellers in the primary bar: two small steppers, each with its own quiet caption so
+   "2  0" is never ambiguous. */
+.pax { display: flex; gap: 10px; }
+.pax-cell { display: flex; align-items: baseline; gap: 4px; }
+.pax-cell input { width: 34px; min-width: 0; text-align: center; }
+.pax-cell i { font-style: normal; font-size: 11px; color: var(--text-muted); }
+
 /* Day-of-week pickers: seven toggles, empty meaning "any day". */
 .dow { display: flex; gap: 2px; }
 
@@ -570,9 +641,10 @@ body.opts-open .controls-adv {
 
 /* ---------------------------------------------------------------- region tree */
 
-/* Destinations: a multi-select combobox in the trip group. The control shows the current
-   selection as removable tags; clicking or focusing it drops the tree popover. */
-.field-dest { flex: 1 1 210px; min-width: 190px; }
+/* Destinations: a multi-select combobox in the primary bar, right after "From". The control
+   shows the current selection as removable tags; clicking or focusing it drops the tree
+   popover. */
+.field-dest { flex: 1 1 200px; min-width: 180px; max-width: 300px; }
 .dest-combo { position: relative; }
 
 .dest-pop-head {
@@ -652,7 +724,9 @@ body.opts-open .controls-adv {
   position: absolute;
   z-index: 40;
   left: 0;
-  right: 0;
+  right: auto;
+  min-width: 280px;
+  max-width: 92vw;
   top: calc(100% + 4px);
   background: var(--surface-1);
   border: 1px solid var(--border);
@@ -934,6 +1008,94 @@ main {
   background: var(--canvas);
 }
 
+/* ---------------------------------------------------------- results app shell
+
+   Once a board exists the results take over the whole viewport: the page itself stops
+   scrolling, and the list and the grid are two independent panes that scroll on their own.
+   Scrolling the list therefore leaves the grid exactly where it is. Gated on body.has-board
+   so the first-run / empty states keep the ordinary document flow. */
+html:has(body.has-board) { height: 100dvh; overflow: hidden; }
+body.has-board {
+  height: 100dvh;
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+body.has-board header.controls { flex: none; position: static; }
+body.has-board .status { flex: none; margin: 0; padding: 4px 16px; }
+body.has-board main {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+  overflow: hidden;
+}
+body.has-board #firstrun { display: none; }
+body.has-board #footnote { display: none; }
+body.has-board .board-tools { flex: none; margin: 0; padding: 8px 16px; }
+
+/* The advanced panel can be taller than the room the shell leaves for it, so it gets its
+   own scroll when open rather than pushing the panes off-screen. */
+body.has-board.opts-open .controls-adv { max-height: 52vh; overflow-y: auto; }
+
+body.has-board .board-split {
+  flex: 1;
+  min-height: 0;
+  gap: 0;
+  border-top: 1px solid var(--border);
+}
+body.has-board .dlist {
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  border-top: 0;
+  border-right: 1px solid var(--border);
+}
+
+/* The grid pane never scrolls as a whole — the head is fixed and the matrix fills the rest
+   and scrolls inside itself. So there is no pane-height scrollbar at the window's edge, only
+   the matrix's own. */
+body.has-board .ddetail,
+body.has-board .tableview {
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  position: static;
+  max-height: none;
+}
+body.has-board .ddetail {
+  display: flex;
+  padding: 12px 18px 14px;
+}
+/* No top padding on the table's scroll box: a gap there lets rows scroll into view above
+   the sticky header. The header itself sits flush with the pane's top edge instead. */
+body.has-board .tableview { padding: 0 0 14px; }
+body.has-board .tableview th:first-child,
+body.has-board .tableview td:first-child { padding-left: 18px; }
+body.has-board .tableview th:last-child,
+body.has-board .tableview td:last-child { padding-right: 18px; }
+body.has-board .ddetail .card {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+}
+body.has-board .ddetail .card-head { flex: none; }
+body.has-board .matrix-wrap {
+  flex: 1;
+  min-height: 0;
+  max-height: none;
+}
+body.has-board .tableview { overflow: auto; }
+
+/* Desktop: fold the list away, grid takes the full width. Toggled from the toolbar. */
+body.list-collapsed .board-split { grid-template-columns: 1fr; }
+body.list-collapsed .dlist { display: none; }
+.bt-listtoggle[aria-pressed='true'] { color: var(--text-primary); border-color: var(--text-muted); }
+
 /* Results filter: one chip per country on the board. */
 .board-chips {
   display: flex;
@@ -966,28 +1128,126 @@ main {
 .chip-all { font-weight: 600; }
 .chip-all[aria-pressed='false'] { text-decoration: none; opacity: 1; border-style: dashed; }
 
-.board {
+/* Master–detail: a fixed-width ranked list, then the selected grid taking the rest. The
+   real sizing is in the "results app shell" block above (body.has-board); these are just
+   the base shape. */
+.board-split {
   display: grid;
-  /* A destination block never has to fit its whole grid, because the grid scrolls inside
-     it. So blocks can be narrow enough to get several side by side. */
-  grid-template-columns: repeat(auto-fill, minmax(420px, 1fr));
-  /* No row gap: the hairline above each block does the separating, so consecutive rows
-     read as one continuous instrument rather than a tray of tiles. */
-  gap: 0 22px;
-  align-items: start;
+  grid-template-columns: minmax(240px, 300px) minmax(0, 1fr);
+  gap: 0;
+  align-items: stretch;
 }
 
-/* No card container. At this density, boxing every destination costs four borders and a
-   radius per block across twenty blocks and buys nothing the content does not already
-   do: the city name and its own matrix bound the group perfectly well. One hairline
-   above each block separates them, and the board reads as a single surface. */
-.card {
-  padding: 14px 0 20px;
-  border-top: 1px solid var(--gridline);
-  /* A grid item defaults to min-width:auto, which lets the wide matrix inside force the
-     block past its track and the page into horizontal scroll. Let it shrink; the
-     .matrix-wrap then clips and scrolls as intended. */
+.dlist {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.ddetail {
   min-width: 0;
+  min-height: 0;
+  scrollbar-width: thin;
+}
+
+/* One destination = one tight row. Name + country on top, cheapest fare and the ceiling
+   right-aligned, the cheapest date pair underneath in muted text. The whole thing is the
+   button. */
+.lrow {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 1px 8px;
+  width: 100%;
+  text-align: left;
+  padding: 8px 8px 9px;
+  border: 0;
+  border-bottom: 1px solid var(--gridline);
+  background: none;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+.lrow:hover { background: var(--surface-1); }
+.lrow.is-sel { background: var(--surface-1); box-shadow: inset 2px 0 0 0 var(--text-primary); }
+.lrow.is-winner { box-shadow: inset 3px 0 0 0 var(--cheapest); }
+.lrow.is-winner.is-sel { box-shadow: inset 3px 0 0 0 var(--cheapest), inset 2px 0 0 0 var(--text-primary); }
+
+.lrow-city {
+  grid-column: 1;
+  font-size: 13.5px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  line-height: 1.2;
+}
+.lrow-country { font-weight: 400; font-size: 11px; color: var(--text-muted); margin-left: 5px; }
+.lrow-price {
+  grid-column: 2;
+  text-align: right;
+  font-size: 13.5px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.lrow-range { font-weight: 400; font-size: 11px; color: var(--text-muted); margin-left: 3px; }
+.lrow-when {
+  grid-column: 1 / -1;
+  font-size: 11px;
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.25;
+}
+
+/* The detail card: the one open grid. No top border — the pane's own column is the frame. */
+.ddetail .card {
+  padding: 4px 0 20px;
+  border-top: 0;
+  min-width: 0;
+}
+
+/* "‹ All" back control: phone-only. On desktop the list is always visible beside the grid. */
+.detail-back { display: none; }
+
+@media (max-width: 860px) {
+  .board-split,
+  body.has-board .board-split { grid-template-columns: 1fr; gap: 0; }
+  body.has-board .dlist { border-right: 0; }
+
+  /* Phone: the list is the whole screen; picking a destination slides its grid in over it
+     as a fixed layer, and the "‹ All" control brings the list back. */
+  .ddetail,
+  body.has-board .ddetail {
+    display: none;
+    position: fixed;
+    inset: 0;
+    z-index: 60;
+    height: auto;
+    max-height: none;
+    background: var(--canvas);
+    overflow-y: auto;
+    padding: 10px 14px 40px;
+  }
+  body.detail-open .ddetail,
+  body.has-board.detail-open .ddetail { display: flex; }
+  body.detail-open .dlist { display: none; }
+
+  /* Table view on a phone: full-bleed over the list; the Table button toggles it back. */
+  body.has-board .tableview {
+    position: fixed;
+    inset: 0;
+    z-index: 60;
+    padding: 0 0 40px;
+    background: var(--canvas);
+  }
+  body.show-table .dlist { display: none; }
+
+  /* The desktop list-collapse toggle has no meaning here — the panes already swap. */
+  #listtoggle { display: none; }
+
+  .detail-back {
+    display: inline-flex;
+    order: -1;
+    margin: 0 0 4px;
+  }
 }
 
 /* The grid is its own scroll viewport in both axes, sized independently of the grid, so
@@ -1087,11 +1347,20 @@ table.matrix th.corner {
   font-variant-numeric: tabular-nums;
 }
 
+.card-head .best .card-range {
+  margin-left: 4px;
+  font-size: 13px;
+  font-weight: 400;
+  color: var(--text-muted);
+}
+
 .card-head button { order: 3; align-self: center; }
 .card-head::after { content: ''; order: 4; flex-basis: 100%; height: 0; }
 
-.card-head .code { order: 5; color: var(--text-muted); font-size: 11px; }
-.card-head .cov { order: 6; color: var(--text-muted); font-size: 11px; font-variant-numeric: tabular-nums; }
+.card-head .card-country { font-size: 13px; font-weight: 400; color: var(--text-muted); }
+.card-head .card-when { order: 5; color: var(--text-secondary); font-size: 12.5px; font-variant-numeric: tabular-nums; }
+.card-head .code { order: 6; color: var(--text-muted); font-size: 11px; }
+.card-head .cov { order: 7; color: var(--text-muted); font-size: 11px; font-variant-numeric: tabular-nums; }
 
 /* order 7: the calendar-drift warning belongs with the metadata on row 2, not competing
    with the city name. Without an explicit order it would default to 0 and sort first. */
@@ -1283,7 +1552,12 @@ table.matrix td {
   border: 1px solid transparent;
 }
 
-td.void { background: none; }
+td.void {
+  background: none;
+  color: var(--text-muted);
+  text-align: center;
+  opacity: 0.45;
+}
 
 td.nodata {
   background-color: var(--canvas);
@@ -1597,8 +1871,10 @@ table.matrix td.cross-at {
 
 /* ---------------------------------------------------------------- table view */
 
+/* Table view is an alternative to the GRID, not the whole board: the ranked list stays,
+   and the table takes the grid pane's place. */
 .tableview { display: none; }
-body.show-table .board { display: none; }
+body.show-table .ddetail { display: none; }
 body.show-table .tableview { display: block; }
 
 .tableview table {
@@ -1618,9 +1894,13 @@ body.show-table .tableview { display: block; }
   color: var(--text-muted);
   font-weight: 600;
   position: sticky;
-  top: 72px;
-  /* Sticky, so it paints over the scrolling rows: match the canvas it sits on. */
-  background: var(--canvas);
+  top: 0;
+  z-index: 2;
+  /* Sticky, so it paints over the scrolling rows: an opaque ground plus its own bottom rule
+     (border-collapse hands the shared border to the cells, which then scroll out from under
+     it). */
+  background: var(--surface-1);
+  box-shadow: inset 0 -1px 0 0 var(--gridline);
   cursor: pointer;
   user-select: none;
 }
