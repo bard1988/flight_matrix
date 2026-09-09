@@ -22,7 +22,7 @@ Things worth doing, not yet scheduled.
 | 8 | **Design pass** — use the `design` skill / a proper design system | L | in progress |
 | 15 | **Discovery coverage — the whole world, not just short-haul** — Kiwi's `returnOnePerCityItineraries` for TLV returns ~160 nearby cities and nothing long-haul (no sub-Saharan Africa, thin on Asia / S. America), so "To: Africa" yields only Marrakesh. Plan of record in **Lever 3**. Committed near-term: **15.0** (OurAirports data) + **15A** (seed discovery from the curated list). Endgame: **15C** (Google price-graph board), gated on a spike. | L | in progress (plan set) |
 | 15.0 | **OurAirports data** — replace the Travelpayouts airport dump with OurAirports (`type`, `scheduled_service`, lat/long, country). Prerequisite for 15A, 15C and #9.1. `data/build_airports.py`, same pattern as `build_countries.py`. | S–M | todo |
-| 15A | **Seed discovery from the curated list** — when `country_codes` (or a typed destination) is set and the live city board returns few/none inside it, top up candidates from OurAirports (region-filtered, ranked by `type`/scheduled_service, capped at the budget) and price them with the existing `fill_matrix`. Works today on Kiwi/TP. Stepping stone to 15C — same fill/stream/rank path, static list instead of Google. | M | todo |
+| 15A | **Seed discovery from the curated list** — when a region/destination filter is set and the live board returns few/none inside it, run our own discovery: OurAirports region universe → shortlist by `type`/scheduled_service → **cheap per-airport price probe** (`prices_for_dates` with destination) to find what actually flies from the origin → fill the survivors cheapest-first via the existing `fill_matrix`. Works today on Kiwi/TP. Stepping stone to 15C. | M | todo |
 | 15C | **Google price-graph board provider** (was "Lever 1") — promote `google_flights.py` to a first-class board provider with `discover()` + `fill_matrix()` via the keyless price-graph RPC. Google isn't IP-blocking the VM and returns real party totals (2026-09-07 spike). **Blocked:** the batched call needs the `SNlM0e` XSRF token Google withholds from anonymous clients; point-query fallback measured ~15–20 min/20 dests. Needs a spike before committing. Endgame, not near-term. | L | spike |
 | 15.1 | — Egypt (Sharm, Hurghada, Cairo) is classified `Asia / Middle East` in `data/build_countries.py`, so the **Africa** filter excludes the one well-connected part of Africa from TLV. Decide: move Egypt to `Africa / Northern Africa`, or surface it under both. | S | todo |
 
@@ -208,12 +208,27 @@ give us that ranking. New `data/build_airports.py`, same pattern as `build_count
 
 **15A — seed discovery from the curated list.** `M`  *(ship first for immediate relief)*
 In `board.build`, when `request.country_codes` (or a typed `destination_filter`) is set
-**and** the live city board returns few/none inside the selection, top up the candidate
-list from OurAirports: filter to the selected countries, rank by `type` /
-`scheduled_service`, cap at the destination budget, then price each with the **existing**
-`fill_matrix` — the same preview-first streaming and ranked-list path everything else
-uses. No new provider: works today on Kiwi/TP. This is 15C's discovery step done offline,
-so building it cleanly (a "fill this explicit list of destinations" path) is a stepping
+**and** the live city board returns few/none inside the selection, run our own discovery
+over a funnel instead of trusting the provider's "where can I go" call:
+
+1. **Universe** — OurAirports, filtered to the selected countries/region (~9k worldwide
+   with scheduled service → hundreds per continent, ~5–30 per country).
+2. **Shortlist** — rank by `type` (large → medium) + `scheduled_service`, cap at ~100
+   (or take all, for a single small country).
+3. **Probe** — one cheap call per shortlisted airport: Travelpayouts `prices_for_dates`
+   **with** an explicit `destination` (the discovery call already used with it omitted),
+   or the Kiwi equivalent. Keeps only airports that come back with a real
+   origin→airport price this month; that price is the seed for ranking. ~600 calls/min,
+   so ~100 airports ≈ 10–12s, a single country ≈ 2–4s. This is the step that answers
+   "which of these is actually reachable from TLV" — OurAirports says what *exists*, the
+   probe says what *flies*.
+4. **Fill** — merge the survivors into `candidates`, re-rank cheapest-first, then the
+   **existing** budget cap + `fill_matrix` loop + preview-first streaming.
+
+Gated on a filter being set: "To: Everywhere" keeps the current ~160-city board (the
+cheapest-anywhere genuinely *is* nearby, so probing 9k airports every search is waste).
+No new provider — works today on Kiwi/TP. This is 15C's discovery step done offline, so
+building it cleanly (a "discover a candidate list, then fill it" path) is a stepping
 stone, not throwaway.
 
 **15C — Google price-graph board provider.** `L`  *(the real arc — needs a spike first)*
