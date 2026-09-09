@@ -43,13 +43,17 @@ const fmtStops = (n) =>
 const REDUCE_MOTION = window.matchMedia('(prefers-reduced-motion: reduce)');
 
 /* Cycling dots for the "still working" lines ("Finding dates", "Finding cheap
-   destinations"). One shared counter, advanced by a single interval (below, after init).
-   Every ellipsis reads the CURRENT frame when it is built, so the list rebuilding many
-   times a second while grids stream in re-applies the same frame instead of resetting the
-   cycle to a fixed string. */
+   destinations"). One shared counter, advanced by a rAF loop (dotLoop, below). Every
+   ellipsis reads the CURRENT frame when it is built, so the list rebuilding many times a
+   second while grids stream in re-applies that frame instead of resetting the cycle.
+
+   NOT gated on prefers-reduced-motion: a text loading indicator is not vestibular motion,
+   and this runs where a CSS keyframe animation would be damped to nothing by the global
+   reduced-motion rule anyway. rAF (not setInterval) because mobile browsers throttle
+   background timers hard; rAF just pauses with the tab, which is what we want. */
 const DOT_FRAMES = ['.', '..', '...'];
 let dotFrame = 0;
-const dots = () => (REDUCE_MOTION.matches ? '...' : DOT_FRAMES[dotFrame % DOT_FRAMES.length]);
+const dots = () => DOT_FRAMES[dotFrame % DOT_FRAMES.length];
 
 /* ----------------------------------------------- shareable / bookmarkable board URL */
 
@@ -2481,18 +2485,23 @@ $('depart').addEventListener('input', syncReturnDate);
 loadFx();
 buildRegionTree();
 
-/* Advance the shared dot frame and write it into every ellipsis currently on the page.
-   New spans built between ticks already carry the current frame (see `dots()`), so this
-   only has to nudge the ones that are already mounted. */
-if (!REDUCE_MOTION.matches) {
-  setInterval(() => {
+/* Advance the shared dot frame ~every 320ms and write it into every ellipsis on the page.
+   New spans built between ticks already carry the current frame (see `dots()`); this nudges
+   the ones already mounted. */
+let dotAt = 0;
+function dotLoop(now) {
+  if (now - dotAt >= 320) {
+    dotAt = now;
     const els = document.getElementsByClassName('ellipsis');
-    if (!els.length) return;
-    dotFrame += 1;
-    const s = DOT_FRAMES[dotFrame % DOT_FRAMES.length];
-    for (const el of els) el.textContent = s;
-  }, 320);
+    if (els.length) {
+      dotFrame += 1;
+      const s = DOT_FRAMES[dotFrame % DOT_FRAMES.length];
+      for (const el of els) el.textContent = s;
+    }
+  }
+  requestAnimationFrame(dotLoop);
 }
+requestAnimationFrame(dotLoop);
 
 /* "When" is a plain month picker plus an "anytime" span. It just writes the two exact
    date fields (which still drive everything); Options exposes those directly for anyone
