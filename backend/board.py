@@ -178,6 +178,7 @@ def _apply_verified(
     matrix: DestinationMatrix,
     depart_dates: list[date] | None = None,
     return_dates: list[date] | None = None,
+    verified: dict[tuple[str, str, str], dict[str, Any]] | None = None,
 ) -> None:
     """Overlay previously verified live totals onto this window's cells.
 
@@ -185,13 +186,19 @@ def _apply_verified(
     for this origin, so without them a board for next April would inherit prices verified
     for this October, inflating the cell count past the grid size and hijacking the
     headline price.
+
+    `verified` is the whole origin's verified set. It does not vary by destination, so a
+    board build reads it ONCE and passes it in; looking it up per destination re-ran the
+    same query 20 times per board for an identical result (measured: 15 ms a time).
     """
     bounds = None
     if depart_dates and return_dates:
         bounds = (depart_dates[0].isoformat(), depart_dates[-1].isoformat(),
                   return_dates[0].isoformat(), return_dates[-1].isoformat())
 
-    verified = cache.get_all_verified(request.origin, request.adults, request.children, request.currency)
+    if verified is None:
+        verified = cache.get_all_verified(
+            request.origin, request.adults, request.children, request.currency)
     for (destination, depart, ret), record in verified.items():
         if destination != matrix.destination:
             continue
@@ -220,6 +227,43 @@ def _apply_verified(
         # verified Travelpayouts cell offered "Book on Aviasales" pointing at Google
         # Flights: the booking deeplink was destroyed and the Google link served twice,
         # once under the wrong name.
+
+
+def _preview_payload(
+    request: SearchRequest,
+    provider: Any,
+    destination: str,
+    seed_price: float,
+    index: int,
+    total: int,
+) -> dict[str, Any]:
+    """A destination card carrying only the headline price discovery already returned.
+
+    Discovery prices the real passenger mix, so `preview_price` is a party total for a trip
+    that exists - it is simply not yet attributable to a date PAIR, because the discovery
+    query returns a departure date and a price and no return date. Rather than infer the
+    return (the mistake that put unbookable prices on the board once already, see
+    `_return_column`), the preview carries no cells and no `best`, and the UI labels it as
+    still finding dates. The grid fill replaces this card wholesale a moment later.
+    """
+    info = _describe(provider, destination)
+    country = info.get("country") or ""
+    return {
+        "type": "destination",
+        "preview": True,
+        "origin": request.origin.upper(),
+        "destination": destination.upper(),
+        "city": info.get("city") or destination.upper(),
+        "country": country,
+        "country_name": airports.country_name(country),
+        "best": None,
+        "preview_price": round(float(seed_price), 2),
+        "currency": request.currency,
+        "coverage": {"populated": 0, "valid": 0},
+        "cells": [],
+        "index": index,
+        "total_candidates": total,
+    }
 
 
 def build(
@@ -358,6 +402,20 @@ def build(
         )
         return
 
+    # Headline-only cards for everything we are about to price, so the ranked list is on
+    # screen after one call instead of after the whole board. Only as many as will actually
+    # be filled: `candidates` is over-fetched by CANDIDATE_MULTIPLIER, and previewing a
+    # destination the loop never reaches would leave a card stuck at "finding dates".
+    if config.PREVIEW_FIRST:
+        for index, (destination, seed_price) in enumerate(candidates[:request.max_destinations]):
+            yield emit(_preview_payload(request, provider, destination, seed_price,
+                                        index, len(candidates)))
+
+    # Read once for the whole board rather than once per destination: the verified set is
+    # keyed by origin and passenger mix, not by destination.
+    verified = cache.get_all_verified(
+        request.origin, request.adults, request.children, request.currency)
+
     filled = 0
     empty = 0
     failovers = 0        # destinations that fell back to the cached source mid-board
@@ -380,7 +438,17 @@ def build(
         # a cache written under an older, narrower fetch strategy (or for a smaller window)
         # easily clears "20 cells" while missing whole diagonals, and would then never be
         # refetched.
-        _, valid_cells = cached.coverage(depart_dates, return_dates) if cached else (0, 0)
+        # `nights` is required. Without it coverage counts the whole depart <= return
+        # triangle, but only the trip lengths in the nights range are askable, so a
+        # COMPLETE grid scored 115/435 = 0.26 and never cleared CACHE_REUSE_MIN_FRACTION.
+        # The effect was that no Kiwi grid was ever reused: every repeat search refetched
+        # the whole board, which is precisely what the cache exists to prevent (and the
+        # main way the rate limit gets tripped). `coverage` warns about this in its own
+        # docstring; `to_json` already passes it.
+        _, valid_cells = (
+            cached.coverage(depart_dates, return_dates, nights=request.nights_span())
+            if cached else (0, 0)
+        )
         complete_enough = (
             cached is not None
             and len(cached.cells) >= config.CACHE_REUSE_MIN_CELLS
@@ -388,7 +456,7 @@ def build(
             and len(cached.cells) / valid_cells >= config.CACHE_REUSE_MIN_FRACTION
         )
         if complete_enough:
-            _apply_verified(request, cached, depart_dates, return_dates)
+            _apply_verified(request, cached, depart_dates, return_dates, verified)
             _prune_to_nights(request, cached)
             info = airports.describe(destination)
             cached.city, cached.country = info["city"], info["country"]
@@ -462,7 +530,7 @@ def build(
         if not request.has_search_filters:
             cache.put_cells(request.origin, destination, request.currency, matrix.cells.values(),
                         party=request.party_key)
-        _apply_verified(request, matrix, depart_dates, return_dates)
+        _apply_verified(request, matrix, depart_dates, return_dates, verified)
         _prune_to_nights(request, matrix)
 
         info = airports.describe(destination)
@@ -558,6 +626,10 @@ def sort_key(destination: dict[str, Any]) -> float:
     for field in ("total", "estimate"):
         if best.get(field) is not None:
             return float(best[field])
+    # A preview card has no cells yet, but discovery already priced it, so rank it on that
+    # rather than dumping every unfilled destination at the bottom of the list.
+    if destination.get("preview_price") is not None:
+        return float(destination["preview_price"])
     return float("inf")
 
 

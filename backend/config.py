@@ -105,9 +105,25 @@ FILL_WORKERS = int(os.environ.get("FM_FILL_WORKERS", "4"))
 # Kiwi.com: which board provider to use, and how its grid fill is paced.
 # Each Kiwi calendar call fills one constant-nights diagonal of the matrix.
 BOARD_PROVIDER = os.environ.get("FM_BOARD_PROVIDER", "kiwi")  # kiwi | travelpayouts
-KIWI_WORKERS = int(os.environ.get("FM_KIWI_WORKERS", "2"))
-# Minimum seconds between Kiwi calls. It IP-blocks bursts and a block lasts minutes.
-KIWI_MIN_INTERVAL = float(os.environ.get("FM_KIWI_MIN_INTERVAL", "0.8"))
+KIWI_WORKERS = int(os.environ.get("FM_KIWI_WORKERS", "4"))
+# Seconds between Kiwi calls, as a STARTING point - the provider now adapts it (see
+# KIWI_MAX_INTERVAL). It IP-blocks on volume and a block lasts a long time.
+#
+# Measured (data/bench_search.py, TLV, 30-day period, 5-9 nights):
+#   0.8s  -> 1.21 calls/s achieved, i.e. the pacer, not Kiwi, was the binding constraint
+#   0.0s / 8 workers -> 4.9x faster over 5 destinations with zero 403s, but over 20
+#     destinations it sustained ~6.6 calls/s for ~230 calls and then took a 403 that
+#     lasted over half an hour, during which the board served Travelpayouts estimates.
+# So there is real headroom above 0.8s but the ceiling is volume-based and the penalty is
+# severe. 0.4s is half the old interval with the adaptive backoff below as the guard.
+KIWI_MIN_INTERVAL = float(os.environ.get("FM_KIWI_MIN_INTERVAL", "0.4"))
+# The pacing interval is adaptive: every 403 doubles it (up to this ceiling) and a run of
+# clean responses eases it back down towards KIWI_MIN_INTERVAL. A fixed interval has to be
+# pessimistic enough for the worst case at all times; this one only pays for the block it
+# actually meets.
+KIWI_MAX_INTERVAL = float(os.environ.get("FM_KIWI_MAX_INTERVAL", "3.0"))
+# Clean responses needed at the current interval before easing it back down a step.
+KIWI_RECOVER_AFTER = int(os.environ.get("FM_KIWI_RECOVER_AFTER", "25"))
 
 # Route ONLY Kiwi's calls through a proxy, to get off the datacenter IP Kiwi rate-limits
 # hardest (Google and Travelpayouts stay direct). Format: http://user:pass@host:port.
@@ -186,6 +202,28 @@ PARSER_VERSION = 2
 # Discovery over-fetches candidates because cached coverage is thin: many destinations
 # come back with an empty grid, so ask for more than we need and stop once enough fill.
 CANDIDATE_MULTIPLIER = float(os.environ.get("FM_CANDIDATE_MULTIPLIER", "3.0"))
+
+# Emit every destination as a headline-only PREVIEW card the moment discovery returns,
+# then upgrade each one in place as its grid fills.
+#
+# Discovery already returns a real party total per city in a single call, and the UI is
+# master-detail: exactly one grid is on screen at a time (frontend/app.js, isExpanded).
+# Filling all 20 grids before the board is usable meant ~500 calls and ~7 minutes to show
+# something the user could act on, of which ~95% of the fetched cells were off screen.
+# Previews make the ranked list usable after one call; the grids still arrive, just behind
+# the answer instead of in front of it.
+PREVIEW_FIRST = os.environ.get("FM_PREVIEW_FIRST", "1") != "0"
+
+# How many destination grids to fill concurrently. The provider's pacer is global, so this
+# does not raise the request rate - it keeps the rate budget saturated across destinations
+# instead of draining the pool at the tail of each one and idling through the sequential
+# headline re-check.
+BOARD_PREFETCH = int(os.environ.get("FM_BOARD_PREFETCH", "3"))
+
+# Completed boards are kept in `searches` so a link to one still resolves. They are large
+# (measured: up to 1.8 MB of JSON each) and were never pruned - 69 MB of a 77 MB cache
+# database. Keep the most recent N and drop the rest.
+SEARCH_HISTORY_KEEP = int(os.environ.get("FM_SEARCH_HISTORY_KEEP", "50"))
 
 # Rate limits, requests per minute, per the Travelpayouts docs.
 RATE_LIMITS = {

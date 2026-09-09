@@ -410,11 +410,12 @@ function render() {
     }
   }
 
-  const ordered = visible.sort((a, b) => {
-    const av = a.shownBest ? cellValue(a.shownBest) : Infinity;
-    const bv = b.shownBest ? cellValue(b.shownBest) : Infinity;
-    return av - bv;
-  });
+  // A preview card has no cells yet but discovery already priced it, so rank it on that.
+  // Without this every not-yet-filled destination sorts to the bottom and the list
+  // visibly reshuffles as each grid lands.
+  const rank = (d) => (d.shownBest ? cellValue(d.shownBest)
+    : d.preview_price != null ? d.preview_price : Infinity);
+  const ordered = visible.sort((a, b) => rank(a) - rank(b));
 
   const active = constraintsActive();
   if (active) {
@@ -467,8 +468,15 @@ function render() {
   // Left: the ranked list, one tight row per destination. Right: the selected one's grid.
   $('dlist').replaceChildren(...ordered.map((dest) => listRow(dest, dest === selDest)));
   const detail = $('ddetail');
-  if (selDest) {
+  if (selDest && selDest.cells.length) {
     detail.replaceChildren(renderCard(selDest, scaleDomain(selDest.allowed)));
+  } else if (selDest) {
+    // Selected, but its grid has not arrived yet - the list is up first now. Say which
+    // destination is loading rather than rendering an empty matrix shell.
+    const wait = document.createElement('p');
+    wait.className = 'detail-waiting';
+    wait.textContent = `Loading the ${selDest.city} grid…`;
+    detail.replaceChildren(wait);
   } else {
     detail.replaceChildren();
   }
@@ -637,15 +645,21 @@ function listRow(dest, isSel) {
   if (isSel) b.classList.add('is-sel');
   b.setAttribute('aria-current', isSel ? 'true' : 'false');
 
-  const best = dest.shownBest ? cellValue(dest.shownBest) : null;
+  // Until the grid lands the row shows discovery's headline price, which is a real party
+  // total for a real trip - just not yet pinned to a date pair, so the dates read as
+  // pending rather than being guessed.
+  const isPreview = dest.preview && !dest.shownBest;
+  const best = dest.shownBest ? cellValue(dest.shownBest)
+    : isPreview ? dest.preview_price : null;
   const priced = (dest.allowed || []).map(cellValue).filter((v) => v != null);
   const hi = priced.length ? Math.max(...priced) : null;
-  const range = best != null && hi != null && hi > best
+  const range = !isPreview && best != null && hi != null && hi > best
     ? `<span class="lrow-range">&ndash;&#8202;${fmtMoney(hi, meta.currency)}</span>` : '';
   const bc = dest.shownBest;
   const when = bc
     ? `${weekday(bc.depart)} ${shortDate(bc.depart)} &rarr; ${weekday(bc.ret)} ${shortDate(bc.ret)} ` +
       `&middot; ${bc.nights}n`
+    : isPreview ? 'from &middot; finding dates&hellip;'
     : 'no fare yet';
 
   b.innerHTML =
@@ -1730,9 +1744,15 @@ function consume(searchId) {
       expected = msg.count;
       $('progress').textContent = `${expected} destinations found, filling grids…`;
     } else if (msg.type === 'destination') {
+      // Previews arrive first and are replaced in place by the filled card, so only the
+      // filled one counts towards progress - otherwise a 20-destination board reports 40.
       state.destinations.set(msg.destination, msg);
-      seen += 1;
-      $('progress').textContent = `${seen} of ${expected} destinations…`;
+      if (msg.preview) {
+        $('progress').textContent = `${state.destinations.size} destinations, filling grids…`;
+      } else {
+        seen += 1;
+        $('progress').textContent = `${seen} of ${expected} grids…`;
+      }
       $('empty').hidden = true;
       $('empty').classList.remove('is-searching');
       render();

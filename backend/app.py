@@ -136,7 +136,15 @@ def _run_search(search_id: str, request: SearchRequest) -> None:
         channel.put({"type": "error", "message": str(exc)})
     finally:
         _cancelled.discard(search_id)
-        destinations = [e for e in collected if e.get("type") == "destination"]
+        # Each destination is emitted twice - once as a headline-only preview, then again
+        # with its filled grid - and the stream upgrades the card in place. The saved
+        # snapshot is a single final board, so keep only the last event per destination or
+        # a reopened link would show every city twice, once with an empty grid.
+        latest: dict[str, dict[str, Any]] = {}
+        for event in collected:
+            if event.get("type") == "destination":
+                latest[event["destination"]] = event
+        destinations = list(latest.values())
         destinations.sort(key=board.sort_key)
         snapshot = {
             "meta": next((e for e in collected if e.get("type") == "meta"), {}),

@@ -46,10 +46,12 @@ Three properties of the current build matter once more than one person uses it:
 * **One shared rate limiter, one shared cache.** This is the reason to host centrally
   rather than have everyone run their own copy: the Kiwi pacing lock is process-global, so
   a single server cannot stampede the provider, and one person's filled grid is served to
-  the next person from SQLite. The flip side is throughput - a 20-destination board is
-  ~300 provider calls paced at `FM_KIWI_MIN_INTERVAL` (0.8s), i.e. about 4-5 minutes of
-  provider time, and concurrent searches queue behind each other. Overlapping searches are
-  nearly free; searches in different months are not.
+  the next person from SQLite. The flip side is throughput - a 20-destination board over a
+  30-day travel period is **501 provider calls** (one per return date per destination, plus
+  discovery), paced by `FM_KIWI_MIN_INTERVAL`, and concurrent searches queue behind each
+  other. Overlapping searches are nearly free; searches in different months are not.
+  The board no longer makes you wait for all of it: discovery alone puts the ranked
+  destination list on screen, and the grids fill in behind it (see *Previews first*).
 
 SQLite runs in WAL mode with a 5s busy timeout so one user's board fill does not block
 another user's reads.
@@ -233,6 +235,24 @@ the airline's. And `visibleDates` is mandatory and may be combined with only *on
 
 Set `FM_BOARD_PROVIDER=travelpayouts` to switch back to the cached source.
 
+### Previews first: the list before the grids
+
+The UI is master-detail - exactly one destination's grid is on screen at a time. Filling
+all 20 grids before showing anything meant ~500 calls and minutes of waiting to render a
+list that discovery had already priced in a single call, with ~95% of the fetched cells
+off screen.
+
+So `board.build` now emits a headline-only **preview** card per destination straight after
+discovery (`type: destination`, `preview: true`, `preview_price`), then re-emits each card
+with its filled grid. The frontend keys destinations by IATA code, so the second event
+upgrades the card in place.
+
+A preview carries `preview_price` and **no cells and no `best`**. Discovery returns a
+departure date and a party total but no return date, and inferring the return is exactly
+the bug that once put unbookable prices on the board (see `_return_column`), so the row
+shows the price with *"finding dates…"* rather than a guessed pair. Set
+`FM_PREVIEW_FIRST=0` to go back to filling every grid before the first card appears.
+
 ### Kiwi rate limiting, and how it is handled
 
 Kiwi blocks bursts by IP with a bare `403`, no `Retry-After`, and the block lasts minutes.
@@ -257,10 +277,16 @@ Five things keep it out of your way, in order of how much they matter:
    Measured symptom: a Larnaca grid sat at 85/180 cells (47%), missing every trip length
    under 7 nights, and no amount of re-searching would fill it. With the fraction check it
    refetches and reaches 170/180 (94%).
-3. **Pacing.** `FM_KIWI_MIN_INTERVAL` (0.8s) between calls, `FM_KIWI_WORKERS` (2) concurrency.
+3. **Adaptive pacing.** `FM_KIWI_MIN_INTERVAL` (0.4s) between calls to start,
+   `FM_KIWI_WORKERS` (4) concurrency. Every 403 doubles the interval up to
+   `FM_KIWI_MAX_INTERVAL` (3.0s); `FM_KIWI_RECOVER_AFTER` (25) clean responses ease it back
+   down a step. A fixed interval has to be pessimistic on every call forever; this one pays
+   for a block only once it meets one, and does not let one bad minute slow every later
+   search. Measured with `data/bench_search.py`: the old fixed 0.8s achieved 1.21 calls/s,
+   i.e. the pacer and not Kiwi was the binding constraint.
 4. **Waiting it out, visibly.** On a 403 the provider backs off 8 → 16 → 32 → 45s up to
-   `FM_KIWI_WAIT_BUDGET` (default 180s), streaming *"Kiwi is rate-limiting; waiting 16s
-   then retrying (24s of 180s budget used)"* to the status bar, so a pause reads as waiting
+   `FM_KIWI_WAIT_BUDGET` (default 40s), streaming *"Kiwi is rate-limiting; waiting 16s
+   then retrying (24s of 40s budget used)"* to the status bar, so a pause reads as waiting
    rather than hanging. The block state is **shared across threads**, so a grid fill pauses
    once as a whole instead of each worker burning the budget separately.
 5. **Fallback last.** Only after the budget is spent does it drop to Travelpayouts, and it
@@ -436,13 +462,14 @@ All optional, via `.env` or environment:
 | `FM_FILL_WORKERS` | `4` | concurrent Google Flights lookups during Fill live |
 | `FM_BOARD_PROVIDER` | `kiwi` | `kiwi` (real party totals) or `travelpayouts` (estimates) |
 | `FM_KIWI_WORKERS` | `4` | concurrent Kiwi calendar calls per destination |
-| `FM_KIWI_NIGHTS_CEILING` | `60` | longest trip length the diagonal fill will request |
-| `FM_KIWI_MAX_DIAGONALS` | uncapped | cap on trip lengths fetched; nearest-to-anchor kept |
-| `FM_KIWI_MIN_INTERVAL` | `0.8` | seconds between Kiwi calls; it IP-blocks bursts |
+| `FM_KIWI_NIGHTS_CEILING` | `60` | longest trip length the grid fill will request |
+| `FM_KIWI_MIN_INTERVAL` | `0.4` | starting seconds between Kiwi calls, and the floor the adaptive pacer eases back to |
+| `FM_KIWI_MAX_INTERVAL` | `3.0` | ceiling the pacer widens to after repeated 403s |
+| `FM_KIWI_RECOVER_AFTER` | `25` | clean responses before the pacer eases back down a step |
+| `FM_PREVIEW_FIRST` | `1` | emit headline-only cards from discovery before filling grids |
+| `FM_SEARCH_HISTORY_KEEP` | `50` | completed boards retained in `searches`; older ones are pruned |
 | `FM_CACHE_REUSE_MIN_FRACTION` | `0.85` | share of a window's valid cells a cached grid needs before it is reused |
 | `FM_KIWI_CACHE_HOURS` | `6` | how long a filled grid stays reusable |
-| `FM_WINDOW_STEP` | `7` | days added to the window each time it widens |
-| `FM_MAX_WINDOW_DAYS` | `28` | widest the window can get (±28 = a 57 × 57 grid) |
 | `FM_CA_BUNDLE` | merged bundle | CA bundle for outbound HTTPS |
 | `FM_DEMO` | *(unset)* | `1` for synthetic data |
 

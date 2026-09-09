@@ -1817,3 +1817,13 @@ body.show-table .tableview { display: block; }
 @media (max-height: 480px) {
   header.controls { position: static; }
 }
+
+/* Detail pane before the selected destination's grid has arrived. The ranked list is on
+   screen after one discovery call now, so this state is briefly visible on every search
+   rather than never. */
+.detail-waiting {
+  margin: 0;
+  padding: 24px 0;
+  color: var(--text-secondary);
+  font-size: 13px;
+}

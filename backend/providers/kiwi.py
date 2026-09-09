@@ -257,6 +257,10 @@ class KiwiProvider:
         self._client = self._new_client()
         self._next_allowed = 0.0
         self._blocked_until = 0.0
+        # Adaptive pacing: start at the configured interval, widen on a 403, ease back
+        # after a run of clean responses. `_clean` counts the current run.
+        self._interval = max(0.0, config.KIWI_MIN_INTERVAL)
+        self._clean = 0
         self.strategy = "kiwi-calendar"
         # Set when the most recent fill_matrix hit a rate limit / transport error on one
         # or more columns. board.build reads it to fail the rest of the board over to the
@@ -295,6 +299,10 @@ class KiwiProvider:
 
         The wait is shared across threads: when one call gets a 403 the whole provider
         pauses, so a grid fill does not spend its retry budget many times over in parallel.
+
+        The interval is adaptive (see `_slower` / `_faster`). A fixed interval has to be
+        pessimistic enough for the worst case on every call; this one starts optimistic and
+        pays for a block only once it actually meets one.
         """
         while True:
             with self._lock:
@@ -302,11 +310,38 @@ class KiwiProvider:
                 blocked_for = self._blocked_until - now
                 if blocked_for <= 0:
                     wait = max(0.0, self._next_allowed - now)
-                    self._next_allowed = max(now, self._next_allowed) + config.KIWI_MIN_INTERVAL
+                    self._next_allowed = max(now, self._next_allowed) + self._interval
                     break
             time.sleep(min(blocked_for, 2.0))
         if wait:
             time.sleep(wait)
+
+    def _slower(self) -> None:
+        """A 403 arrived: double the interval, up to the ceiling, and reset the run."""
+        with self._lock:
+            self._clean = 0
+            widened = min(self._interval * 2, config.KIWI_MAX_INTERVAL)
+            if widened <= self._interval:
+                return
+            self._interval = widened
+        self._note(f"Kiwi pushed back - pacing Kiwi calls {widened:.2f}s apart from here.")
+
+    def _faster(self) -> None:
+        """A clean response. After a run of them, ease the interval back down a step.
+
+        Without this the first 403 of a long board would permanently halve the rate for
+        every search after it, which is how a single bad minute becomes a slow afternoon.
+        """
+        with self._lock:
+            self._clean += 1
+            if self._clean < config.KIWI_RECOVER_AFTER:
+                return
+            self._clean = 0
+            eased = max(self._interval / 2, config.KIWI_MIN_INTERVAL)
+            if eased >= self._interval:
+                return
+            self._interval = eased
+        self._note(f"Kiwi steady - easing pacing back to {eased:.2f}s between calls.")
 
     def _note(self, message: str) -> None:
         if self.on_status:
@@ -358,6 +393,7 @@ class KiwiProvider:
                     continue
 
             if response.status_code in (403, 429):
+                self._slower()
                 backoff = min(config.KIWI_BACKOFF_BASE * (2 ** attempt), config.KIWI_BACKOFF_MAX)
                 if spent + backoff > config.KIWI_WAIT_BUDGET:
                     last = ProviderError(
@@ -381,6 +417,7 @@ class KiwiProvider:
 
             if spent:
                 self._note("Kiwi responded again, continuing.")
+            self._faster()
             payload = response.json()
             if payload.get("errors"):
                 messages = "; ".join(e.get("message", "")[:160] for e in payload["errors"][:2])

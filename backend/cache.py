@@ -346,6 +346,15 @@ def finish_search(search_id: str, board: dict[str, Any], status: str = "done") -
             "UPDATE searches SET board=?, status=? WHERE id=?",
             (json.dumps(board), status, search_id),
         )
+        # A saved board runs to ~1.8 MB of JSON and nothing ever deleted one: 324 rows had
+        # grown to 69 MB of a 77 MB database. Keep the most recent ones so an old link
+        # still resolves, and drop the tail.
+        if config.SEARCH_HISTORY_KEEP > 0:
+            conn.execute(
+                "DELETE FROM searches WHERE id NOT IN ("
+                " SELECT id FROM searches ORDER BY created_at DESC LIMIT ?)",
+                (config.SEARCH_HISTORY_KEEP,),
+            )
         conn.commit()
 
 
