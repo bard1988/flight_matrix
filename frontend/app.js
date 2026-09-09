@@ -645,11 +645,30 @@ function isExpanded(code) {
    destination has dropped off the board (e.g. a country filter hid it). */
 let userPickedDest = false;
 function syncSelection(ordered) {
+  if (!ordered.length) { state.selected = null; return; }
   const stillThere = ordered.some((d) => d.destination === state.selected);
   if (userPickedDest && stillThere) return;
-  if (!userPickedDest || !stillThere) {
-    state.selected = ordered.length ? ordered[0].destination : null;
-  }
+
+  const current = stillThere ? state.destinations.get(state.selected) : null;
+  const streaming = !!state.source;
+
+  // While the board is streaming, hold on to a selection that already has a grid instead
+  // of re-pinning to whatever is currently top of the list.
+  //
+  // The two ranking bases are not comparable during a fill. A preview ranks on discovery's
+  // price, which is a floor across the whole window; a filled grid ranks on its cheapest
+  // cell within the requested nights, which is usually higher. So each destination that
+  // finishes filling sinks BELOW the previews still above it, top-of-list flips to a card
+  // with no grid, and the matrix the user is watching fill is replaced by a waiting card.
+  // Measured: it swapped the open grid out mid-fill on a 6-destination board.
+  if (streaming && current && current.cells.length) return;
+
+  // Otherwise take the cheapest destination that actually has a grid to show. Falling back
+  // to ordered[0] regardless would settle the finished board on a card that never filled,
+  // leaving the pane empty next to a list full of priced grids. ordered[0] is only right
+  // when nothing has filled at all, which is the state before the first column lands.
+  const withGrid = ordered.find((d) => d.cells && d.cells.length);
+  state.selected = (withGrid || ordered[0]).destination;
 }
 
 /* One row in the ranked list: the destination's essence in a line — name, country, the
@@ -1883,7 +1902,13 @@ function consume(searchId) {
     } else if (msg.type === 'cells') {
       mergeCells(msg.destination, msg.cells);
     } else if (msg.type === 'destination_empty') {
+      // Discovery priced this city, but nothing is bookable at the trip lengths asked for,
+      // so the backend leaves it off the board. Drop its preview card too, or it sits in
+      // the list saying "Finding dates..." for the rest of the session, for dates that do
+      // not exist.
+      state.destinations.delete(msg.destination);
       seen += 1;
+      render();
     } else if (msg.type === 'destination_error') {
       $('errors').textContent = `${msg.destination}: ${msg.message}`;
       seen += 1;
