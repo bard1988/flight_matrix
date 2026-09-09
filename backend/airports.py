@@ -84,3 +84,29 @@ def describe(code: str) -> dict[str, Any]:
     if not entry:
         return {"city": (code or "").upper(), "country": ""}
     return entry
+
+
+# Best-hub-first ordinal for discovery seeding. A metro code (LON, NYC) has no `type`
+# and sorts with the mediums — it is still a fine thing to probe.
+_TIER_RANK = {"large": 0, "medium": 1, "small": 3}
+
+
+def shortlist(country_codes: "Any", limit: int = 150) -> list[str]:
+    """IATA codes in the given ISO alpha-2 countries, best hubs first.
+
+    Discovery seeding (`board._seed_candidates`) probes this list for a live fare when the
+    board provider's own discovery returns too few destinations inside a region filter.
+    Ordered by scheduled service, then airport size; one code per airport, capped at
+    `limit` so the probe stays cheap.
+    """
+    want = {(c or "").upper() for c in country_codes}
+    if not want:
+        return []
+    ranked = sorted(
+        (
+            (0 if e.get("scheduled") else 1, _TIER_RANK.get(e.get("type"), 2), code)
+            for code, e in load().items()
+            if e.get("country") in want
+        )
+    )
+    return [code for *_, code in ranked[:limit]]

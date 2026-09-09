@@ -6,6 +6,7 @@ making the user stare at a spinner until all 20 are done.
 from __future__ import annotations
 
 import traceback
+from concurrent.futures import ThreadPoolExecutor
 from datetime import date
 from typing import Any, Callable, Iterator
 
@@ -57,6 +58,48 @@ def _describe(provider: Any, code: str) -> dict[str, str]:
     if known and code.upper() in known:
         return known[code.upper()]
     return airports.describe(code)
+
+
+def _seed_candidates(
+    request: SearchRequest,
+    have: set[str],
+    depart_dates: list[date],
+) -> tuple[list[tuple[str, float]], int]:
+    """Discovery top-up for a region filter the board provider under-served (idea.md #15A).
+
+    Take the best hubs in the selected countries (OurAirports, `airports.shortlist`), drop
+    the ones discovery already found, and probe each with one cheap Travelpayouts call for
+    a live fare in the first month of the window. Keep the ones that price, seed price
+    scaled to a party total so it ranks against the discovery candidates.
+
+    Returns `([(code, party_price), ...] cheapest first, airports_probed)`.
+    """
+    if config.SEED_SHORTLIST <= 0 or not config.TRAVELPAYOUTS_TOKEN:
+        return [], 0
+    origin = request.origin.upper()
+    shortlist = [
+        code for code in airports.shortlist(request.country_codes, config.SEED_SHORTLIST)
+        if code.upper() not in have and code.upper() != origin
+    ]
+    if not shortlist:
+        return [], 0
+
+    month = depart_dates[0].strftime("%Y-%m")
+    probe = TravelpayoutsProvider()
+
+    def _probe(code: str) -> tuple[str, float] | None:
+        try:
+            fare = probe.cheapest_fare(origin, code, month, request.currency,
+                                       nonstop=request.nonstop_only)
+        except ProviderError:
+            return None
+        if fare is None:
+            return None
+        return code.upper(), round(request.scale(fare, config.CHILD_FACTOR), 2)
+
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        found = [r for r in pool.map(_probe, shortlist) if r]
+    return sorted(found, key=lambda kv: kv[1]), len(shortlist)
 
 
 def destination_matches(needle: str, code: str, city: str, country: str) -> bool:
@@ -404,6 +447,24 @@ def build(
             "considered": len(candidates),
         })
         candidates = kept
+
+        # The board provider's "where can I go" is short/medium-haul heavy: a TLV -> Africa
+        # search finds ~1 city because Kiwi's board just does not carry Nairobi / Zanzibar /
+        # Cape Town for TLV. If the region filter left us short, probe a curated shortlist
+        # of that region's real hubs for a live fare and fold in the ones that fly.
+        if (len(candidates) < request.max_destinations
+                and config.SEED_SHORTLIST > 0 and config.TRAVELPAYOUTS_TOKEN):
+            have = {code.upper() for code, _ in candidates}
+            yield emit({"type": "region_seeding"})
+            seeded, probed = _seed_candidates(request, have, depart_dates)
+            if probed:
+                candidates = sorted(candidates + seeded, key=lambda kv: kv[1])
+                yield emit({
+                    "type": "region_seeded",
+                    "probed": probed,
+                    "added": len(seeded),
+                    "matched": len(candidates),
+                })
 
     # Restrict the search itself, not just the view. Filtering here means the destination
     # budget is spent inside the filter: "IT" searches the cheapest Italian cities, rather

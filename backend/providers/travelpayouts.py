@@ -238,6 +238,46 @@ class TravelpayoutsProvider:
 
         return sorted(cheapest.items(), key=lambda item: item[1])
 
+    def cheapest_fare(
+        self,
+        origin: str,
+        destination: str,
+        month: str,
+        currency: str,
+        nonstop: bool = False,
+    ) -> float | None:
+        """Cheapest single-ticket round-trip `origin`->`destination` departing in `month`
+        (YYYY-MM), or None if the route has no cached fare.
+
+        One `prices_for_dates` call, `destination` set this time. This is the reachability
+        + seed-price probe for discovery seeding (board._seed_candidates): OurAirports says
+        an airport exists, this says whether anything actually flies there from here.
+        """
+        rows = self._get(
+            "/aviasales/v3/prices_for_dates",
+            {
+                "origin": origin.upper(),
+                "destination": destination.upper(),
+                "departure_at": month,
+                "one_way": "false",
+                "direct": "true" if nonstop else "false",
+                "currency": currency,
+                "limit": 1,
+                "sorting": "price",
+                "market": "il",
+            },
+            endpoint="prices_for_dates",
+        )
+        best: float | None = None
+        for row in rows:
+            try:
+                price = float(row.get("price") or row.get("value"))
+            except (TypeError, ValueError):
+                continue
+            if best is None or price < best:
+                best = price
+        return best
+
     # ------------------------------------------------------------------ grid fill
 
     def fill_matrix(

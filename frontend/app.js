@@ -2016,6 +2016,12 @@ function consume(searchId) {
       $('currency').value = msg.currency;
       syncDateMode();
       $('progress').textContent = `Searching from ${msg.origin_city} (${msg.origin})…`;
+    } else if (msg.type === 'region_seeding') {
+      // The region filter left the board thin, so the backend is probing a shortlist of
+      // that region's airports for live fares. Can take a few seconds — say so.
+      $('progress').textContent = 'Checking which airports fly from here…';
+    } else if (msg.type === 'region_seeded') {
+      if (msg.added) $('progress').textContent = `Found ${msg.matched} destinations in this region…`;
     } else if (msg.type === 'candidates') {
       expected = msg.count;
       $('progress').textContent = `${expected} destinations found, filling grids…`;
