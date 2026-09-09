@@ -782,6 +782,7 @@ body.opts-open .controls-adv {
   border-radius: 4px;
 }
 .rleaf { padding-left: 22px; color: var(--text-secondary); font-weight: 400; }
+.rname { flex: 1 1 auto; min-width: 0; }
 .rhead label:hover,
 .rleaf:hover { background: var(--page); }
 
@@ -1748,7 +1749,13 @@ body.show-table .tableview { display: block; }
 .tableview th[aria-sort='descending']::after { content: ' \2193'; }  /* ↓ */
 .tableview th.num, .tableview td.num { text-align: right; }
 .tableview tbody tr:nth-child(even) td { background: color-mix(in oklab, var(--text-primary) 3.5%, transparent); }
+/* A row is a link to that fare's detail panel, same as a matrix cell. */
+.tableview tbody tr { cursor: pointer; }
 .tableview tbody tr:hover td { background: color-mix(in oklab, var(--text-primary) 9%, transparent); }
+.tableview tbody tr:focus-visible {
+  outline: 2px solid var(--text-primary);
+  outline-offset: -2px;
+}
 /* Inside a dense table row the chip's border reads as clutter; the text alone is enough. */
 .tableview td .tag { border: 0; padding: 0; }
 

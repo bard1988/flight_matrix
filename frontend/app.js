@@ -1157,24 +1157,44 @@ function renderTable(ordered) {
     const aria = on ? ` aria-sort="${tableSort.dir === 1 ? 'ascending' : 'descending'}"` : '';
     return `<th data-sort="${c.key}"${c.num ? ' class="num"' : ''}${aria}>${c.label}</th>`;
   }).join('');
-  const body = rows.slice(0, 800)
-    .map((r) => '<tr>' + cols.map((c) => `<td${c.num ? ' class="num"' : ''}>${c.cell(r)}</td>`).join('') + '</tr>')
+  const shown = rows.slice(0, 800);
+  renderTable._rows = shown;   // click handler maps a <tr> back to its {dest, cell}
+  const body = shown
+    .map((r, i) => `<tr data-i="${i}" tabindex="0">`
+      + cols.map((c) => `<td${c.num ? ' class="num"' : ''}>${c.cell(r)}</td>`).join('') + '</tr>')
     .join('');
 
   host.innerHTML =
-    `<table><caption class="sr-only">Every priced date pair, ${rows.length} rows${rows.length > 800 ? ' (showing 800)' : ''}. Click a column heading to sort.</caption>` +
+    `<table><caption class="sr-only">Every priced date pair, ${rows.length} rows${rows.length > 800 ? ' (showing 800)' : ''}. Click a column heading to sort, or a row for its flight details.</caption>` +
     `<thead><tr>${head}</tr></thead><tbody>${body}</tbody></table>`;
   host.prepend(tableBack());
 }
 
-/* Click a heading to sort; same column again flips direction. */
+/** Open the detail panel for the row the event landed on, if any. */
+function tableRowDetail(e) {
+  const tr = e.target.closest('tbody tr[data-i]');
+  if (!tr) return false;
+  const r = (renderTable._rows || [])[Number(tr.dataset.i)];
+  if (r) verifyCell(r.dest, r.cell);   // same panel a matrix cell opens
+  return true;
+}
+
 $('tableview').addEventListener('click', (e) => {
+  // A heading sorts; same column again flips direction.
   const th = e.target.closest('th[data-sort]');
-  if (!th || !renderTable._list) return;
-  const key = th.dataset.sort;
-  tableSort.dir = tableSort.key === key ? -tableSort.dir : 1;
-  tableSort.key = key;
-  renderTable(renderTable._list);
+  if (th && renderTable._list) {
+    const key = th.dataset.sort;
+    tableSort.dir = tableSort.key === key ? -tableSort.dir : 1;
+    tableSort.key = key;
+    renderTable(renderTable._list);
+    return;
+  }
+  tableRowDetail(e);
+});
+$('tableview').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' || e.key === ' ' || e.key === 'Spacebar') {
+    if (tableRowDetail(e)) e.preventDefault();
+  }
 });
 
 /* ------------------------------------------------------------------- verify */
@@ -2175,7 +2195,10 @@ function regionBranch(label, codes, children) {
   const cb = document.createElement('input');
   cb.type = 'checkbox';
   cb.dataset.codes = codes.join(',');
-  lab.append(cb, ' ', label, spanCount());
+  const name = document.createElement('span');
+  name.className = 'rname';
+  name.textContent = label;
+  lab.append(cb, name, spanCount());
   head.append(toggle, lab);
   const kids = document.createElement('div');
   kids.className = 'rchildren';
@@ -2197,7 +2220,10 @@ function regionLeaf(code, name) {
   cb.type = 'checkbox';
   cb.value = code;
   cb.dataset.codes = code;
-  lab.append(cb, ' ', name, spanCount(code));
+  const label = document.createElement('span');
+  label.className = 'rname';
+  label.textContent = name;
+  lab.append(cb, label, spanCount(code));
   return lab;
 }
 
