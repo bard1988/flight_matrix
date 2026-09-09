@@ -1714,12 +1714,14 @@ $('panelclose').addEventListener('click', () => $('panel').classList.remove('ope
 
 function startSearch() {
   if (state.source) state.source.close();
-  // On a phone the filter panel fills the screen, so fold it away on search. On desktop
-  // it sits above the board, so leave it as the user set it and filters stay easy to tune.
+  // On a phone the search bar and filter panel fill the screen, so fold both away on
+  // search — the results need the room. On desktop they wrap, so leave them.
   if (window.matchMedia('(max-width: 720px)').matches) {
-    document.body.classList.remove('opts-open');
+    document.body.classList.remove('opts-open', 'search-open');
     $('optsbtn').setAttribute('aria-expanded', 'false');
+    $('editsearch').setAttribute('aria-expanded', 'false');
   }
+  renderEditSummary();
   state.destinations.clear();
   state.meta = null;
   $('dlist').replaceChildren();
@@ -2336,6 +2338,35 @@ $('listtoggle').addEventListener('click', () => {
 $('optsbtn').addEventListener('click', () => {
   const open = document.body.classList.toggle('opts-open');
   $('optsbtn').setAttribute('aria-expanded', open ? 'true' : 'false');
+});
+
+/* Mobile only (CSS hides #editsearch elsewhere): once a board exists the full search bar
+   is folded to a one-line summary. This toggles it back open, and running a search folds
+   it again (startSearch). */
+function renderEditSummary() {
+  const dests = state.regions && state.regions.size
+    ? (state.regions.size === 1
+        ? (regionMeta.name[[...state.regions][0]] || '1 place')
+        : `${state.regions.size} places`)
+    : 'Anywhere';
+  // Terse on purpose — this has to fit one line on a narrow phone. Origin, where to, and
+  // roughly when; the rest is a tap away.
+  const w = $('whenselect');
+  const label = w.options[w.selectedIndex]?.text || '';
+  const when = w.value === 'flex'
+    ? 'anytime'
+    : label.replace(/^(\w{3})\w*/, '$1');   // "October 2026" -> "Oct 2026"
+  $('editsearchtext').textContent =
+    `${($('origin').value || '').toUpperCase()} → ${dests} · ${when}`;
+  $('editsearch').querySelector('.edit-search-cue').textContent =
+    document.body.classList.contains('search-open') ? 'Hide ▴' : 'Edit ▾';
+}
+
+$('editsearch').addEventListener('click', () => {
+  const open = document.body.classList.toggle('search-open');
+  $('editsearch').setAttribute('aria-expanded', open ? 'true' : 'false');
+  if (!open) document.body.classList.remove('opts-open');
+  renderEditSummary();
 });
 $('themetoggle').addEventListener('click', () => {
   const root = document.documentElement;

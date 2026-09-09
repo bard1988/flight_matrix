@@ -49,6 +49,14 @@
       </svg>
     <!-- fm-logo:end --></span>
 
+    <!-- Mobile only: once results exist the full search bar is too tall for the screen,
+         so it folds to this one-line summary. Tap to expand it back (body.search-open);
+         running a search folds it again. -->
+    <button type="button" id="editsearch" class="edit-search" aria-expanded="false">
+      <span class="edit-search-summary" id="editsearchtext"></span>
+      <span class="edit-search-cue" aria-hidden="true">Edit ▾</span>
+    </button>
+
     <!-- The whole search in four fields. Everything else is a refinement and lives in
          Options: precise dates, exact nights, travellers, stops, price cap, weekdays,
          flight times, how many destinations. -->

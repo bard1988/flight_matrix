@@ -312,6 +312,32 @@ header.controls {
   gap: 8px 10px;
 }
 
+/* Mobile-only collapsed search (see the @media block near the end for where it shows). */
+.edit-search {
+  display: none;
+  width: 100%;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 9px 40px 9px 10px;   /* clear the absolute theme toggle on the right */
+  border: 1px solid var(--axis);
+  border-radius: var(--rounded-md, 6px);
+  background: var(--surface-1);
+  color: var(--text-primary);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.edit-search-summary {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.edit-search-cue { flex: none; font-size: 12px; color: var(--text-secondary); }
+
 /* Theme toggle: a small sun/moon in the header's top-right corner, out of the control
    flow entirely so it never competes with the search inputs for the row. */
 .theme-btn {
@@ -1573,7 +1599,10 @@ table.matrix td.cross-at {
   overflow-y: auto;
   transform: translateX(100%);
   transition: transform 0.16s ease;
-  z-index: 50;
+  /* Above everything, including the mobile matrix / table full-screen layers (z 60), so a
+     cell's detail sheet actually covers the grid it was opened from rather than sliding
+     in behind it. */
+  z-index: 70;
 }
 
 /* Dim the board behind the open side panel so it reads as the focus, not as a
@@ -1749,6 +1778,15 @@ body.show-table .tableview { display: block; }
   }
   .brand { margin-right: auto; }
   .brand svg { height: 28px; }
+
+  /* Once results exist, fold the search bar to the one-line summary. It expands again on
+     tap (body.search-open); running a search re-folds it (app.js). First run and the
+     no-results state keep the full bar — there is nothing else on screen competing yet. */
+  body.has-board:not(.search-open) .bar-group,
+  body.has-board:not(.search-open) .bar-actions,
+  body.has-board:not(.search-open) .controls-adv { display: none; }
+  body.has-board .edit-search { display: flex; }
+  body.has-board.search-open .edit-search-summary { display: none; }
 
   /* Search fields stack full-width. */
   .bar-group > .field { flex: 1 1 100%; }

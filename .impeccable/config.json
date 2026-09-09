@@ -27,6 +27,15 @@
         ],
         "createdAt": "2026-09-08T21:07:31.330Z",
         "reason": "The 45-degree hatch on td.nodata and its legend swatch is the load-bearing 'no cached data' cell encoding, per DESIGN.md named rules. Not surface decoration."
+      },
+      {
+        "rule": "tiny-text",
+        "value": "*",
+        "files": [
+          "frontend/styles.css"
+        ],
+        "createdAt": "2026-09-09T17:56:51.345Z",
+        "reason": "11px is the DESIGN.md 11px Floor Rule: labels, tags, hints, and card/row metadata (country, dates, price ceiling) run at 11px as a deliberate density choice and clear AA. Body prose and inputs are 14px+ (16px on touch)."
       }
     ]
   }
