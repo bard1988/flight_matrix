@@ -42,6 +42,15 @@ const fmtStops = (n) =>
 
 const REDUCE_MOTION = window.matchMedia('(prefers-reduced-motion: reduce)');
 
+/* Cycling dots for the "still working" lines ("Finding dates", "Finding cheap
+   destinations"). One shared counter, advanced by a single interval (below, after init).
+   Every ellipsis reads the CURRENT frame when it is built, so the list rebuilding many
+   times a second while grids stream in re-applies the same frame instead of resetting the
+   cycle to a fixed string. */
+const DOT_FRAMES = ['.', '..', '...'];
+let dotFrame = 0;
+const dots = () => (REDUCE_MOTION.matches ? '...' : DOT_FRAMES[dotFrame % DOT_FRAMES.length]);
+
 /* ----------------------------------------------- shareable / bookmarkable board URL */
 
 // query key -> element id. Everything a fresh search needs to reproduce this board.
@@ -707,7 +716,7 @@ function listRow(dest, isSel) {
   const when = bc
     ? `${weekday(bc.depart)} ${shortDate(bc.depart)} &rarr; ${weekday(bc.ret)} ${shortDate(bc.ret)}` +
       `, ${bc.nights}n`
-    : isPreview ? 'Finding dates<span class="ellipsis" aria-hidden="true">...</span>'
+    : isPreview ? `Finding dates<span class="ellipsis" aria-hidden="true">${dots()}</span>`
     : 'no fare yet';
 
   b.innerHTML =
@@ -767,7 +776,7 @@ function renderWaiting(dest) {
   // The trailing dots cycle (the tickDots ticker); aria-hidden so a screen reader just
   // hears the stem.
   wait.append(stem, Object.assign(document.createElement('span'),
-    { className: 'ellipsis', ariaHidden: 'true', textContent: '...' }));
+    { className: 'ellipsis', ariaHidden: 'true', textContent: dots() }));
   card.appendChild(wait);
   return card;
 }
@@ -1809,7 +1818,7 @@ function startSearch() {
   $('empty').classList.add('is-searching');
   $('empty').replaceChildren('Finding cheap destinations',
     Object.assign(document.createElement('span'),
-      { className: 'ellipsis', ariaHidden: 'true', textContent: '...' }));
+      { className: 'ellipsis', ariaHidden: 'true', textContent: dots() }));
   $('boardtools').hidden = true;   // no results yet
   // Orientation is a first-run thing; once you've searched, you know. The date hint is
   // part of that same orientation (the field labels and the first-run lede already say
@@ -2472,24 +2481,18 @@ $('depart').addEventListener('input', syncReturnDate);
 loadFx();
 buildRegionTree();
 
-/* One ticker writes the dots into every "Finding…" ellipsis on the page (the list rows,
-   the placeholder card, the pre-first-result line). Writing the text directly — rather than
-   a per-element CSS animation — means a list re-render, which recreates the rows several
-   times a second while the board fills, can't restart or freeze the cycle: the next tick
-   just fills the fresh spans in. */
-(function tickDots() {
-  const frames = ['.', '..', '...'];
-  let i = 0;
-  const paint = () => {
+/* Advance the shared dot frame and write it into every ellipsis currently on the page.
+   New spans built between ticks already carry the current frame (see `dots()`), so this
+   only has to nudge the ones that are already mounted. */
+if (!REDUCE_MOTION.matches) {
+  setInterval(() => {
     const els = document.getElementsByClassName('ellipsis');
     if (!els.length) return;
-    const s = REDUCE_MOTION.matches ? '...' : frames[i % frames.length];
+    dotFrame += 1;
+    const s = DOT_FRAMES[dotFrame % DOT_FRAMES.length];
     for (const el of els) el.textContent = s;
-    i += 1;
-  };
-  paint();
-  if (!REDUCE_MOTION.matches) setInterval(paint, 400);
-})();
+  }, 400);
+}
 
 /* "When" is a plain month picker plus an "anytime" span. It just writes the two exact
    date fields (which still drive everything); Options exposes those directly for anyone
