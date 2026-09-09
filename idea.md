@@ -19,6 +19,8 @@ Things worth doing, not yet scheduled.
 | 7.3 | — cell-detail panel: the ✕ close is mispositioned (far right); reconsider full-screen panel on mobile | S | todo |
 | 10 | **Show the airport's city** wherever only the IATA code appears | S | **backend done** (2026-09-07: `describe()` resolves airport→city via `city_code`); panel-leg display todo |
 | 8 | **Design pass** — use the `design` skill / a proper design system | L | in progress |
+| 15 | **Long-haul discovery coverage** — Kiwi's `returnOnePerCityItineraries` for TLV returns ~160 nearby cities and no sub-Saharan Africa, so "To: Africa" yields only Marrakesh. Seed known long-haul destinations into discovery (or add a second discovery source). See Lever 3. | M–L | todo |
+| 15.1 | — Egypt (Sharm, Hurghada, Cairo) is classified `Asia / Middle East` in `data/build_countries.py`, so the **Africa** filter excludes the one well-connected part of Africa from TLV. Decide: move Egypt to `Africa / Northern Africa`, or surface it under both. | S | todo |
 
 ### Notes on specific items
 
@@ -224,6 +226,41 @@ Travelpayouts fallback) manage it but cap throughput; the live test took ~5 min 
 
 **Note:** the merged-CA hack (`config._ca_bundle()`) is corp-proxy-specific and already
 correctly no-ops on the VM; a proxy integration should not resurrect it.
+
+---
+
+## Lever 3 — discovery coverage for long-haul (Africa, and anywhere far)
+
+**The shortcoming (verified 2026-09-09, live).** A TLV → "Africa" search returns
+**Marrakesh only**. Cause is discovery, not filtering or the region tree:
+
+- Kiwi's `returnOnePerCityItineraries` for TLV returns ~160 destinations, effectively
+  all Europe / Caucasus / Gulf. The only African city in it is `RAK`. Nairobi, Zanzibar,
+  Addis, Johannesburg, Cape Town — 1–2-stop long-haul routes — are simply not in Kiwi's
+  city board for TLV, so `board.build`'s region filter has nothing to keep (`matched: 0`,
+  `done` → "Nothing reachable from here is in the regions you picked").
+- Egypt *does* come back (`CAI`, `HRG`, `SSH`) — but it's tagged `Asia / Middle East`
+  (`data/build_countries.py` override), so the **Africa** checkbox never includes it. See
+  backlog #15.1.
+- This is a provider-data gap, not a bug: `returnOnePerCityItineraries` has no limit knob
+  to widen, and per the provider-research conclusion above, adding aggregators adds no
+  routes.
+
+**Options, cheapest first:**
+1. **Seed discovery when a region/filter is set.** If `country_codes` (or a typed
+   destination) is present and discovery returns few/none inside it, synthesise
+   candidates from a bundled list of well-known airports per country (the airport table
+   in `backend/airports.py` already has the data) and price them directly with
+   `fill_matrix` / the calendar call, rather than relying on the city board to surface
+   them. Bounded by the destination budget. Smallest change, no new service.
+2. **Google Travel Explore as a discovery source** (SerpApi free tier, 250/mo) — already
+   noted under "Smaller / maybe"; gives a real "where can I go from X" that isn't
+   Kiwi-shaped. Pairs with Lever 1.
+3. **Google price-graph board provider (Lever 1)** with its own discovery — the fuller
+   fix; Google is not IP-blocking the VM.
+
+**Acceptance:** TLV → "Africa", 3-month window, ~1 week → returns Sharm/Hurghada plus at
+least a few of Nairobi / Zanzibar / Cape Town / Johannesburg with a filled grid.
 
 ---
 
