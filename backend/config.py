@@ -238,10 +238,10 @@ PARSER_VERSION = 2
 CANDIDATE_MULTIPLIER = float(os.environ.get("FM_CANDIDATE_MULTIPLIER", "3.0"))
 
 # Discovery seeding (idea.md #15A): when a region filter is set and the board provider's
-# own "where can I go" under-delivers inside it, probe up to this many curated airports
-# from that region (OurAirports, best hubs first) with one cheap Travelpayouts call each,
-# and fold in the ones that actually fly from the origin. 0 disables seeding.
-SEED_SHORTLIST = int(os.environ.get("FM_SEED_SHORTLIST", "150"))
+# own "where can I go" under-delivers inside it, probe up to this many curated hub
+# airports from that region (OurAirports, best hubs first) with one Google Flights call
+# each, and fold in the ones that actually fly from the origin. 0 disables seeding.
+SEED_SHORTLIST = int(os.environ.get("FM_SEED_SHORTLIST", "40"))
 
 # Emit every destination as a headline-only PREVIEW card the moment discovery returns,
 # then upgrade each one in place as its grid fills.

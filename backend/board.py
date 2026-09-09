@@ -15,6 +15,7 @@ import cache
 import config
 from models import Cell, DestinationMatrix, SearchRequest, parse_date
 from providers.base import NoItinerariesError, ProviderError
+from providers.google_flights import GoogleFlightsProvider
 from providers.kiwi import KiwiProvider
 from providers.travelpayouts import TravelpayoutsProvider
 
@@ -64,42 +65,50 @@ def _seed_candidates(
     request: SearchRequest,
     have: set[str],
     depart_dates: list[date],
+    return_dates: list[date],
 ) -> tuple[list[tuple[str, float]], int]:
     """Discovery top-up for a region filter the board provider under-served (idea.md #15A).
 
     Take the best hubs in the selected countries (OurAirports, `airports.shortlist`), drop
-    the ones discovery already found, and probe each with one cheap Travelpayouts call for
-    a live fare in the first month of the window. Keep the ones that price, seed price
-    scaled to a party total so it ranks against the discovery candidates.
+    the ones discovery already found, and probe each with one Google Flights lookup on a
+    representative date pair near the middle of the window. Google prices the routes the
+    board's cache-shaped discovery never surfaces (TLV -> Nairobi / Zanzibar / Cape Town),
+    and returns a real party total. Keep the ones that price.
 
-    Returns `([(code, party_price), ...] cheapest first, airports_probed)`.
+    Returns `([(code, party_total), ...] cheapest first, airports_probed)`.
     """
-    if config.SEED_SHORTLIST <= 0 or not config.TRAVELPAYOUTS_TOKEN:
+    if config.SEED_SHORTLIST <= 0:
         return [], 0
     origin = request.origin.upper()
+    dead = cache.unpriceable_destinations(
+        origin, request.adults, request.children, request.currency)
     shortlist = [
         code for code in airports.shortlist(request.country_codes, config.SEED_SHORTLIST)
-        if code.upper() not in have and code.upper() != origin
+        if code.upper() not in have and code.upper() != origin and code.upper() not in dead
     ]
     if not shortlist:
         return [], 0
 
-    month = depart_dates[0].strftime("%Y-%m")
-    probe = TravelpayoutsProvider()
+    # One representative pair near the middle of the window: mid departure, ~a week later.
+    depart = depart_dates[len(depart_dates) // 2]
+    ret = return_dates[min(len(return_dates) - 1, len(return_dates) // 2 + 7)]
+    if ret <= depart:
+        ret = return_dates[-1]
+    verifier = GoogleFlightsProvider()
 
     def _probe(code: str) -> tuple[str, float] | None:
-        # A single airport failing the probe (unknown to Travelpayouts, a 4xx, a transport
-        # blip) must never take the board down with it - just skip that one.
+        # A single route failing the probe (not in Google's data, a throttle, a blip) must
+        # never take the board down with it - just skip that one.
         try:
-            fare = probe.cheapest_fare(origin, code, month, request.currency,
-                                       nonstop=request.nonstop_only)
+            result = verifier.verify(origin, code, depart.isoformat(), ret.isoformat(),
+                                     request.adults, request.children, request.currency,
+                                     request.nonstop_only)
         except Exception:                       # noqa: BLE001
             return None
-        if fare is None:
-            return None
-        return code.upper(), round(request.scale(fare, config.CHILD_FACTOR), 2)
+        total = result.get("total")
+        return (code.upper(), round(float(total), 2)) if total else None
 
-    with ThreadPoolExecutor(max_workers=8) as pool:
+    with ThreadPoolExecutor(max_workers=config.FILL_WORKERS) as pool:
         found = [r for r in pool.map(_probe, shortlist) if r]
     return sorted(found, key=lambda kv: kv[1]), len(shortlist)
 
@@ -454,11 +463,10 @@ def build(
         # search finds ~1 city because Kiwi's board just does not carry Nairobi / Zanzibar /
         # Cape Town for TLV. If the region filter left us short, probe a curated shortlist
         # of that region's real hubs for a live fare and fold in the ones that fly.
-        if (len(candidates) < request.max_destinations
-                and config.SEED_SHORTLIST > 0 and config.TRAVELPAYOUTS_TOKEN):
+        if len(candidates) < request.max_destinations and config.SEED_SHORTLIST > 0:
             have = {code.upper() for code, _ in candidates}
             yield emit({"type": "region_seeding"})
-            seeded, probed = _seed_candidates(request, have, depart_dates)
+            seeded, probed = _seed_candidates(request, have, depart_dates, return_dates)
             if probed:
                 candidates = sorted(candidates + seeded, key=lambda kv: kv[1])
                 yield emit({

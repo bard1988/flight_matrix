@@ -2,7 +2,7 @@
 
 When a region filter is set and the board provider's own discovery under-delivers inside
 it, `board.build` probes a curated shortlist of that region's hubs (OurAirports, via
-`airports.shortlist`) with one cheap Travelpayouts call each and folds in the ones that
+`airports.shortlist`) with one Google Flights lookup each and folds in the ones that
 price. This is what turns a TLV -> "Africa" search from "Marrakesh only" into a real board.
 """
 from __future__ import annotations
@@ -58,16 +58,24 @@ class _Discover:
         return fill_grid(request, destination, dd, rd, 900.0, source=self.name, is_total=True)
 
 
-class _FakeTP:
-    """Stands in for TravelpayoutsProvider inside _seed_candidates: a fixed price book."""
+class _FakeVerifier:
+    """Stands in for GoogleFlightsProvider inside _seed_candidates: a fixed price book.
 
-    book = {"NBO": 300.0, "ZNZ": 350.0, "CPT": 500.0, "JNB": 480.0, "ADD": 260.0}
+    Prices are already party totals (Google prices the real mix), so 2 adults doubles
+    nothing here.
+    """
+
+    book = {"NBO": 600.0, "ZNZ": 700.0, "CPT": 1000.0, "JNB": 960.0, "ADD": 520.0}
 
     def __init__(self, *a, **k):
         pass
 
-    def cheapest_fare(self, origin, destination, month, currency, nonstop=False):
-        return self.book.get(destination.upper())
+    def verify(self, origin, destination, depart, ret, adults, children, currency, nonstop=False):
+        total = self.book.get(destination.upper())
+        if total is None:
+            from providers.base import ProviderError
+            raise ProviderError("no itineraries")
+        return {"total": total, "currency": currency}
 
 
 @pytest.fixture
@@ -82,8 +90,8 @@ def _quiet(monkeypatch, isolated_cache):
     monkeypatch.setattr(config, "CHECK_HEADLINE", False)
     monkeypatch.setattr(config, "KIWI_CACHE_HOURS", 0.0)
     monkeypatch.setattr(config, "ESTIMATE_FIRST", False)
-    monkeypatch.setattr(config, "TRAVELPAYOUTS_TOKEN", "test-token")
-    monkeypatch.setattr(board, "TravelpayoutsProvider", _FakeTP)
+    monkeypatch.setattr(config, "SEED_SHORTLIST", 40)
+    monkeypatch.setattr(board, "GoogleFlightsProvider", _FakeVerifier)
 
 
 def _events(req, provider):
@@ -97,21 +105,30 @@ def test_thin_region_gets_seeded_from_the_shortlist(africa_req):
     assert seeded and seeded[0]["added"] == 5
 
     filled = {e["city"] for e in events if e["type"] == "destination" and not e.get("preview")}
-    # ADD (260) and NBO (300) are the cheapest probes, so they lead the board.
+    # ADD (520) and NBO (600) are the cheapest probes, so they lead the board.
     assert {"Addis Ababa", "Nairobi"} <= filled
 
 
-def test_seed_prices_are_party_totals(africa_req):
+def test_seed_price_is_the_google_party_total(africa_req):
     events = _events(africa_req, _Discover([]))
     previews = {e["city"]: e for e in events if e["type"] == "destination" and e.get("preview")}
-    # 2 adults, so the single-ticket 260 for ADD is previewed at ~520.
+    # Google already prices the real party, so the probe total is carried through as-is.
     assert previews["Addis Ababa"]["preview_price"] == pytest.approx(520.0)
+
+
+def test_unpriceable_routes_are_not_re_probed(africa_req, monkeypatch):
+    import cache
+    monkeypatch.setattr(cache, "unpriceable_destinations", lambda *a, **k: {"NBO", "ADD"})
+    events = _events(africa_req, _Discover([]))
+    filled = {e["city"] for e in events if e["type"] == "destination" and not e.get("preview")}
+    assert "Nairobi" not in filled and "Addis Ababa" not in filled
+    assert "Cape Town" in filled          # still seeded
 
 
 def test_no_region_filter_means_no_probe(req, monkeypatch):
     calls = []
-    monkeypatch.setattr(_FakeTP, "cheapest_fare",
-                        lambda self, *a, **k: calls.append(a) or 100.0)
+    monkeypatch.setattr(_FakeVerifier, "verify",
+                        lambda self, *a, **k: calls.append(a) or {"total": 100.0})
     events = _events(req, _Discover(["ATH", "CTA"]))
     assert not calls
     assert not [e for e in events if e["type"] == "region_seeded"]
@@ -119,16 +136,16 @@ def test_no_region_filter_means_no_probe(req, monkeypatch):
 
 def test_well_served_region_is_not_probed(africa_req, monkeypatch):
     calls = []
-    monkeypatch.setattr(_FakeTP, "cheapest_fare",
-                        lambda self, *a, **k: calls.append(1) or 100.0)
+    monkeypatch.setattr(_FakeVerifier, "verify",
+                        lambda self, *a, **k: calls.append(1) or {"total": 100.0})
     # discovery already returns >= max_destinations inside the selection
     events = _events(africa_req, _Discover(["NBO", "MBA", "ZNZ", "CPT", "JNB", "DAR"]))
     assert not calls
     assert not [e for e in events if e["type"] == "region_seeded"]
 
 
-def test_no_token_means_no_seeding(africa_req, monkeypatch):
+def test_seeding_disabled_by_config(africa_req, monkeypatch):
     import config
-    monkeypatch.setattr(config, "TRAVELPAYOUTS_TOKEN", "")
+    monkeypatch.setattr(config, "SEED_SHORTLIST", 0)
     events = _events(africa_req, _Discover(["RAK"]))
     assert not [e for e in events if e["type"] == "region_seeded"]

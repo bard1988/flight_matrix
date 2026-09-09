@@ -91,22 +91,24 @@ def describe(code: str) -> dict[str, Any]:
 _TIER_RANK = {"large": 0, "medium": 1, "small": 3}
 
 
-def shortlist(country_codes: "Any", limit: int = 150) -> list[str]:
+def shortlist(country_codes: "Any", limit: int = 40, hubs_only: bool = True) -> list[str]:
     """IATA codes in the given ISO alpha-2 countries, best hubs first.
 
     Discovery seeding (`board._seed_candidates`) probes this list for a live fare when the
     board provider's own discovery returns too few destinations inside a region filter.
     Ordered by scheduled service, then airport size; one code per airport, capped at
-    `limit` so the probe stays cheap.
+    `limit` so the probe stays cheap. `hubs_only` drops the small airstrips — nobody flies
+    a board-worthy international trip from those, and probing them just wastes calls.
     """
     want = {(c or "").upper() for c in country_codes}
     if not want:
         return []
-    ranked = sorted(
-        (
-            (0 if e.get("scheduled") else 1, _TIER_RANK.get(e.get("type"), 2), code)
-            for code, e in load().items()
-            if e.get("country") in want
-        )
-    )
-    return [code for *_, code in ranked[:limit]]
+    rows = []
+    for code, e in load().items():
+        if e.get("country") not in want:
+            continue
+        tier = _TIER_RANK.get(e.get("type"), 2)
+        if hubs_only and tier >= 3:
+            continue
+        rows.append((0 if e.get("scheduled") else 1, tier, code))
+    return [code for *_, code in sorted(rows)[:limit]]
