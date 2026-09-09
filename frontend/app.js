@@ -490,7 +490,17 @@ function render() {
   $('dlist').replaceChildren(...ordered.map((dest) => listRow(dest, dest === selDest)));
   const detail = $('ddetail');
   if (selDest && selDest.cells.length) {
-    detail.replaceChildren(renderCard(selDest, scaleDomain(selDest.allowed)));
+    const domain = scaleDomain(selDest.allowed);
+    const cur = detail.querySelector('.card.is-open');
+    const sameGrid = cur && cur.dataset.dest === selDest.destination
+      && cur.dataset.sig === detailSig(selDest);
+    if (sameGrid && matrixScrolling) {
+      pendingRepaint = true;                       // flush when the scroll settles
+    } else if (sameGrid) {
+      refreshOpenCard(cur, selDest, domain);       // keep the scroll container
+    } else {
+      detail.replaceChildren(renderCard(selDest, domain));
+    }
   } else if (selDest) {
     detail.replaceChildren(renderWaiting(selDest));
   } else {
@@ -759,16 +769,48 @@ function renderWaiting(dest) {
   return card;
 }
 
+/* Signature of the grid's SHAPE, not its contents: the axes. Two renders with the same
+   signature can reuse the same scroll container and just repaint the cells; a different
+   one (a widen) has to rebuild. */
+function detailSig(dest) {
+  const ax = axesFor(dest);
+  return ax.departs.join(',') + '|' + ax.returns.join(',');
+}
+
 function renderCard(dest, domain) {
-  const meta = state.meta;
   const card = document.createElement('section');
-  card.className = 'card';
+  card.className = 'card is-open';
   card.dataset.dest = dest.destination;
+  card.dataset.sig = detailSig(dest);
   if (!animatedDests.has(dest.destination)) {
     card.classList.add('is-new');
     animatedDests.add(dest.destination);
   }
+  card.appendChild(buildCardHead(dest, domain, card));
+  return finishCard(card, dest, buildMatrix(dest, domain));
+}
 
+/* Repaint the OPEN card without touching its scroll container. A stream update (auto-verify,
+   the open-destination fill) fires render() several times a second; rebuilding the whole
+   card each time threw away the .matrix-wrap the user was scrolling, so the grid kept
+   snapping back — badly on a phone mid-fling. Here the wrap element (and its scroll
+   position and scroll listener) survive: only the head and the table inside it are rebuilt,
+   and the scroll offset is re-asserted synchronously so there is no visible jump. */
+function refreshOpenCard(card, dest, domain) {
+  const wrap = card.querySelector('.matrix-wrap');
+  if (!wrap) return renderCard(dest, domain);
+  const sx = wrap.scrollLeft;
+  const sy = wrap.scrollTop;
+  card.dataset.sig = detailSig(dest);
+  card.replaceChild(buildCardHead(dest, domain, card), card.querySelector('.card-head'));
+  wrap.replaceChildren(buildMatrix(dest, domain));
+  wrap.scrollLeft = sx;
+  wrap.scrollTop = sy;
+  return card;
+}
+
+function buildCardHead(dest, domain, card) {
+  const meta = state.meta;
   const head = document.createElement('div');
   head.className = 'card-head';
   const best = dest.shownBest ? cellValue(dest.shownBest) : null;
@@ -790,10 +832,8 @@ function renderCard(dest, domain) {
     headlineChip(dest) +
     `<span class="best">${best != null ? fmtMoney(best, meta.currency) : ''}${range}</span>`;
 
-  /* This card is always the detail pane now: the one selected destination's full grid. The
-     leading control is a "back" affordance — it only matters on a phone, where the grid
+  /* The leading control is a "back" affordance — it only matters on a phone, where the grid
      covers the list; on desktop the list stays beside it and CSS hides the button. */
-  card.classList.add('is-open');
   const back = document.createElement('button');
   back.className = 'fillbtn detail-back';
   back.type = 'button';
@@ -842,8 +882,14 @@ function renderCard(dest, domain) {
     head.appendChild(wider);
   }
 
-  card.appendChild(head);
+  return head;
+}
 
+/* The departure x return grid. Rebuilt wholesale on every repaint — cheap for one
+   destination — but always dropped INTO an existing .matrix-wrap by the caller, so the
+   scroll viewport around it is never disturbed. */
+function buildMatrix(dest, domain) {
+  const meta = state.meta;
   const byKey = new Map(dest.cells.map((c) => [c.depart + '|' + c.ret, c]));
 
   // Always the departure x return matrix, in both date modes. In range mode that means a
@@ -977,19 +1023,28 @@ function renderCard(dest, domain) {
   });
   table.addEventListener('mouseleave', () => restorePinned(table));
 
-  return finishCard(card, dest, table);
-}
-
-/** Wrap a grid in its scroll viewport and restore where the user had scrolled to. */
-function finishCard(card, dest, table) {
   table.setAttribute('aria-label', `${dest.city} fares by date. Arrow keys to move between cells, Enter for the live price.`);
   seedGridTabstop(table);
+  return table;
+}
+
+/** Wrap the grid in its scroll viewport and restore where the user had scrolled to. */
+function finishCard(card, dest, table) {
   const wrap = document.createElement('div');
   wrap.className = 'matrix-wrap';
   wrap.appendChild(table);
-  // Scrolling to any edge asks for a wider window. Restore the scroll offset after the
-  // re-render so growing the grid does not yank the view back to the corner.
-  wrap.addEventListener('scroll', () => rememberScroll(dest.destination, wrap), { passive: true });
+  // Every scroll remembers the position AND holds off the next repaint: rebuilding the
+  // grid under an actively-scrolling finger is what made it snap back. When the scroll
+  // settles, any repaint that came in meanwhile is flushed once.
+  wrap.addEventListener('scroll', () => {
+    rememberScroll(dest.destination, wrap);
+    matrixScrolling = true;
+    clearTimeout(matrixScrollTimer);
+    matrixScrollTimer = setTimeout(() => {
+      matrixScrolling = false;
+      if (pendingRepaint) { pendingRepaint = false; render(); }
+    }, 180);
+  }, { passive: true });
   // No wheel handler any more: its only job was to widen the date window on deliberate
   // overscroll, and that path is gone with the widen control. The grid scrolls natively.
   card.appendChild(wrap);
@@ -1473,6 +1528,13 @@ function widenDestination(dest) {
 
 const scrollOffsets = new Map(); // IATA -> {x, y}
 
+/* While the open grid is being scrolled, defer repaints (see finishCard's scroll handler
+   and render's use of refreshOpenCard). Cleared 180ms after the last scroll event, which
+   also flushes any repaint that was held back. */
+let matrixScrolling = false;
+let matrixScrollTimer = null;
+let pendingRepaint = false;
+
 /** Keep the last scroll position so a re-render does not jump back to the corner. */
 function rememberScroll(dest, wrap) {
   scrollOffsets.set(dest, { x: wrap.scrollLeft, y: wrap.scrollTop });
@@ -1749,6 +1811,9 @@ function startSearch() {
   $('growing').hidden = true;   // clear any stale rate-limit / widening notice
   $('note').hidden = true;
   scrollOffsets.clear();
+  matrixScrolling = false;
+  pendingRepaint = false;
+  clearTimeout(matrixScrollTimer);
   animatedDests.clear();        // a new board: let every destination animate in again
   state.selected = null;        // and let the new cheapest be the one that opens
   userPickedDest = false;
