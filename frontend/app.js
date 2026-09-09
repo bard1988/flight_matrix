@@ -881,6 +881,20 @@ function buildCardHead(dest, domain, card) {
   locate.onclick = () => locateBest(card, dest);
   head.appendChild(locate);
 
+  /* Phone only (CSS hides it on desktop, where the toolbar carries the toggle): read this
+     destination as a sortable table instead of the grid. It lives in the open-destination
+     head on purpose — on a phone the toggle should only change how the OPEN destination is
+     drawn, never reach back and open something from the list. The way back is the table
+     layer's own "‹ Board". */
+  const astable = document.createElement('button');
+  astable.type = 'button';
+  astable.className = 'fillbtn detail-astable';
+  astable.textContent = 'Table';
+  astable.title = 'Show this destination as a sortable table';
+  astable.setAttribute('aria-label', 'Show this destination as a sortable table');
+  astable.onclick = () => setTableView(true);
+  head.appendChild(astable);
+
   /* Widen THIS destination's dates by a week at each end. Per destination because that is
      how the need arises: you narrow to a candidate and want more dates for it, and one
      destination costs a twentieth of the provider calls a whole board would.
@@ -1092,6 +1106,17 @@ function finishCard(card, dest, table) {
     sortable by any column. */
 const tableSort = { key: 'total', dir: 1 };   // price, ascending
 
+/* One pane, two ways to read it: the colour grid or a sortable table of the same fares.
+   Every entry point (the desktop toolbar button, the phone card-head button, the table's
+   own "‹ Board") routes through here so the class and the toolbar button's label stay in
+   step. #tabletoggle is hidden on a phone but harmless to keep updated. */
+function setTableView(on) {
+  document.body.classList.toggle('show-table', on);
+  const tt = $('tabletoggle');
+  tt.textContent = on ? 'Matrix' : 'Table';
+  tt.setAttribute('aria-pressed', String(on));
+}
+
 /* Leave table view. On a phone the table is a fixed full-screen layer, so it covers the
    Table/Matrix toggle that opened it; without a control of its own the only way out was
    the browser's back button. Mirrors .detail-back, and CSS hides it on desktop where the
@@ -1103,11 +1128,7 @@ function tableBack() {
   back.textContent = '‹ Board';
   back.title = 'Back to the fare grid';
   back.setAttribute('aria-label', 'Back to the fare grid');
-  back.onclick = () => {
-    document.body.classList.remove('show-table');
-    $('tabletoggle').textContent = 'Table';
-    $('tabletoggle').setAttribute('aria-pressed', 'false');
-  };
+  back.onclick = () => setTableView(false);
   return back;
 }
 
@@ -2433,12 +2454,9 @@ $('autoverify').addEventListener('change', (e) => {
   if (e.target.checked) startAutoVerify();
   else stopAutoVerify();
 });
-/* One pane, two ways to read it: the colour grid or a sortable table of the same fares.
-   The button names the view you'd switch TO. */
+/* The desktop toolbar toggle; the button names the view you'd switch TO. */
 $('tabletoggle').addEventListener('click', () => {
-  const table = document.body.classList.toggle('show-table');
-  $('tabletoggle').textContent = table ? 'Matrix' : 'Table';
-  $('tabletoggle').setAttribute('aria-pressed', String(table));
+  setTableView(!document.body.classList.contains('show-table'));
 });
 
 /* Desktop: fold the ranked list away and let the grid have the whole width. No effect on a

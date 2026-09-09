@@ -808,7 +808,19 @@ body.opts-open .controls-adv {
   font-weight: 400;
 }
 
-.region-tree input[type='checkbox'] { flex: 0 0 auto; margin: 0; }
+/* The popover lives inside .field-dest, so the mobile `.field input { width: 100% }` /
+   `min-height: 44px` rules would otherwise blow every tree checkbox up to the full row
+   width and shove the country name to zero. Pin it back to a real checkbox. Higher
+   specificity than `.field input`, so it wins wherever that rule reaches. */
+.region-tree input[type='checkbox'] {
+  flex: 0 0 auto;
+  width: 16px;
+  min-width: 16px;
+  height: 16px;
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+}
 
 /* Cells ruled out by a constraint stay visible but recede, so you can see what you
    excluded and what it would have cost. */
@@ -1188,15 +1200,24 @@ body.list-collapsed .dlist { display: none; }
 /* "‹ Back" back control: phone-only. On desktop the list is always visible beside the grid. */
 .detail-back { display: none; }
 
+/* Table/Matrix toggle in the open-destination head: phone-only. On desktop the board
+   toolbar carries it (#tabletoggle); on a phone that toolbar button is hidden and this one
+   takes over, so the toggle only ever changes how the OPEN destination is drawn. */
+.card-head .detail-astable { display: none; }
+
 @media (max-width: 860px) {
   .board-split,
   body.has-board .board-split { grid-template-columns: 1fr; gap: 0; }
   body.has-board .dlist { border-right: 0; }
 
-  /* Phone: the list is the whole screen; picking a destination slides its grid in over it
-     as a fixed layer, and the "‹ Back" control brings the list back. */
+  /* Phone: the list is the whole screen. Opening a destination slides its detail in over
+     it as a fixed layer, and "‹ Back" returns to the list. The layer shows the grid, or
+     the table when that mode is on — the Table/Matrix toggle only chooses WHICH, it never
+     opens a destination by itself. On the list, with no destination open, the toggle is a
+     stored preference and changes nothing on screen. */
   .ddetail,
-  body.has-board .ddetail {
+  body.has-board .ddetail,
+  body.has-board .tableview {
     display: none;
     position: fixed;
     inset: 0;
@@ -1207,22 +1228,18 @@ body.list-collapsed .dlist { display: none; }
     overflow-y: auto;
     padding: 10px 14px 40px;
   }
-  body.detail-open .ddetail,
-  body.has-board.detail-open .ddetail { display: flex; }
+  body.has-board.detail-open:not(.show-table) .ddetail { display: flex; }
+  body.has-board.detail-open.show-table .tableview { display: block; }
   body.detail-open .dlist { display: none; }
-
-  /* Table view on a phone: full-bleed over the list; the Table button toggles it back. */
-  body.has-board .tableview {
-    position: fixed;
-    inset: 0;
-    z-index: 60;
-    padding: 0 0 40px;
-    background: var(--canvas);
-  }
-  body.show-table .dlist { display: none; }
 
   /* The desktop list-collapse toggle has no meaning here — the panes already swap. */
   #listtoggle { display: none; }
+
+  /* The board toolbar's Table toggle would sit above the ranked list and, pressed there,
+     read as "open something as a table" — the confusing behaviour. On a phone it moves
+     into the open-destination head instead. */
+  #tabletoggle { display: none; }
+  .card-head .detail-astable { display: inline-flex; }
 
   .detail-back {
     display: inline-flex;
@@ -1710,11 +1727,15 @@ table.matrix td.cross-at {
 
 /* ---------------------------------------------------------------- table view */
 
-/* Table view is an alternative to the GRID, not the whole board: the ranked list stays,
-   and the table takes the grid pane's place. */
 .tableview { display: none; }
-body.show-table .ddetail { display: none; }
-body.show-table .tableview { display: block; }
+
+/* Desktop: the table replaces the GRID pane, the ranked list stays. On mobile (the
+   <=860px block) the detail is a full-screen layer and the swap is gated on detail-open,
+   so these must not apply there. */
+@media (min-width: 861px) {
+  body.show-table .ddetail { display: none; }
+  body.show-table .tableview { display: block; }
+}
 
 .tableview table {
   border-collapse: collapse;
