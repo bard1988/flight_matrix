@@ -2485,23 +2485,16 @@ $('depart').addEventListener('input', syncReturnDate);
 loadFx();
 buildRegionTree();
 
-/* Advance the shared dot frame ~every 320ms and write it into every ellipsis on the page.
+/* Advance the shared dot frame every 300ms and write it into every ellipsis on the page.
    New spans built between ticks already carry the current frame (see `dots()`); this nudges
-   the ones already mounted. */
-let dotAt = 0;
-function dotLoop(now) {
-  if (now - dotAt >= 320) {
-    dotAt = now;
-    const els = document.getElementsByClassName('ellipsis');
-    if (els.length) {
-      dotFrame += 1;
-      const s = DOT_FRAMES[dotFrame % DOT_FRAMES.length];
-      for (const el of els) el.textContent = s;
-    }
-  }
-  requestAnimationFrame(dotLoop);
-}
-requestAnimationFrame(dotLoop);
+   the mounted ones. A plain foreground interval — no guards, no reduced-motion gate — is
+   the most reliable thing across phone browsers. */
+setInterval(() => {
+  dotFrame += 1;
+  const s = DOT_FRAMES[dotFrame % DOT_FRAMES.length];
+  const els = document.getElementsByClassName('ellipsis');
+  for (let i = 0; i < els.length; i += 1) els[i].textContent = s;
+}, 300);
 
 /* "When" is a plain month picker plus an "anytime" span. It just writes the two exact
    date fields (which still drive everything); Options exposes those directly for anyone

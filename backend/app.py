@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 import os
 import queue
@@ -10,7 +11,7 @@ import uuid
 from typing import Any
 
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import FileResponse, PlainTextResponse, Response, StreamingResponse
+from fastapi.responses import PlainTextResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
@@ -573,8 +574,22 @@ def sitemap(request: Request) -> Response:
 
 
 @app.get("/")
-def index() -> FileResponse:
-    return FileResponse(config.FRONTEND_DIR / "index.html")
+def index() -> Response:
+    """Serve index.html with a content hash pinned onto each asset URL.
+
+    `no_store_static` already sends `Cache-Control: no-store`, but some networks (corporate
+    proxies, mobile carriers, an over-eager service worker) hold onto `/static/app.js`
+    anyway, and then a deploy is invisible until the user clears their cache. A `?v=<hash>`
+    that changes with the file content sidesteps every one of those: it is a different URL.
+    """
+    html = (config.FRONTEND_DIR / "index.html").read_text(encoding="utf-8")
+    for asset in ("app.js", "styles.css", "favicon.svg"):
+        try:
+            digest = hashlib.sha1((config.FRONTEND_DIR / asset).read_bytes()).hexdigest()[:10]
+        except OSError:
+            continue
+        html = html.replace(f"/static/{asset}", f"/static/{asset}?v={digest}")
+    return Response(content=html, media_type="text/html")
 
 
 app.mount("/static", StaticFiles(directory=config.FRONTEND_DIR), name="static")
