@@ -88,10 +88,12 @@ def _seed_candidates(
     probe = TravelpayoutsProvider()
 
     def _probe(code: str) -> tuple[str, float] | None:
+        # A single airport failing the probe (unknown to Travelpayouts, a 4xx, a transport
+        # blip) must never take the board down with it - just skip that one.
         try:
             fare = probe.cheapest_fare(origin, code, month, request.currency,
                                        nonstop=request.nonstop_only)
-        except ProviderError:
+        except Exception:                       # noqa: BLE001
             return None
         if fare is None:
             return None

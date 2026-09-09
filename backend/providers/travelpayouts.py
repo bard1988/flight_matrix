@@ -262,7 +262,6 @@ class TravelpayoutsProvider:
                 "one_way": "false",
                 "direct": "true" if nonstop else "false",
                 "currency": currency,
-                "limit": 1,
                 "sorting": "price",
                 "market": "il",
             },
