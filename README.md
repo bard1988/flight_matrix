@@ -235,6 +235,34 @@ the airline's. And `visibleDates` is mandatory and may be combined with only *on
 
 Set `FM_BOARD_PROVIDER=travelpayouts` to switch back to the cached source.
 
+### Tests
+
+```
+py -3 -m pip install -r requirements-dev.txt
+py -3 -m pytest
+```
+
+84 tests, about three seconds, **no network and no provider is ever reached**. Every
+provider is a double; the real ones are exercised by the `data/probe_*.py` scripts, which
+are manual tools rather than tests. The cache runs against a fresh SQLite file per test,
+and the Kiwi block latch is reset per test, because both are module-level state that would
+otherwise leak into whatever ran next.
+
+| File | Covers |
+|---|---|
+| `test_models.py` | date axes, trip lengths, party scaling, booking links, cell derivations |
+| `test_coverage_and_cache_reuse.py` | the `coverage(nights=...)` regression that made the grid cache dead code |
+| `test_cache.py` | what SQLite refuses to hand back: wrong passenger mix, wrong source, older fill strategy |
+| `test_board_flow.py` | emission order: previews before grids, estimate-first then upgrade, destination matching |
+| `test_kiwi_provider.py` | the block latch, and that a pinned return date reaches every cell |
+| `test_api.py` | health, snapshot deduping, search lifecycle |
+
+The weighting is deliberate: most of these are regression tests for bugs that actually
+shipped, and each one names the failure it prevents rather than the function it calls.
+
+Not covered: the frontend (`frontend/app.js` has no test harness; it is checked by
+`data/audit_responsive.py`, which drives a real browser), and live provider behaviour.
+
 ### Previews first: the list before the grids
 
 The UI is master-detail - exactly one destination's grid is on screen at a time. Filling

@@ -72,7 +72,19 @@ def destination_matches(needle: str, code: str, city: str, country: str) -> bool
     code, country = (code or "").lower(), (country or "").lower()
     if len(needle) in (2, 3) and needle in (code, country):
         return True
-    return needle in (city or "").lower() or needle in airports.country_name(country).lower()
+
+    city_name = (city or "").lower()
+    country_name = airports.country_name(country).lower()
+
+    # A short needle is a CODE the user typed, not a fragment of a name, so it may only
+    # match where a word begins. The exact-match guard above was not enough on its own:
+    # the plain substring fall-through below still put "IT" inside L-it-huania, Un-it-ed
+    # Kingdom and Spl-it, so a search for Italy returned Vilnius, London and Split.
+    if len(needle) <= 3:
+        return any(word.startswith(needle)
+                   for word in (city_name + " " + country_name).split())
+
+    return needle in city_name or needle in country_name
 
 
 def date_axes(request: SearchRequest) -> tuple[list[date], list[date]]:
