@@ -10,7 +10,7 @@ Things worth doing, not yet scheduled.
 |---|---|---|---|
 | 1 | **Filter by airline** — bundled airline-name DB, refreshed periodically (and/or from what searches return) | M | todo |
 | 9 | **Filter by region** — collapsible continent → subregion → country tree | M–L | **done** (2026-09-08: tree UI in the Advanced panel) |
-| 9.1 | **Airport / city leaves in the region tree** — a fourth level under each country: pick a specific airport or city (by name or IATA), not just the whole country. Needs the airport list grouped by country (`backend/airports.py` has country_code per airport), a typeahead so a 4-level tree stays usable, and the search filter to accept airport codes alongside country codes. Pairs with #15 (seeding known airports into discovery). | M | todo |
+| 9.1 | **Airport / city leaves in the region tree** — a fourth level under each country: pick a specific airport or city (by name or IATA), not just the whole country. Needs the airport list grouped by country (`backend/airports.py` has country_code per airport), a typeahead so a 4-level tree stays usable, and the search filter to accept airport codes alongside country codes. Shares the OurAirports data with #15.0 / #15A. | M | todo |
 | 11 | **Kids' ages** — per-child age (infant/child buckets), not just a count; changes the price. Must propagate to providers + `party_key` cache key + child-factor scaling | M–L | todo |
 | 6 | **Cabin class** selector (economy / premium / business) — thread through provider → API → UI | M | todo |
 | 4 | **One search model: period + trip length** — drop the "Dates mean" dropdown | M | **done** (2026-09-07/08: dropdown gone, range default; anchors plumbing removed + widen reworked for the period model by the redesign pass) |
@@ -20,7 +20,10 @@ Things worth doing, not yet scheduled.
 | 7.3 | — cell-detail panel: the ✕ close is mispositioned (far right); reconsider full-screen panel on mobile | S | todo |
 | 10 | **Show the airport's city** wherever only the IATA code appears | S | **backend done** (2026-09-07: `describe()` resolves airport→city via `city_code`); panel-leg display todo |
 | 8 | **Design pass** — use the `design` skill / a proper design system | L | in progress |
-| 15 | **Long-haul discovery coverage** — Kiwi's `returnOnePerCityItineraries` for TLV returns ~160 nearby cities and no sub-Saharan Africa, so "To: Africa" yields only Marrakesh. Seed known long-haul destinations into discovery (or add a second discovery source). See Lever 3. | M–L | todo |
+| 15 | **Discovery coverage — the whole world, not just short-haul** — Kiwi's `returnOnePerCityItineraries` for TLV returns ~160 nearby cities and nothing long-haul (no sub-Saharan Africa, thin on Asia / S. America), so "To: Africa" yields only Marrakesh. Plan of record in **Lever 3**. Committed near-term: **15.0** (OurAirports data) + **15A** (seed discovery from the curated list). Endgame: **15C** (Google price-graph board), gated on a spike. | L | in progress (plan set) |
+| 15.0 | **OurAirports data** — replace the Travelpayouts airport dump with OurAirports (`type`, `scheduled_service`, lat/long, country). Prerequisite for 15A, 15C and #9.1. `data/build_airports.py`, same pattern as `build_countries.py`. | S–M | todo |
+| 15A | **Seed discovery from the curated list** — when `country_codes` (or a typed destination) is set and the live city board returns few/none inside it, top up candidates from OurAirports (region-filtered, ranked by `type`/scheduled_service, capped at the budget) and price them with the existing `fill_matrix`. Works today on Kiwi/TP. Stepping stone to 15C — same fill/stream/rank path, static list instead of Google. | M | todo |
+| 15C | **Google price-graph board provider** (was "Lever 1") — promote `google_flights.py` to a first-class board provider with `discover()` + `fill_matrix()` via the keyless price-graph RPC. Google isn't IP-blocking the VM and returns real party totals (2026-09-07 spike). **Blocked:** the batched call needs the `SNlM0e` XSRF token Google withholds from anonymous clients; point-query fallback measured ~15–20 min/20 dests. Needs a spike before committing. Endgame, not near-term. | L | spike |
 | 15.1 | — Egypt (Sharm, Hurghada, Cairo) is classified `Asia / Middle East` in `data/build_countries.py`, so the **Africa** filter excludes the one well-connected part of Africa from TLV. Decide: move Egypt to `Africa / Northern Africa`, or surface it under both. | S | todo |
 
 ### Notes on specific items
@@ -72,10 +75,10 @@ date-field change to that pass.
   datacenter IP; Kiwi 403-blocks it far more than a residential one. The free answer is
   #14 (fast graceful failover to Travelpayouts + live cross-check). Two dormant tools
   remain if we ever want real Kiwi coverage back:
-  - **Google price-graph board (Lever 1)** — spiked 2026-09-07: Google prices real party
+  - **Google price-graph board (#15C)** — spiked 2026-09-07: Google prices real party
     totals ✓, but the batched calendar call needs the `SNlM0e` XSRF token Google
     withholds from anonymous clients → fragile reverse-engineering. Point-query-only
-    board is ~15-20 min for 20 destinations. Parked.
+    board is ~15-20 min for 20 destinations. Parked; see Lever 3 / #15C.
   - **`FM_KIWI_PROXY` + `FM_KIWI_PROXY_BUDGET_MB`** (built, dormant) — routes only
     Kiwi's calls through a proxy, counts wire bytes to `data/kiwi_proxy_usage.json`,
     drops to direct when the budget is spent or the proxy fails (HTTP 407 etc.).
@@ -163,47 +166,99 @@ miss or misprice. For TLV every candidate is already blocked:
 The README's own line settles it: *"The aggregator has the carriers; what we were
 missing was itineraries, and that was our parser, not the source."*
 
-So the two levers below are about **capability and reliability of the sources we have**,
-not breadth.
+So the levers below are about **capability and reliability of the sources we have**, not
+breadth — Lever 3 (discovery coverage) is the plan of record.
 
 ---
 
-## Lever 1 — Google Flights as a full board source (price graph)
+## Lever 3 — discovery coverage: the whole world, not just short-haul (PLAN OF RECORD)
 
-**What:** today Google Flights is only a per-cell verifier (`backend/providers/google_flights.py`,
-used by Fill live and Auto cross-check). Promote it to a first-class board provider
-(`FM_BOARD_PROVIDER=google`) that can `discover()` and `fill_matrix()`.
+**The shortcoming (verified 2026-09-09, live).** A TLV → "Africa" search returns
+**Marrakesh only**. It is a *discovery* failure, not a data or filtering failure:
 
-**How:** Google Flights has a keyless **price-graph RPC** — cheapest round-trip per
-departure date over a range, for a trip-length band, in one call. Same protobuf
-mechanism `fast-flights` already uses for point queries; it just doesn't expose this
-message. `krisukox/google-flights-api` (Go) implements it as `GetPriceGraph()` and shows
-the protobuf shape. `backend/providers/google_flights.py` already builds and parses
-Google Flights protobufs (`_parse_all_itineraries`, `PARSER_VERSION`), so this is an
-extension, not a new dependency.
+- Kiwi and Travelpayouts can both price a TLV→Nairobi grid perfectly well **if you name
+  the route** — `fill_matrix` is route-by-route and works. What fails is the "where can I
+  go from TLV?" question.
+- Kiwi's `returnOnePerCityItineraries` for TLV returns ~160 destinations, effectively all
+  Europe / Caucasus / Gulf. The only African city in it is `RAK`. Nairobi, Zanzibar,
+  Addis, Johannesburg, Cape Town — 1–2-stop long-haul — are simply absent, so
+  `board.build`'s region filter has nothing to keep (`matched: 0` → `done` "Nothing
+  reachable from here is in the regions you picked").
+- Travelpayouts discovery (`prices_for_dates`, no `destination`) is a cache of what
+  Aviasales users recently searched — broader than Kiwi but skewed the same Euro-heavy
+  way, and not live.
+- Adding a third aggregator buys nothing (see the provider-research conclusion above:
+  Kiwi / TP / Google / Skyscanner / Kayak all resell the same GDS+NDC+LCC pool). The
+  missing piece is **a better list of candidate destinations to hand to discovery.**
 
-**Why it's the good lever:**
-- free, keyless, no new service
-- data from the source we already trust for verification
-- Google is **not** blocking the Oracle datacenter IP (the live deploy test filled 5
-  boards clean) — unlike Kiwi
-- gives a Kiwi-style grid fill that isn't rate-limited to death
+**Egypt sub-issue (#15.1).** Egypt *does* come back from Kiwi (`CAI`, `HRG`, `SSH`) but
+is tagged `Asia / Middle East` in `data/build_countries.py`, so the **Africa** checkbox
+never includes it. Cheap independent fix; decide move-vs-dual-list.
 
-**Caveats:**
-- price graph is departure-date-centric → a full departure×return matrix means one call
-  per trip length, i.e. the same "diagonal" approach `backend/providers/kiwi.py` already
-  takes
-- verify it honours the passenger count (real total, not per-person) — `GetOffers` does;
-  confirm the graph message does too
-- still Google → a block is possible later. Mitigations: the BrightData / SearchApi hooks
-  `fast-flights` v3 added, or a residential proxy.
+### Steps, in order
 
-**Rough shape:**
-- new `GoogleFlightsBoardProvider` in `backend/providers/`
-- port the price-graph protobuf build from the Go lib into `google_flights.py`
-- wire into `board.make_board_provider()` on `FM_BOARD_PROVIDER=google`
-- `discover()` can reuse the existing Travelpayouts discovery, or Google Travel Explore
-  (SerpApi free tier: 250/mo) if we want it fully off Travelpayouts
+**15.0 — OurAirports data (prerequisite).** `S–M`
+Replace `data/airports.v2.json` (Travelpayouts dump: 10.5k airports, no hub signal) with
+[OurAirports](https://ourairports.com/data/) — same worldwide coverage **plus** a `type`
+field (`large_airport` / `medium_airport` / `small_airport`), a `scheduled_service`
+flag, lat/long, and ISO country. The list was never the gap; the *ranking* was — Kenya
+alone has ~39 airports and discovery can only price ~20. `type` + `scheduled_service`
+give us that ranking. New `data/build_airports.py`, same pattern as `build_countries.py`;
+`backend/airports.py` reads the new shape. Also unblocks #9.1 (airport tree leaves).
+
+**15A — seed discovery from the curated list.** `M`  *(ship first for immediate relief)*
+In `board.build`, when `request.country_codes` (or a typed `destination_filter`) is set
+**and** the live city board returns few/none inside the selection, top up the candidate
+list from OurAirports: filter to the selected countries, rank by `type` /
+`scheduled_service`, cap at the destination budget, then price each with the **existing**
+`fill_matrix` — the same preview-first streaming and ranked-list path everything else
+uses. No new provider: works today on Kiwi/TP. This is 15C's discovery step done offline,
+so building it cleanly (a "fill this explicit list of destinations" path) is a stepping
+stone, not throwaway.
+
+**15C — Google price-graph board provider.** `L`  *(the real arc — needs a spike first)*
+Promote `backend/providers/google_flights.py` from per-cell verifier to a first-class
+board provider that can `discover()` and `fill_matrix()`, selected with
+`FM_BOARD_PROVIDER=google`. Would replace **Kiwi** as the primary board source;
+**Travelpayouts stays exactly where it is** — the estimate-first / fallback source
+(`_base_provider`, `_fallback_provider`).
+
+- **The plan:** Google has a keyless **price-graph RPC** — cheapest round-trip per
+  departure date over a range, for a trip-length band, in one call (the same "diagonal"
+  shape `kiwi.py` already fills). Port the message from `krisukox/google-flights-api`
+  (Go, `GetPriceGraph()`); `fast-flights` builds the point-query protobuf and
+  `_parse_all_itineraries` parses results, but does not expose the graph message.
+- **In its favour:** free, keyless, no new service; data from the source we already trust
+  for verification; Google is **not** IP-blocking the Oracle VM (Kiwi is — that is why
+  Kiwi boards take ~5 min today). The 2026-09-07 spike confirmed Google returns **real
+  party totals**, not per-person.
+- **The blocker the spike hit:** the *batched* price-graph / calendar call needs the
+  `SNlM0e` XSRF token that Google withholds from anonymous clients. Without it you fall
+  back to point queries — one call per date pair — which measured **~15–20 min for 20
+  destinations**, i.e. slower than Kiwi, and the spike was parked there. So 15C is not
+  "port a Go function"; it needs a spike to either (a) obtain / mint `SNlM0e` reliably
+  from a warm session, or (b) find another batched endpoint, or (c) decide point-query
+  throughput is acceptable with heavy caching + estimate-first painting.
+- **Risk:** Google could throttle later — mitigations: `fast-flights` v3 BrightData /
+  SearchApi hooks, or a residential proxy.
+- **Discovery for 15C:** the price-graph is route-keyed, so it still needs a candidate
+  list — 15A's OurAirports seeding feeds it directly.
+
+**Because of that blocker: 15.0 + 15A are the committed near-term work** (they fix the
+reported bug on the providers we already have). 15C stays the intended endgame but is
+gated on its own spike.
+
+**Parked:** Google Travel Explore / SerpApi as a discovery source. Revisit only if 15A's
+curated seeding proves too coarse in practice.
+
+**Acceptance (15.0 + 15A + 15.1):** TLV → "Africa", 3-month window, ~1 week → returns
+Sharm / Hurghada (needs 15.1) plus at least a few of Nairobi / Zanzibar / Cape Town /
+Johannesburg (needs 15A), each with a filled grid.
+
+**Expectations caveat:** even with perfect discovery, TLV → sub-Saharan Africa is
+genuinely 1–2 stops and expensive — those grids will be sparse and pricey. That is real,
+not a bug. The goal is that the destinations *appear* when asked for, not that they are
+cheap.
 
 ---
 
@@ -222,46 +277,11 @@ Travelpayouts fallback) manage it but cap throughput; the live test took ~5 min 
 2. **Residential / mobile proxy for outbound Kiwi calls only** — a `FM_KIWI_PROXY` env
    that `KiwiProvider`'s httpx client honours. Cheap residential proxy pools exist; only
    the Kiwi calls need it, not Google or Travelpayouts.
-3. **Accept it** and lean on lever 1 (Google board) as the primary, Kiwi as the
+3. **Accept it** and lean on 15C (Google board) as the primary, Kiwi as the
    real-totals cross-check on cheapest cells only.
 
 **Note:** the merged-CA hack (`config._ca_bundle()`) is corp-proxy-specific and already
 correctly no-ops on the VM; a proxy integration should not resurrect it.
-
----
-
-## Lever 3 — discovery coverage for long-haul (Africa, and anywhere far)
-
-**The shortcoming (verified 2026-09-09, live).** A TLV → "Africa" search returns
-**Marrakesh only**. Cause is discovery, not filtering or the region tree:
-
-- Kiwi's `returnOnePerCityItineraries` for TLV returns ~160 destinations, effectively
-  all Europe / Caucasus / Gulf. The only African city in it is `RAK`. Nairobi, Zanzibar,
-  Addis, Johannesburg, Cape Town — 1–2-stop long-haul routes — are simply not in Kiwi's
-  city board for TLV, so `board.build`'s region filter has nothing to keep (`matched: 0`,
-  `done` → "Nothing reachable from here is in the regions you picked").
-- Egypt *does* come back (`CAI`, `HRG`, `SSH`) — but it's tagged `Asia / Middle East`
-  (`data/build_countries.py` override), so the **Africa** checkbox never includes it. See
-  backlog #15.1.
-- This is a provider-data gap, not a bug: `returnOnePerCityItineraries` has no limit knob
-  to widen, and per the provider-research conclusion above, adding aggregators adds no
-  routes.
-
-**Options, cheapest first:**
-1. **Seed discovery when a region/filter is set.** If `country_codes` (or a typed
-   destination) is present and discovery returns few/none inside it, synthesise
-   candidates from a bundled list of well-known airports per country (the airport table
-   in `backend/airports.py` already has the data) and price them directly with
-   `fill_matrix` / the calendar call, rather than relying on the city board to surface
-   them. Bounded by the destination budget. Smallest change, no new service.
-2. **Google Travel Explore as a discovery source** (SerpApi free tier, 250/mo) — already
-   noted under "Smaller / maybe"; gives a real "where can I go from X" that isn't
-   Kiwi-shaped. Pairs with Lever 1.
-3. **Google price-graph board provider (Lever 1)** with its own discovery — the fuller
-   fix; Google is not IP-blocking the VM.
-
-**Acceptance:** TLV → "Africa", 3-month window, ~1 week → returns Sharm/Hurghada plus at
-least a few of Nairobi / Zanzibar / Cape Town / Johannesburg with a filled grid.
 
 ---
 
@@ -271,8 +291,8 @@ least a few of Nairobi / Zanzibar / Cape Town / Johannesburg with a filled grid.
   **2026-06-15**.
 - `fast-flights` is pinned `>=2.2` in `requirements.txt` but the code targets the 3.x
   API. Pin it properly (`>=3,<4`) and retest Fill live.
-- SerpApi Google Travel Explore (free 250/mo) as a discovery source, to get discovery
-  fully off Travelpayouts.
+- SerpApi Google Travel Explore (free 250/mo) as a discovery source — **parked** under
+  Lever 3; revisit only if #15A's curated seeding proves too coarse.
 
 ---
 
