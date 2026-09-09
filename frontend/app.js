@@ -2491,7 +2491,7 @@ if (!REDUCE_MOTION.matches) {
     dotFrame += 1;
     const s = DOT_FRAMES[dotFrame % DOT_FRAMES.length];
     for (const el of els) el.textContent = s;
-  }, 400);
+  }, 320);
 }
 
 /* "When" is a plain month picker plus an "anytime" span. It just writes the two exact

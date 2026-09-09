@@ -1755,14 +1755,13 @@ body.show-table .tableview { display: block; }
 .empty { color: var(--text-muted); padding: 40px 16px; text-align: center; }
 
 /* Trailing dots that cycle . -> .. -> ... on a "still working" line ("Finding dates",
-   "Finding cheap destinations"). The text is written by one JS ticker (app.js); a 3ch mono
-   box is reserved so the line never jitters as the dot count changes. */
-.ellipsis {
-  display: inline-block;
-  width: 3ch;
-  text-align: left;
-  font-family: var(--mono);
-}
+   "Finding cheap destinations"). The text is written by one JS ticker (app.js). It butts
+   straight onto the preceding word like a normal ellipsis — no reserved box, no mono
+   spacing, so the dots read as ".." not ". ." — and since nothing follows it on the line
+   the growing/shrinking width jitters nothing. */
+.ellipsis { display: inline; }
+/* The one place text after / around it would shift: the centred #empty line. */
+#empty .ellipsis { display: inline-block; min-width: 1.6ch; text-align: left; }
 
 .sr-only {
   position: absolute;
