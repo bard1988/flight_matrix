@@ -1,48 +1,457 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-09-07T00:00:00Z",
+  "generatedAt": "2026-09-09T15:04:01Z",
   "title": "Design System: FlightMatrix",
   "extensions": {
     "colorMeta": {
-      "ink": { "role": "primary", "displayName": "Near-Black Ink", "canonical": "#0b0b0b", "darkValue": "#ffffff", "tonalRamp": ["#0b0b0b", "#232320", "#3d3c38", "#575650", "#767469", "#9d9a8d", "#c6c2b4", "#ece8dd"] },
-      "ink-secondary": { "role": "neutral", "displayName": "Warm Slate", "canonical": "#52514e", "darkValue": "#c3c2b7", "tonalRamp": ["#1a1a18", "#2e2d2a", "#42413d", "#52514e", "#6e6c67", "#928f86", "#bdb9ac", "#e6e2d7"] },
-      "ink-muted": { "role": "neutral", "displayName": "Quiet Stone", "canonical": "#6c6960", "darkValue": "#97938a", "tonalRamp": ["#0f0d07", "#2a271f", "#47443b", "#66635a", "#87837a", "#a9a69c", "#cdc9bf", "#f2eee4"] },
-      "paper": { "role": "neutral", "displayName": "Warm Paper", "canonical": "#f9f9f7", "darkValue": "#0d0d0d", "tonalRamp": ["#171613", "#2b2823", "#423e37", "#5c574d", "#7c766a", "#a39d8f", "#c9c3b4", "#f9f9f7"] },
-      "paper-raised": { "role": "neutral", "displayName": "Raised Paper", "canonical": "#fcfcfb", "darkValue": "#1a1a19", "tonalRamp": ["#1a1a19", "#2c2b28", "#434139", "#5d584e", "#7d776b", "#a49e90", "#c9c4b5", "#fcfcfb"] },
-      "gridline": { "role": "neutral", "displayName": "Gridline", "canonical": "#e1e0d9", "darkValue": "#2c2c2a", "tonalRamp": ["#1c1c1a", "#2c2c2a", "#43423d", "#5d5b53", "#7d7b70", "#a4a294", "#c6c4b8", "#e1e0d9"] },
-      "axis": { "role": "neutral", "displayName": "Axis Grey", "canonical": "#c3c2b7", "darkValue": "#383835", "tonalRamp": ["#232320", "#383835", "#4f4e48", "#67655d", "#87857a", "#a5a398", "#c3c2b7", "#e7e6dc"] },
-      "hairline": { "role": "neutral", "displayName": "Ink Hairline", "canonical": "rgba(11, 11, 11, 0.1)", "darkValue": "rgba(255, 255, 255, 0.1)", "tonalRamp": ["rgba(11,11,11,0.9)", "rgba(11,11,11,0.7)", "rgba(11,11,11,0.5)", "rgba(11,11,11,0.35)", "rgba(11,11,11,0.22)", "rgba(11,11,11,0.14)", "rgba(11,11,11,0.1)", "rgba(11,11,11,0.05)"] },
-      "marker-yellow": { "role": "tertiary", "displayName": "Reserved Marker Yellow", "canonical": "#f2b705", "darkValue": "#ffcf33", "tonalRamp": ["#3a2c01", "#5a4402", "#7c5e02", "#a37c03", "#c99a04", "#f2b705", "#f8d15f", "#fdecb8"] },
-      "verified-green": { "role": "tertiary", "displayName": "Verified Green", "canonical": "#0ca30c", "darkValue": "#0ca30c", "tonalRamp": ["#032f03", "#054605", "#075f07", "#0a7d0a", "#0c9a0c", "#0ca30c", "#5fd35f", "#b8f0b8"] },
-      "error-red": { "role": "tertiary", "displayName": "Error Red", "canonical": "#d03b3b", "darkValue": "#d03b3b", "tonalRamp": ["#3a0d0d", "#571313", "#7c1c1c", "#a32626", "#c93232", "#d03b3b", "#e38585", "#f5d0d0"] },
-      "advisory-amber": { "role": "tertiary", "displayName": "Advisory Amber", "canonical": "#fab219", "darkValue": "#fab219", "tonalRamp": ["#3d2b03", "#5d4104", "#815a05", "#a87706", "#d09507", "#fab219", "#fccf63", "#fee9b6"] },
-      "fare-0": { "role": "secondary", "displayName": "Fare Green (Cheapest)", "canonical": "#12603d", "darkValue": "#68e4a3", "tonalRamp": ["#07100a", "#152d20", "#214e37", "#307250", "#539470", "#7eb495", "#a8d6bb", "#dbf6e5"] },
-      "fare-1": { "role": "secondary", "displayName": "Fare Green", "canonical": "#19773f", "darkValue": "#5bcc80", "tonalRamp": ["#071009", "#152d1c", "#214f30", "#257442", "#489761", "#76b888", "#a3d9b0", "#dcf7e2"] },
-      "fare-2": { "role": "secondary", "displayName": "Fare Green-Gold", "canonical": "#278d41", "darkValue": "#52b365", "tonalRamp": ["#071008", "#152e19", "#214f2a", "#247537", "#409952", "#71ba7c", "#9fdba6", "#ddf7e0"] },
-      "fare-3": { "role": "secondary", "displayName": "Fare Gold (Mid)", "canonical": "#bb7c24", "darkValue": "#b4771f", "tonalRamp": ["#120c06", "#332413", "#593e1d", "#84591f", "#ae772f", "#ce9b5e", "#eac193", "#f6ede2"] },
-      "fare-4": { "role": "secondary", "displayName": "Fare Warm Orange", "canonical": "#e0875c", "darkValue": "#aa562a", "tonalRamp": ["#150a06", "#3a1f13", "#66351c", "#974a21", "#bb6c45", "#d99271", "#ebbfab", "#f6ece7"] },
-      "fare-5": { "role": "secondary", "displayName": "Fare Coral", "canonical": "#f99885", "darkValue": "#953e2f", "tonalRamp": ["#180805", "#411912", "#6e2c21", "#994738", "#bd6858", "#db8f80", "#ebbdb4", "#f6ece9"] },
-      "fare-6": { "role": "secondary", "displayName": "Fare Faded Red (Dearest)", "canonical": "#fbb7b4", "darkValue": "#723232", "tonalRamp": ["#190707", "#3e1b1b", "#623534", "#885150", "#ac7270", "#cb9794", "#eabdba", "#f6eceb"] }
+      "ink": {
+        "role": "primary",
+        "displayName": "Near-Black Ink",
+        "canonical": "#0b0b0b",
+        "darkValue": "#ffffff",
+        "tonalRamp": [
+          "#0b0b0b",
+          "#232320",
+          "#3d3c38",
+          "#575650",
+          "#767469",
+          "#9d9a8d",
+          "#c6c2b4",
+          "#ece8dd"
+        ]
+      },
+      "ink-secondary": {
+        "role": "neutral",
+        "displayName": "Warm Slate",
+        "canonical": "#52514e",
+        "darkValue": "#c3c2b7",
+        "tonalRamp": [
+          "#1a1a18",
+          "#2e2d2a",
+          "#42413d",
+          "#52514e",
+          "#6e6c67",
+          "#928f86",
+          "#bdb9ac",
+          "#e6e2d7"
+        ]
+      },
+      "ink-muted": {
+        "role": "neutral",
+        "displayName": "Quiet Stone",
+        "canonical": "#6c6960",
+        "darkValue": "#97938a",
+        "tonalRamp": [
+          "#0f0d07",
+          "#2a271f",
+          "#47443b",
+          "#66635a",
+          "#87837a",
+          "#a9a69c",
+          "#cdc9bf",
+          "#f2eee4"
+        ]
+      },
+      "paper": {
+        "role": "neutral",
+        "displayName": "Warm Paper",
+        "canonical": "#f9f9f7",
+        "darkValue": "#0d0d0d",
+        "tonalRamp": [
+          "#171613",
+          "#2b2823",
+          "#423e37",
+          "#5c574d",
+          "#7c766a",
+          "#a39d8f",
+          "#c9c3b4",
+          "#f9f9f7"
+        ]
+      },
+      "paper-raised": {
+        "role": "neutral",
+        "displayName": "Raised Paper",
+        "canonical": "#fcfcfb",
+        "darkValue": "#1a1a19",
+        "tonalRamp": [
+          "#1a1a19",
+          "#2c2b28",
+          "#434139",
+          "#5d584e",
+          "#7d776b",
+          "#a49e90",
+          "#c9c4b5",
+          "#fcfcfb"
+        ]
+      },
+      "gridline": {
+        "role": "neutral",
+        "displayName": "Gridline",
+        "canonical": "#e1e0d9",
+        "darkValue": "#2c2c2a",
+        "tonalRamp": [
+          "#1c1c1a",
+          "#2c2c2a",
+          "#43423d",
+          "#5d5b53",
+          "#7d7b70",
+          "#a4a294",
+          "#c6c4b8",
+          "#e1e0d9"
+        ]
+      },
+      "axis": {
+        "role": "neutral",
+        "displayName": "Axis Grey",
+        "canonical": "#c3c2b7",
+        "darkValue": "#383835",
+        "tonalRamp": [
+          "#232320",
+          "#383835",
+          "#4f4e48",
+          "#67655d",
+          "#87857a",
+          "#a5a398",
+          "#c3c2b7",
+          "#e7e6dc"
+        ]
+      },
+      "hairline": {
+        "role": "neutral",
+        "displayName": "Ink Hairline",
+        "canonical": "rgba(11, 11, 11, 0.1)",
+        "darkValue": "rgba(255, 255, 255, 0.1)",
+        "tonalRamp": [
+          "rgba(11,11,11,0.9)",
+          "rgba(11,11,11,0.7)",
+          "rgba(11,11,11,0.5)",
+          "rgba(11,11,11,0.35)",
+          "rgba(11,11,11,0.22)",
+          "rgba(11,11,11,0.14)",
+          "rgba(11,11,11,0.1)",
+          "rgba(11,11,11,0.05)"
+        ]
+      },
+      "marker-yellow": {
+        "role": "tertiary",
+        "displayName": "Reserved Marker Yellow",
+        "canonical": "#f2b705",
+        "darkValue": "#ffcf33",
+        "tonalRamp": [
+          "#3a2c01",
+          "#5a4402",
+          "#7c5e02",
+          "#a37c03",
+          "#c99a04",
+          "#f2b705",
+          "#f8d15f",
+          "#fdecb8"
+        ]
+      },
+      "verified-green": {
+        "role": "tertiary",
+        "displayName": "Verified Green",
+        "canonical": "#0ca30c",
+        "darkValue": "#0ca30c",
+        "tonalRamp": [
+          "#032f03",
+          "#054605",
+          "#075f07",
+          "#0a7d0a",
+          "#0c9a0c",
+          "#0ca30c",
+          "#5fd35f",
+          "#b8f0b8"
+        ]
+      },
+      "error-red": {
+        "role": "tertiary",
+        "displayName": "Error Red",
+        "canonical": "#d03b3b",
+        "darkValue": "#d03b3b",
+        "tonalRamp": [
+          "#3a0d0d",
+          "#571313",
+          "#7c1c1c",
+          "#a32626",
+          "#c93232",
+          "#d03b3b",
+          "#e38585",
+          "#f5d0d0"
+        ]
+      },
+      "advisory-amber": {
+        "role": "tertiary",
+        "displayName": "Advisory Amber",
+        "canonical": "#fab219",
+        "darkValue": "#fab219",
+        "tonalRamp": [
+          "#3d2b03",
+          "#5d4104",
+          "#815a05",
+          "#a87706",
+          "#d09507",
+          "#fab219",
+          "#fccf63",
+          "#fee9b6"
+        ]
+      },
+      "fare-0": {
+        "role": "secondary",
+        "displayName": "Fare Green (Cheapest)",
+        "canonical": "#12603d",
+        "darkValue": "#68e4a3",
+        "tonalRamp": [
+          "#07100a",
+          "#152d20",
+          "#214e37",
+          "#307250",
+          "#539470",
+          "#7eb495",
+          "#a8d6bb",
+          "#dbf6e5"
+        ]
+      },
+      "fare-1": {
+        "role": "secondary",
+        "displayName": "Fare Green",
+        "canonical": "#19773f",
+        "darkValue": "#5bcc80",
+        "tonalRamp": [
+          "#071009",
+          "#152d1c",
+          "#214f30",
+          "#257442",
+          "#489761",
+          "#76b888",
+          "#a3d9b0",
+          "#dcf7e2"
+        ]
+      },
+      "fare-2": {
+        "role": "secondary",
+        "displayName": "Fare Green-Gold",
+        "canonical": "#278d41",
+        "darkValue": "#52b365",
+        "tonalRamp": [
+          "#071008",
+          "#152e19",
+          "#214f2a",
+          "#247537",
+          "#409952",
+          "#71ba7c",
+          "#9fdba6",
+          "#ddf7e0"
+        ]
+      },
+      "fare-3": {
+        "role": "secondary",
+        "displayName": "Fare Gold (Mid)",
+        "canonical": "#bb7c24",
+        "darkValue": "#b4771f",
+        "tonalRamp": [
+          "#120c06",
+          "#332413",
+          "#593e1d",
+          "#84591f",
+          "#ae772f",
+          "#ce9b5e",
+          "#eac193",
+          "#f6ede2"
+        ]
+      },
+      "fare-4": {
+        "role": "secondary",
+        "displayName": "Fare Warm Orange",
+        "canonical": "#e0875c",
+        "darkValue": "#aa562a",
+        "tonalRamp": [
+          "#150a06",
+          "#3a1f13",
+          "#66351c",
+          "#974a21",
+          "#bb6c45",
+          "#d99271",
+          "#ebbfab",
+          "#f6ece7"
+        ]
+      },
+      "fare-5": {
+        "role": "secondary",
+        "displayName": "Fare Coral",
+        "canonical": "#f99885",
+        "darkValue": "#953e2f",
+        "tonalRamp": [
+          "#180805",
+          "#411912",
+          "#6e2c21",
+          "#994738",
+          "#bd6858",
+          "#db8f80",
+          "#ebbdb4",
+          "#f6ece9"
+        ]
+      },
+      "fare-6": {
+        "role": "secondary",
+        "displayName": "Fare Faded Red (Dearest)",
+        "canonical": "#fbb7b4",
+        "darkValue": "#723232",
+        "tonalRamp": [
+          "#190707",
+          "#3e1b1b",
+          "#623534",
+          "#885150",
+          "#ac7270",
+          "#cb9794",
+          "#eabdba",
+          "#f6eceb"
+        ]
+      }
     },
     "typographyMeta": {
-      "display": { "displayName": "Display", "purpose": "The single large price in the detail panel. The one big number on the surface." },
-      "headline": { "displayName": "Headline", "purpose": "Wordmark, destination card titles, panel heading. Ceiling for type size in the chrome." },
-      "body": { "displayName": "Body", "purpose": "Default text: inputs, status line, panel prose, footnote." },
-      "label": { "displayName": "Label", "purpose": "Field labels above every control. Sentence case, 11px, muted, no tracking: twelve uppercase wide-tracked labels at once made the control bar read as a database query form, and upper case is harder to read at 11px than lower." },
-      "numeric": { "displayName": "Numeric / Cell", "purpose": "The price printed in each fare cell and the matrix date headers. Small by necessity; hundreds on screen." }
+      "display": {
+        "displayName": "Display",
+        "purpose": "The verified total in the cell panel; the first-run headline on desktop. 26px/600."
+      },
+      "headline": {
+        "displayName": "Headline",
+        "purpose": "First-run headline at <=720px and in the short-viewport branch. 22px/600."
+      },
+      "title": {
+        "displayName": "Title",
+        "purpose": "The card headline fare. 19px/600, dropping to 18px at <=720px."
+      },
+      "title-touch": {
+        "displayName": "Title (touch)",
+        "purpose": "The card headline fare at <=720px. 18px/600."
+      },
+      "title-compact": {
+        "displayName": "Title Compact",
+        "purpose": "The card headline in its tighter variant. 17px/600."
+      },
+      "subtitle": {
+        "displayName": "Subtitle",
+        "purpose": "Panel section headings; primary and options buttons at <=720px. 15px/600."
+      },
+      "body-lg": {
+        "displayName": "Body Large",
+        "purpose": "The board tools strip at <=720px. 14px."
+      },
+      "list-city": {
+        "displayName": "List City",
+        "purpose": "Destination name in a ranked list row. 13.5px/600."
+      },
+      "body": {
+        "displayName": "Body",
+        "purpose": "Default UI text, table cells, the detail-pane waiting note. 13px."
+      },
+      "meta": {
+        "displayName": "Meta",
+        "purpose": "The card date-pair line. 12.5px."
+      },
+      "cell": {
+        "displayName": "Cell",
+        "purpose": "The fare matrix. Geist Mono 12px/18px tabular; 13px on mobile in a 38px cell."
+      },
+      "label": {
+        "displayName": "Label",
+        "purpose": "Field labels, tags, hints, legend text. The 11px floor for functional text."
+      },
+      "icon-glyph": {
+        "displayName": "Icon Glyph",
+        "purpose": "Disclosure carets only (.ctry-caret, .dest-caret). 10px, the documented exception to the floor."
+      },
+      "input-touch": {
+        "displayName": "Input (touch)",
+        "purpose": "Every field at <=720px at 16px, to stop iOS zooming the viewport on focus."
+      }
     },
     "shadows": [
-      { "name": "tooltip-ambient", "value": "0 6px 20px rgba(0, 0, 0, 0.18)", "purpose": "The only true drop shadow in the system. Belongs to the hover tooltip, the one element that genuinely floats free above everything." },
-      { "name": "ring-card-best", "value": "0 0 0 1px var(--marker-yellow)", "purpose": "Not elevation: a spread outline marking the board-wide cheapest card." },
-      { "name": "ring-cell-best-here", "value": "0 0 0 1px var(--surface-1), 0 0 0 3px var(--marker-yellow)", "purpose": "Marks each card's own cheapest cell with a 1px surface gap then a yellow ring." },
-      { "name": "ring-cell-best-board", "value": "0 0 0 1px var(--surface-1), 0 0 0 4px var(--marker-yellow), 0 0 0 5px var(--text-primary)", "purpose": "Heavier double ring for the single cheapest cell on the whole board." }
+      {
+        "name": "tooltip-ambient",
+        "value": "0 6px 20px rgba(0, 0, 0, 0.18)",
+        "purpose": "The hover tooltip, which genuinely floats free above everything."
+      },
+      {
+        "name": "popover-ambient",
+        "value": "0 8px 28px rgba(0, 0, 0, 0.18)",
+        "purpose": "The region tree and destinations popovers."
+      },
+      {
+        "name": "panel-scrim",
+        "value": "0 0 0 100vmax rgba(0, 0, 0, 0.22)",
+        "purpose": "The full-viewport dim behind the cell panel."
+      },
+      {
+        "name": "ring-cheapest-here",
+        "value": "inset 0 0 0 1px currentColor, inset 0 0 0 3px var(--cheapest)",
+        "purpose": "Not elevation: the marker ring on this grid own cheapest cell."
+      },
+      {
+        "name": "ring-cheapest-board",
+        "value": "inset 0 0 0 1px currentColor, inset 0 0 0 4px var(--cheapest), inset 0 0 0 5px currentColor",
+        "purpose": "The thicker ring-plus-ink-edge on the board-wide cheapest cell."
+      },
+      {
+        "name": "locate-flash",
+        "value": "var(--flash-from) to var(--flash-to)",
+        "purpose": "The pulse that lands you on a cell after a jump."
+      },
+      {
+        "name": "rule-sticky-header",
+        "value": "inset 0 -1px 0 0 var(--gridline)",
+        "purpose": "A rule drawn as a shadow under the table sticky header, not elevation."
+      },
+      {
+        "name": "rule-row-selected",
+        "value": "inset 2px 0 0 0 var(--text-primary)",
+        "purpose": "The selected list row leading edge."
+      },
+      {
+        "name": "wash-row-hover",
+        "value": "inset 0 0 0 999px rgba(127, 127, 127, 0.16)",
+        "purpose": "The table hover tint."
+      },
+      {
+        "name": "focus-ring",
+        "value": "0 0 0 1px var(--text-primary)",
+        "purpose": "Crisp offset ring for focus and selection. Never a blurred halo."
+      }
     ],
     "motion": [
-      { "name": "panel-slide", "value": "transform 0.16s ease", "purpose": "The detail panel entering from the right edge (translateX(100%) to none). Mobile: same, as a full sheet." },
-      { "name": "locate-flash", "value": "locate-flash 0.4s ease-in-out 4", "purpose": "Pulses the cheapest-cell marker ring four times after a jump-to-cheapest, so the eye lands on the right square." }
+      {
+        "name": "panel-slide",
+        "value": "transform 0.16s ease",
+        "purpose": "The detail panel entering from the right edge (translateX(100%) to none). Mobile: same, as a full sheet."
+      },
+      {
+        "name": "locate-flash",
+        "value": "locate-flash 0.4s ease-in-out 4",
+        "purpose": "Pulses the cheapest-cell marker ring four times after a jump-to-cheapest, so the eye lands on the right square."
+      }
     ],
     "breakpoints": [
-      { "name": "mobile", "value": "720px" }
+      {
+        "name": "bar-stack",
+        "value": "720px",
+        "purpose": "Control bar restacks to full-width fields, loses stickiness, fields go to 16px."
+      },
+      {
+        "name": "master-detail-collapse",
+        "value": "860px",
+        "purpose": "List becomes the whole screen; detail pane and table view become fixed full-bleed layers at z-index 60. .detail-back and .table-back appear here."
+      },
+      {
+        "name": "short-viewport",
+        "value": "max-height: 480px",
+        "purpose": "Landscape phones: the control bar stops being sticky."
+      },
+      {
+        "name": "coarse-pointer",
+        "value": "pointer: coarse",
+        "purpose": "Touch comfort sizing, independent of width. A landscape phone is 740px wide and still a finger, so this keys off the pointer."
+      }
     ]
   },
   "components": [
@@ -117,42 +526,72 @@
       "description": "Top of the slide-in detail panel: the one large price, a definition list of facts, flight legs indented under a bold sector summary.",
       "html": "<div class=\"ds-panel\"><h3 class=\"ds-panel-h\">Athens · 12–19 Nov</h3><div class=\"ds-big\">₪412</div><dl class=\"ds-dl\"><dt>Source</dt><dd>Kiwi</dd><dt>Stops</dt><dd>Nonstop</dd></dl></div>",
       "css": ".ds-panel { width: 300px; background: #fcfcfb; border-left: 1px solid rgba(11,11,11,0.1); padding: 16px; font: 14px/1.45 system-ui, sans-serif; color: #0b0b0b; } .ds-panel-h { margin: 0 0 4px; font-size: 15px; font-weight: 600; } .ds-big { font-size: 26px; font-weight: 600; font-variant-numeric: tabular-nums; } .ds-dl { display: grid; grid-template-columns: auto 1fr; gap: 4px 10px; margin: 12px 0; } .ds-dl dt { color: #6c6960; } .ds-dl dd { margin: 0; font-variant-numeric: tabular-nums; }"
+    },
+    {
+      "name": "Preview List Row",
+      "kind": "list-item",
+      "refersTo": "list-row",
+      "description": "A ranked list row before its grid arrives. Carries discovery party total in the fare slot and 'from - finding dates...' where the date pair goes. Shows no range and no dates: discovery returns a departure date and a price but no return date, and a guessed pair is how unbookable prices reached the board once before. The price goes through the same per-person division as a filled row, or the list would rank two different quantities against each other.",
+      "html": "<button class=\"lrow\"><span class=\"lrow-city\">Sofia<span class=\"lrow-country\">Bulgaria</span></span><span class=\"lrow-price\">₪1,200</span><span class=\"lrow-when\">from &middot; finding dates&hellip;</span></button>",
+      "css": ".lrow { display: grid; grid-template-columns: 1fr auto; gap: 1px 8px; width: 100%; text-align: left; padding: 8px 8px 9px; border: 0; border-bottom: 1px solid var(--gridline); background: none; color: inherit; font: inherit; cursor: pointer; }\n.lrow-city { font-size: 13.5px; font-weight: 600; }\n.lrow-when { grid-column: 1 / -1; font-size: 11px; color: var(--text-secondary); }"
+    },
+    {
+      "name": "Waiting Detail Card",
+      "kind": "card",
+      "refersTo": "card",
+      "description": "The detail pane for a selected destination whose grid has not landed. Uses the same .card and .card-head as a filled card, so it carries the city name and the same back control; on a phone the pane is a fixed full-screen layer and a bare sentence with no control is a dead end. role=status so a screen reader hears the grid arrive. No skeleton grid: the axes are unknown until the fill returns, and a placeholder of the wrong shape is a worse lie than a sentence.",
+      "html": "<section class=\"card is-waiting\"><div class=\"card-head\"><button class=\"fillbtn detail-back\" aria-label=\"Back to the destination list\">&lsaquo; All</button><h2 class=\"card-city\">Sofia</h2></div><p class=\"detail-waiting\" role=\"status\">Cheapest found so far ₪1,200. Finding the dates behind it&hellip;</p></section>",
+      "css": ".card.is-waiting { padding-bottom: 24px; }\n.detail-waiting { margin: 0; padding: 20px 0 0; color: var(--text-secondary); font-size: 13px; }"
+    },
+    {
+      "name": "Layer Back Control",
+      "kind": "button",
+      "refersTo": "button",
+      "description": "The escape hatch for a full-screen layer. Below 860px both the detail pane and the table view are fixed and full-bleed and each covers the toolbar control that opened it, so the dismiss control lives inside the layer. Hidden above 860px, where the toolbar is never covered.",
+      "html": "<button class=\"fillbtn detail-back\">&lsaquo; All</button>\n<button class=\"fillbtn detail-back table-back\">&lsaquo; Board</button>",
+      "css": ".detail-back { display: none; }\n.table-back { margin: 0 0 8px; }\n@media (max-width: 860px) {\n  .detail-back { display: inline-flex; order: -1; margin: 0 0 4px; }\n  .table-back { display: inline-flex; }\n}"
     }
   ],
   "narrative": {
     "northStar": "The Departures Board",
-    "overview": "FlightMatrix looks like the analog board in an airport concourse: tabular, glanceable, numbers first, and stripped of decoration. The interface's whole job is to get out of the way of a dense grid of prices so the eye can scan across destinations and date pairs and land on the cheap one. Every element is sized to the information it carries — a fare cell is 26×17px because that is what a four-digit price needs, not a pixel more — and the chrome around the grid is deliberately quiet: hairline borders, a faint warm-paper ground, one weight of one typeface doing all the hierarchy.\n\nThe stance is a quiet instrument, explicitly not a consumer travel site. There are no hero images, no gradients, no urgency banners, no \"1 seat left\" theatre, no decorative colour. The one place colour is loud — the green-to-red fare heatmap — is load-bearing data, and even there the number is always printed on the cell so colour is never the only signal. The product's voice is candid about its own limits (estimates are a ranking, not a quote; a hatched cell means \"no data\", not \"expensive\") and the design carries that honesty: states are labelled in words, warnings ship with text, and nothing is styled to look more certain than it is.\n\nDensity is high and calculated. Several destination cards sit side by side, each matrix scrolls inside its own fixed viewport rather than stretching the card, and the page fills the viewport edge to edge like a tool rather than sitting in a document column. Motion is minimal — a panel slide, a locate pulse — and surfaces are flat.",
+    "overview": "FlightMatrix looks like the analog board in an airport concourse: tabular, glanceable, numbers first, and stripped of decoration. The interface's whole job is to get out of the way of a dense grid of prices so the eye can scan across destinations and date pairs and land on the cheap one. Every element is sized to the information it carries - a fare cell is 26×17px because that is what a four-digit price needs, not a pixel more - and the chrome around the grid is deliberately quiet: hairline borders, a faint warm-paper ground, one weight of one typeface doing all the hierarchy.\n\nThe stance is a quiet instrument, explicitly not a consumer travel site. There are no hero images, no gradients, no urgency banners, no \"1 seat left\" theatre, no decorative colour. The one place colour is loud - the green-to-red fare heatmap - is load-bearing data, and even there the number is always printed on the cell so colour is never the only signal. The product's voice is candid about its own limits (estimates are a ranking, not a quote; a hatched cell means \"no data\", not \"expensive\") and the design carries that honesty: states are labelled in words, warnings ship with text, and nothing is styled to look more certain than it is.\n\nDensity is high and calculated. Several destination cards sit side by side, each matrix scrolls inside its own fixed viewport rather than stretching the card, and the page fills the viewport edge to edge like a tool rather than sitting in a document column. Motion is minimal - a panel slide, a locate pulse - and surfaces are flat.",
     "keyCharacteristics": [
       "Numbers-first: tabular figures everywhere comparison happens; the grid is the hero.",
-      "One typeface, one warm-neutral palette, hairline separation — the chrome recedes.",
+      "Master-detail: a ranked list you scan, one grid you study, in independent scroll regions.",
+      "Two families (Geist for chrome, Geist Mono for every numeral), one warm-neutral palette.",
       "Flat by default: depth is a 1px border or a tonal step, not a shadow.",
-      "Colour is a second channel, never the only one; yellow is reserved for the \"cheapest\" marker.",
+      "Colour is a second channel, never the only one; yellow is reserved for the cheapest marker.",
       "Honest states: labelled in words, never over-styled for false confidence.",
-      "Light and dark are equal citizens (system-following, with a manual override)."
+      "Light and dark are equal citizens (system-following, with a manual override).",
+      "Every layer that covers the screen carries its own way out."
     ],
     "rules": [
-      { "name": "The Colour-Is-Second Rule", "body": "Every priced cell prints its price, and the fare ramp's OKLCH lightness is strictly monotonic cheapest → dearest, so the scale still separates every step with hue removed — green, amber and red otherwise collapse together under deuteranopia. Any ramp change must keep the lightness monotone (min step ΔL ≥ 0.06) and re-run data/emit_fare_ramp.py. Never ship a state where colour is the only carrier of meaning.", "section": "colors" },
-      { "name": "The Reserved Yellow Rule", "body": "marker-yellow (#f2b705, #ffcf33 in dark) marks the cheapest cell — a ring on each card's own cheapest, a thicker ring plus card border on the board-wide cheapest. It appears nowhere in the fare ramp, so a yellow ring can never be misread as a price level.", "section": "colors" },
-      { "name": "The Per-Matrix Scale Rule", "body": "Heatmap colour ranks date pairs within one destination, never across cards. A green cell on an expensive city can cost more than a red cell on a cheap one. Cross-card comparison is by headline price and cheapest-first order only — never imply otherwise in UI copy or legend.", "section": "colors" },
-      { "name": "The Two Family Rule", "body": "Supersedes the earlier One Family Rule. Exactly two self-hosted families, each with one job: Geist for all chrome, Geist Mono for every numeral a user might compare, sort or watch update. Weight (400/500/600/700) and size carry hierarchy inside each. Do not add a third family, and do not put the mono on prose: the panel's definition list and the flight-leg lines carry words beside their figures and stay in the sans with tabular-nums. Numeric surfaces are enumerated in one selector list at the top of styles.css.", "section": "typography" },
-      { "name": "The Tabular Numbers Rule", "body": "Any number a user might compare, sort, or watch update uses font-variant-numeric: tabular-nums so digits stay column-aligned. This is already on the matrix, every headline price, the panel, and both table views.", "section": "typography" },
-      { "name": "The 11px Floor Rule", "body": "Functional text (labels, tags, hints, buttons, meta) is never below 11px. The only exception is inside the fare matrix — its cell values and date-axis headers run at 9px because it is a dense data grid and 11px would break its density.", "section": "typography" },
-      { "name": "The Flat-By-Default Rule", "body": "Surfaces are flat at rest. If you reach for a box-shadow, stop: use a 1px border or a tonal step instead. The tooltip is the single sanctioned exception, because it is the single element that actually floats.", "section": "elevation" },
-      { "name": "The Ring, Not Glow Rule", "body": "Focus, selection and \"you are here\" are hard offset rings (crisp, 1–5px spread, often with a 1px surface-coloured gap), never a soft blurred glow. Hover on a fare cell is a 2px ink outline at outline-offset: 1px.", "section": "elevation" },
-      { "name": "The Radius-Tracks-Size Rule", "body": "8px for containers, 6px for controls, 4px for small toggles, 3px for chips, 2px for fare cells. Radius shrinks as the element shrinks so the dense grid stays crisp.", "section": "elevation" },
-      { "name": "The Card-Sized-Not-Grid-Sized Rule", "body": "A destination card never grows to fit its matrix; the matrix scrolls inside a fixed viewport (max-height: min(46vh, 268px)) so many cards stay comparable on one screen.", "section": "elevation" },
-      { "name": "The Pinned Axes Rule", "body": "When a matrix scrolls, the departure row, return column and corner stay pinned via position: sticky, z-order corner (3) > header row (2) > row header (1).", "section": "elevation" }
+      "The Colour-Is-Second Rule. Every priced cell prints its price; the ramp is never the only carrier of meaning.",
+      "The Reserved Yellow Rule. marker-yellow marks the cheapest cell only, and never as a fill.",
+      "The Per-Matrix Scale Rule. Heatmap colour ranks within the destination on screen, never across destinations.",
+      "The Key Follows The Grid Rule. The colour key shows only while a grid is actually rendered.",
+      "The 11px Floor Rule. Functional text is never below 11px; the only exception is a 10px disclosure caret.",
+      "The Tabular Numbers Rule. Any comparable number carries font-variant-numeric: tabular-nums.",
+      "The Two Families Rule. Geist for chrome, Geist Mono for numerals. No third typeface.",
+      "The Panes Scroll, The Page Does Not Rule. Once a board exists, .dlist and .matrix-wrap own the only scrollbars.",
+      "The Escape Hatch Rule. Any layer that covers the screen carries its own dismiss control, inside the layer.",
+      "The Full-Bleed Rule. The app is never in a centred max-width column.",
+      "The Flat-By-Default Rule. Surfaces are flat at rest; shadows belong to things that float.",
+      "The Ring, Not Glow Rule. Focus and selection are crisp offset rings, never a blurred halo.",
+      "The Square Grid Rule. The matrix never gets a corner radius.",
+      "The Target Floor Rule. Every control clears 24x24px on any pointer and 44x44px on a coarse one; the fare matrix is the one documented exception.",
+      "The Honest State Rule. An estimate is never styled to look as certain as a verified price."
     ],
     "dos": [
       "Do print the number on anything that also uses colour to encode a value; the colour is the second channel.",
       "Do keep font-variant-numeric: tabular-nums on every comparable figure.",
       "Do separate surfaces with a 1px border (hairline / axis / gridline) and the paper → paper-raised tonal step.",
       "Do use hard offset rings for focus / selection / \"you are here\"; give the fare-cell hover a 2px ink outline.",
-      "Do size an element to its content — the grid's tightness (2px gaps, 2px radius, 9px type) is deliberate.",
+      "Do size an element to its content - the grid's tightness (2px gaps, 2px radius, 9px type) is deliberate.",
       "Do let colour rank within a card only; compare across cards by headline price and order.",
       "Do ship every warning and state with a word or icon, not colour alone; keep advisory things in advisory-amber, errors in error-red, verified in verified-green.",
       "Do keep the warm-paper neutrals (#f9f9f7 / #fcfcfb); they are the system's character, not an accident.",
-      "Do support light and dark equally — define every colour as a token in all three roots (:root, prefers-color-scheme: dark, [data-theme='dark'])."
+      "Do support light and dark equally - define every colour as a token in all three roots (:root, prefers-color-scheme: dark, [data-theme='dark'])."
     ],
     "donts": [
       "Don't add an elevation box-shadow to blocks, the panel, buttons, or inputs. The tooltip is the only element that carries an ambient shadow; the winner block's inset yellow shadow is a rule, not elevation.",
@@ -163,7 +602,7 @@
       "Don't let a destination block grow to fit its matrix. The matrix scrolls inside a fixed viewport (max-height: min(46vh, 268px)) so blocks stay comparable.",
       "Don't hide the matrix scrollbars or make them overlay-only; their visibility tells the user there is more grid.",
       "Don't style an estimate to look as certain as a verified price, or a nodata cell to look expensive.",
-      "Don't add gradients, hero imagery, urgency messaging, or decorative colour — this is an instrument, not a booking funnel.",
+      "Don't add gradients, hero imagery, urgency messaging, or decorative colour - this is an instrument, not a booking funnel.",
       "Don't animate beyond the sanctioned set (panel slide 0.16s, locate pulse); a global @media (prefers-reduced-motion: reduce) block damps it all; keep new motion inside that guard."
     ]
   }
