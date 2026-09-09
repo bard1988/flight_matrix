@@ -536,7 +536,7 @@ backend/
   board.py                discovery -> grid fill -> progressive events
   cache.py                SQLite: cells, verified, searches
   models.py               SearchRequest, Cell, DestinationMatrix
-  airports.py             IATA -> city/country (downloaded once, cached)
+  airports.py             IATA -> city/country + size/scheduled signal (data/airports.v3.json)
   config.py               token, defaults, CA bundle resolution
   providers/
     travelpayouts.py      board fill + destination discovery
@@ -554,8 +554,9 @@ data/
   shoot.py, probe*.py     headless screenshot / DOM probes
 ```
 
-Everything in `data/` except `airports.json` and the caches is a dev aid; none of it is
-imported by the app.
+Everything in `data/` except the committed tables (`airports.v3.json`, `countries.json`,
+`kiwi_slugs.json`) and the caches is a dev aid; none of it is imported by the app. The
+tables are rebuilt by their `build_*.py` scripts, not fetched at runtime.
 
 ## Networking on this machine
 

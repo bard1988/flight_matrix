@@ -522,7 +522,7 @@ def cell_details(body: VerifyBody) -> dict[str, Any]:
 
 
 @app.get("/api/airport/{code}")
-def airport(code: str) -> dict[str, str]:
+def airport(code: str) -> dict[str, Any]:
     return {"code": code.upper(), **airports.describe(code)}
 
 
