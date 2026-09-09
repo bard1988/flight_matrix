@@ -1183,7 +1183,7 @@ body.list-collapsed .dlist { display: none; }
   min-width: 0;
 }
 
-/* "‹ All" back control: phone-only. On desktop the list is always visible beside the grid. */
+/* "‹ Back" back control: phone-only. On desktop the list is always visible beside the grid. */
 .detail-back { display: none; }
 
 @media (max-width: 860px) {
@@ -1192,7 +1192,7 @@ body.list-collapsed .dlist { display: none; }
   body.has-board .dlist { border-right: 0; }
 
   /* Phone: the list is the whole screen; picking a destination slides its grid in over it
-     as a fixed layer, and the "‹ All" control brings the list back. */
+     as a fixed layer, and the "‹ Back" control brings the list back. */
   .ddetail,
   body.has-board .ddetail {
     display: none;
@@ -1383,9 +1383,9 @@ table.matrix th.corner {
 table.matrix td.flash { animation: locate-flash 0.4s ease-in-out 4; }
 
 .card-head .locate {
-  font-size: 12px;
+  font-size: 14px;
   line-height: 1;
-  padding: 3px 7px;
+  padding: 2px 7px;
 }
 
 .card-head .fillbtn {
@@ -1882,7 +1882,7 @@ body.show-table .tableview { display: block; }
    than never, and on a cold board it can hold for a while.
 
    It reuses .card and .card-head, so it carries the same city heading and the same phone
-   "‹ All" control as a filled card. No skeleton grid: the axes are not known until the
+   "‹ Back" control as a filled card. No skeleton grid: the axes are not known until the
    fill returns, and a shimmering placeholder of the wrong shape is a worse lie than a
    sentence. Held to the left with the head rather than centred in the pane, so the card
    does not jump when the real grid replaces it. */

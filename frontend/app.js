@@ -729,7 +729,7 @@ function listRow(dest, isSel) {
  *
  * This state only exists because the board previews every destination after one discovery
  * call, so on a cold board a card can sit here for a while. It must carry the same head
- * and the same "‹ All" control as a filled card: on a phone the pane is a fixed full-screen
+ * and the same "‹ Back" control as a filled card: on a phone the pane is a fixed full-screen
  * layer that hides the list, so a bare sentence with no control is a dead end - you could
  * open Sofia and have no way back until its grid landed, which on a cold board is minutes.
  * The head also keeps the pane from reading as a rendering failure on a wide desktop. */
@@ -744,7 +744,7 @@ function renderWaiting(dest) {
   const back = document.createElement('button');
   back.className = 'fillbtn detail-back';
   back.type = 'button';
-  back.textContent = '‹ All';
+  back.textContent = '‹ Back';
   back.title = 'Back to the destination list';
   back.setAttribute('aria-label', 'Back to the destination list');
   back.onclick = () => { document.body.classList.remove('detail-open'); render(); };
@@ -837,7 +837,7 @@ function buildCardHead(dest, domain, card) {
   const back = document.createElement('button');
   back.className = 'fillbtn detail-back';
   back.type = 'button';
-  back.textContent = '‹ All';
+  back.textContent = '‹ Back';
   back.title = 'Back to the destination list';
   back.setAttribute('aria-label', 'Back to the destination list');
   back.onclick = () => { document.body.classList.remove('detail-open'); };
@@ -852,7 +852,7 @@ function buildCardHead(dest, domain, card) {
   // board exists to remove.
   const locate = document.createElement('button');
   locate.className = 'fillbtn locate';
-  locate.textContent = '◎';
+  locate.textContent = '⌖';
   locate.title = 'Jump to this destination’s cheapest date pair';
   locate.setAttribute('aria-label', `Jump to ${dest.city}'s cheapest date pair`);
   locate.onclick = () => locateBest(card, dest);
