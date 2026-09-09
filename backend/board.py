@@ -25,6 +25,21 @@ def make_board_provider():
     return KiwiProvider()
 
 
+def _base_provider(live: Any):
+    """The source that paints the board first.
+
+    Returns `live` unchanged unless ESTIMATE_FIRST is on and there is a cheap source to
+    lead with, in which case the caller's expensive provider is held back for the upgrade
+    pass. Falls through to `live` when there is no token, because an estimate-first board
+    with no estimates source is just a slower Kiwi board.
+    """
+    if not config.ESTIMATE_FIRST or not config.TRAVELPAYOUTS_TOKEN:
+        return live
+    if getattr(live, "name", None) != "kiwi":
+        return live          # already the cheap source, or a demo/test double
+    return TravelpayoutsProvider()
+
+
 def _fallback_provider(current: Any):
     """The cached source is the safety net when the live one is unavailable."""
     if isinstance(current, TravelpayoutsProvider) or not config.TRAVELPAYOUTS_TOKEN:
@@ -295,7 +310,14 @@ def build(
     stopped = False
     # Status messages from the provider (rate-limit waits) are queued here and drained
     # into the event stream, so a pause is visible rather than looking like a hang.
-    provider = provider or make_board_provider()
+    #
+    # `live` is the good-but-expensive source the caller handed us, already wired for
+    # status and live-cell streaming. `provider` is what actually paints the board. Under
+    # ESTIMATE_FIRST those are different: a cheap source fills every card fast and `live`
+    # comes back afterwards to upgrade the grids (see the upgrade pass at the end).
+    live = provider or make_board_provider()
+    provider = _base_provider(live)
+    upgrade_with = live if provider is not live else None
     depart_dates, return_dates = date_axes(request)
 
     def emit(event: dict[str, Any]) -> dict[str, Any]:
@@ -572,8 +594,62 @@ def build(
         payload.update({"type": "destination", "index": index, "total_candidates": len(candidates)})
         yield emit(payload)
 
+    # ---------------------------------------------------------------- upgrade pass
+    #
+    # Every card now carries an estimate. Come back with the expensive source and replace
+    # those grids with real party totals, cheapest destination first, streaming each
+    # calendar column as it lands so the upgrade is visible rather than a second wait.
+    #
+    # This is the whole point of leading with estimates: the board is already usable, so
+    # the moment Kiwi pushes back we stop and keep what we have. The old order spent the
+    # rate limit BEFORE there was anything on screen, which is how a 403 turned into a
+    # board made of estimates rather than a board made of estimates plus some real prices.
+    upgraded = 0
+    if upgrade_with is not None and filled and not stopped:
+        yield emit({
+            "type": "provider_status",
+            "message": f"{filled} destinations priced from cached estimates. "
+                       "Upgrading to live Kiwi prices, cheapest first.",
+        })
+        for destination in [d for d, _ in candidates][:request.max_destinations]:
+            if should_stop and should_stop():
+                stopped = True
+                break
+            try:
+                fresh = upgrade_with.fill_matrix(request, destination, depart_dates, return_dates)
+            except ProviderError:
+                yield emit({
+                    "type": "provider_status",
+                    "message": "Kiwi is unavailable, so the board keeps its cached "
+                               "estimates. Click any cell for a live price.",
+                })
+                break
+            if getattr(upgrade_with, "rate_limited", False):
+                yield emit({
+                    "type": "provider_status",
+                    "message": f"Kiwi started rate-limiting after {upgraded} upgrade(s). "
+                               "The rest of the board keeps its estimates.",
+                })
+                break
+            if not fresh.cells:
+                continue
+            _prune_to_nights(request, fresh)
+            if not request.has_search_filters:
+                cache.put_cells(request.origin, destination, request.currency,
+                                fresh.cells.values(), party=request.party_key)
+            upgraded += 1
+            # The cells already streamed to the client through the provider's on_cells
+            # hook as each column landed; nothing more to emit per destination here.
+
     if stopped:
         done_note = f"Stopped - showing the {filled} destination(s) filled so far."
+    elif upgraded:
+        done_note = (
+            f"{upgraded} of {filled} destinations upgraded to live Kiwi prices; the rest "
+            "are cached estimates. Click any cell for a live price."
+            if upgraded < filled else
+            "Click any cell for the live price with your real passenger mix."
+        )
     elif failovers:
         estimated = max(0, filled - real_totals)
         done_note = (

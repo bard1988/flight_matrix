@@ -54,6 +54,37 @@ _PROXY_USAGE_FILE = config.DATA_DIR / "kiwi_proxy_usage.json"
 _proxy_lock = threading.Lock()
 
 
+# --- block latch ------------------------------------------------------------------
+# Once a call has spent its whole wait budget against a 403, Kiwi is blocking this IP and
+# will keep blocking it for minutes. Without a latch every other in-flight call goes on to
+# spend its own budget discovering the same thing: a 25-column grid fill took 176 seconds
+# to conclude what the first column already knew, because the columns are serialised behind
+# the shared pacing lock and each one waits in turn.
+#
+# Module level, not per instance, because the block belongs to the egress IP rather than to
+# a provider object, and a new provider is built for every search.
+_block_lock = threading.Lock()
+_blocked_until_ts = 0.0
+
+
+def _latch_block(seconds: float) -> None:
+    global _blocked_until_ts
+    with _block_lock:
+        _blocked_until_ts = max(_blocked_until_ts, time.monotonic() + seconds)
+
+
+def _block_remaining() -> float:
+    with _block_lock:
+        return max(0.0, _blocked_until_ts - time.monotonic())
+
+
+def clear_block() -> None:
+    """Drop the latch. For tests and for a manual retry."""
+    global _blocked_until_ts
+    with _block_lock:
+        _blocked_until_ts = 0.0
+
+
 def _proxy_bytes_used() -> int:
     try:
         return int(json.loads(_PROXY_USAGE_FILE.read_text(encoding="utf-8")).get("bytes", 0))
@@ -316,6 +347,12 @@ class KiwiProvider:
                     wait = max(0.0, self._next_allowed - now)
                     self._next_allowed = max(now, self._next_allowed) + self._interval
                     break
+            # Sleeping in <=2s slices is what makes the backoff interruptible: if another
+            # worker latches the block while this one is waiting, return now and let the
+            # caller's latch check abandon the call, instead of serving out a backoff whose
+            # answer is already known.
+            if _block_remaining() > 0:
+                return
             time.sleep(min(blocked_for, 2.0))
         if wait:
             time.sleep(wait)
@@ -361,12 +398,30 @@ class KiwiProvider:
         own. Waiting is nearly always better than falling back to scaled estimates, so
         spend the configured budget before giving up.
         """
+        # Fail immediately while the latch is in force. The board is expected to carry on
+        # with whatever it already has rather than queue behind a block that is not going
+        # to lift inside this search.
+        held = _block_remaining()
+        if held > 0:
+            self.rate_limited = True
+            raise ProviderError(
+                f"Kiwi is rate-limiting this address; not retrying for another "
+                f"{int(held)}s. Showing cached estimates instead.")
+
         body = json.dumps({"query": query, "variables": variables, "operationName": operation})
         last: Exception | None = None
         spent = 0.0
 
         for attempt in range(config.KIWI_MAX_ATTEMPTS):
             self._pace()
+            # Another worker may have latched the block while this one sat in the pacer or
+            # in its own backoff. Abandon rather than finish a wait whose answer is already
+            # known: with four workers, each independently completing one 8s backoff was
+            # most of the time a blocked board spent before giving up.
+            if _block_remaining() > 0:
+                self.rate_limited = True
+                raise ProviderError("Kiwi is rate-limiting this address. "
+                                    "Showing cached estimates instead.")
             try:
                 response = self._client.post(ENDPOINT, content=body)
             except httpx.HTTPError as exc:
@@ -400,6 +455,11 @@ class KiwiProvider:
                 self._slower()
                 backoff = min(config.KIWI_BACKOFF_BASE * (2 ** attempt), config.KIWI_BACKOFF_MAX)
                 if spent + backoff > config.KIWI_WAIT_BUDGET:
+                    # Budget spent against a live 403: latch it so every other call in this
+                    # board (and the next search inside the cooldown) fails fast instead of
+                    # each rediscovering the block at its own expense.
+                    _latch_block(config.KIWI_BLOCK_COOLDOWN)
+                    self.rate_limited = True
                     last = ProviderError(
                         f"Kiwi kept rate-limiting for {int(spent)}s (HTTP "
                         f"{response.status_code}). Giving up on the live source for now."

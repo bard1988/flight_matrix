@@ -105,6 +105,24 @@ FILL_WORKERS = int(os.environ.get("FM_FILL_WORKERS", "4"))
 # Kiwi.com: which board provider to use, and how its grid fill is paced.
 # Each Kiwi calendar call fills one constant-nights diagonal of the matrix.
 BOARD_PROVIDER = os.environ.get("FM_BOARD_PROVIDER", "kiwi")  # kiwi | travelpayouts
+
+# Paint the board from Travelpayouts FIRST, then upgrade it with Kiwi.
+#
+# Kiwi has the better data (real party totals, ~115 cells a grid) and the worse economics:
+# a cold 20-destination board is 501 calls, and Kiwi blocks on volume, by IP, for minutes.
+# Travelpayouts has the weaker data (single-ticket estimates, thinner coverage) and a
+# documented, generous limit. Measured on the same 20-destination board:
+#
+#     Travelpayouts   42 calls    18s    916 cells at +30d, 495 at +90d
+#     Kiwi           501 calls   234s   2300 cells
+#
+# Leading with the cheap source inverts the failure mode. It used to be Kiwi-then-degrade:
+# spend the rate limit, hit a 403 part way through, and hand the REST of the board to
+# estimates, so a block cost you a board. It is now estimate-then-improve: every card is
+# populated within seconds, and Kiwi's calls are an upgrade that overlays real totals a
+# grid at a time. A block now costs precision rather than the board, and because the
+# upgrade is interruptible we stop bursting, which is what caused the block.
+ESTIMATE_FIRST = os.environ.get("FM_ESTIMATE_FIRST", "1") != "0"
 KIWI_WORKERS = int(os.environ.get("FM_KIWI_WORKERS", "4"))
 # Seconds between Kiwi calls, as a STARTING point - the provider now adapts it (see
 # KIWI_MAX_INTERVAL). It IP-blocks on volume and a block lasts a long time.
@@ -138,13 +156,29 @@ KIWI_PROXY_BUDGET_MB = float(os.environ.get("FM_KIWI_PROXY_BUDGET_MB", "950"))
 # source (see board.build) a long stall is worse than an estimate. Wait a little, then
 # hand the rest of the board to Travelpayouts and let the live cross-check fix the
 # cheapest cells. Raise this if Kiwi is usable and you want to wait it out.
-KIWI_WAIT_BUDGET = float(os.environ.get("FM_KIWI_WAIT_BUDGET", "40"))
+# Measured under a live block: at 40s the provider spent 8s + 16s of backoff and only
+# handed over to Travelpayouts at t=26s, so the user watched three "rate-limiting" notices
+# before seeing a board. The block does not clear inside that window anyway - it lasts
+# minutes - so the budget was buying nothing but delay. At 12s the first 8s backoff is the
+# only one that fits and the failover happens at ~9s.
+KIWI_WAIT_BUDGET = float(os.environ.get("FM_KIWI_WAIT_BUDGET", "12"))
 KIWI_BACKOFF_BASE = float(os.environ.get("FM_KIWI_BACKOFF_BASE", "8"))
 KIWI_BACKOFF_MAX = float(os.environ.get("FM_KIWI_BACKOFF_MAX", "45"))
 KIWI_MAX_ATTEMPTS = int(os.environ.get("FM_KIWI_MAX_ATTEMPTS", "8"))
+# Once one call has spent the whole wait budget against a 403, treat Kiwi as blocked for
+# this long and fail every other call instantly instead of re-proving it. The block is per
+# egress IP and lasts minutes, so this latch is shared across provider instances and
+# therefore across searches. Measured before it existed: a single 25-column grid fill spent
+# 176s confirming what its first column already knew.
+KIWI_BLOCK_COOLDOWN = float(os.environ.get("FM_KIWI_BLOCK_COOLDOWN", "180"))
 
 # Reuse recently fetched cells instead of re-querying, which is what triggers the block.
-KIWI_CACHE_HOURS = float(os.environ.get("FM_KIWI_CACHE_HOURS", "6"))
+# Re-querying is the main way the rate limit gets tripped, so reuse for as long as the
+# board is willing to stand behind a cell. That bound already exists: STALE_AFTER_HOURS
+# (24) is when the UI puts the staleness dot on a price. Reusing for 6h and then refetching
+# something the interface would still have shown without comment was throwing calls away
+# for no gain in freshness.
+KIWI_CACHE_HOURS = float(os.environ.get("FM_KIWI_CACHE_HOURS", "24"))
 # Only reuse a cached grid if it is nearly complete for the window being asked for.
 # The FRACTION is the important one: a flat cell count let a half-filled grid (written by an
 # older fetch strategy, or for a narrower window) satisfy a wider request forever.
