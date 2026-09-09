@@ -235,6 +235,19 @@ function cellValue(cell) {
   return total / Math.max(pax, 1);
 }
 
+/* The same figure for a preview card, which has no cells for cellValue() to price.
+ *
+ * `preview_price` is a party total from discovery, exactly like a cell's, so Per person has
+ * to divide it the same way. Reading it raw put a party total and a per-person fare in the
+ * same ranked list under the same currency symbol, which silently mis-ordered the board
+ * whenever the toggle was on. */
+function previewValue(dest) {
+  if (dest.preview_price == null) return null;
+  if (!state.perPerson) return dest.preview_price;
+  const pax = (state.meta?.adults || 1) + (state.meta?.children || 0);
+  return dest.preview_price / Math.max(pax, 1);
+}
+
 /* Ink is no longer chosen by a single flip index: the ramp is diverging, so BOTH ends are
    saturated and each step carries its own readable ink as a CSS variable. */
 
@@ -413,8 +426,11 @@ function render() {
   // A preview card has no cells yet but discovery already priced it, so rank it on that.
   // Without this every not-yet-filled destination sorts to the bottom and the list
   // visibly reshuffles as each grid lands.
-  const rank = (d) => (d.shownBest ? cellValue(d.shownBest)
-    : d.preview_price != null ? d.preview_price : Infinity);
+  const rank = (d) => {
+    if (d.shownBest) return cellValue(d.shownBest);
+    const pv = previewValue(d);
+    return pv == null ? Infinity : pv;
+  };
   const ordered = visible.sort((a, b) => rank(a) - rank(b));
 
   const active = constraintsActive();
@@ -471,15 +487,11 @@ function render() {
   if (selDest && selDest.cells.length) {
     detail.replaceChildren(renderCard(selDest, scaleDomain(selDest.allowed)));
   } else if (selDest) {
-    // Selected, but its grid has not arrived yet - the list is up first now. Say which
-    // destination is loading rather than rendering an empty matrix shell.
-    const wait = document.createElement('p');
-    wait.className = 'detail-waiting';
-    wait.textContent = `Loading the ${selDest.city} grid…`;
-    detail.replaceChildren(wait);
+    detail.replaceChildren(renderWaiting(selDest));
   } else {
     detail.replaceChildren();
   }
+  const gridOnScreen = !!(selDest && selDest.cells.length);
   document.body.classList.toggle('has-board', ordered.length > 0);
 
   if (keep && keep.dest) {
@@ -495,8 +507,10 @@ function render() {
   refreshRegionCounts();
   $('boardtools').hidden = state.destinations.size === 0;
   $('footnote').hidden = ordered.length === 0;
-  // The detail pane always has a grid on screen, so the colour key is always relevant here.
-  $('legend').hidden = ordered.length === 0;
+  // The colour key describes the grid in the detail pane. That pane no longer always has
+  // one: previews land first, so between discovery and the fill the key would be
+  // explaining a ramp with nothing on screen using it.
+  $('legend').hidden = !gridOnScreen;
 }
 
 /* The board's focal point: the cheapest find, then the two behind it.
@@ -650,7 +664,7 @@ function listRow(dest, isSel) {
   // pending rather than being guessed.
   const isPreview = dest.preview && !dest.shownBest;
   const best = dest.shownBest ? cellValue(dest.shownBest)
-    : isPreview ? dest.preview_price : null;
+    : isPreview ? previewValue(dest) : null;
   const priced = (dest.allowed || []).map(cellValue).filter((v) => v != null);
   const hi = priced.length ? Math.max(...priced) : null;
   const range = !isPreview && best != null && hi != null && hi > best
@@ -675,6 +689,50 @@ function listRow(dest, isSel) {
     render();
   });
   return b;
+}
+
+/* The detail pane for a destination whose grid has not arrived yet.
+ *
+ * This state only exists because the board previews every destination after one discovery
+ * call, so on a cold board a card can sit here for a while. It must carry the same head
+ * and the same "‹ All" control as a filled card: on a phone the pane is a fixed full-screen
+ * layer that hides the list, so a bare sentence with no control is a dead end - you could
+ * open Sofia and have no way back until its grid landed, which on a cold board is minutes.
+ * The head also keeps the pane from reading as a rendering failure on a wide desktop. */
+function renderWaiting(dest) {
+  const card = document.createElement('section');
+  card.className = 'card is-waiting';
+  card.dataset.dest = dest.destination;
+
+  const head = document.createElement('div');
+  head.className = 'card-head';
+
+  const back = document.createElement('button');
+  back.className = 'fillbtn detail-back';
+  back.type = 'button';
+  back.textContent = '‹ All';
+  back.title = 'Back to the destination list';
+  back.setAttribute('aria-label', 'Back to the destination list');
+  back.onclick = () => { document.body.classList.remove('detail-open'); render(); };
+  head.appendChild(back);
+
+  const city = document.createElement('h2');
+  city.className = 'card-city';
+  city.textContent = dest.city || dest.destination;
+  head.appendChild(city);
+  card.appendChild(head);
+
+  const wait = document.createElement('p');
+  wait.className = 'detail-waiting';
+  // aria-live so a screen reader hears the grid arrive rather than sitting in silence.
+  wait.setAttribute('role', 'status');
+  const price = previewValue(dest);
+  wait.textContent = price != null
+    ? `Cheapest found so far ${fmtMoney(price, dest.currency || state.meta.currency)}. `
+      + 'Finding the dates behind it…'
+    : 'Loading this destination’s dates…';
+  card.appendChild(wait);
+  return card;
 }
 
 function renderCard(dest, domain) {
@@ -932,6 +990,25 @@ function finishCard(card, dest, table) {
     sortable by any column. */
 const tableSort = { key: 'total', dir: 1 };   // price, ascending
 
+/* Leave table view. On a phone the table is a fixed full-screen layer, so it covers the
+   Table/Matrix toggle that opened it; without a control of its own the only way out was
+   the browser's back button. Mirrors .detail-back, and CSS hides it on desktop where the
+   toolbar toggle is never covered. */
+function tableBack() {
+  const back = document.createElement('button');
+  back.className = 'fillbtn detail-back table-back';
+  back.type = 'button';
+  back.textContent = '‹ Board';
+  back.title = 'Back to the fare grid';
+  back.setAttribute('aria-label', 'Back to the fare grid');
+  back.onclick = () => {
+    document.body.classList.remove('show-table');
+    $('tabletoggle').textContent = 'Table';
+    $('tabletoggle').setAttribute('aria-pressed', 'false');
+  };
+  return back;
+}
+
 function renderTable(ordered) {
   renderTable._list = ordered;
   const host = $('tableview');
@@ -985,6 +1062,7 @@ function renderTable(ordered) {
   host.innerHTML =
     `<table><caption class="sr-only">Every priced date pair, ${rows.length} rows${rows.length > 800 ? ' (showing 800)' : ''}. Click a column heading to sort.</caption>` +
     `<thead><tr>${head}</tr></thead><tbody>${body}</tbody></table>`;
+  host.prepend(tableBack());
 }
 
 /* Click a heading to sort; same column again flips direction. */

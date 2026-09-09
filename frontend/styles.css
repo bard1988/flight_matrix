@@ -1819,11 +1819,119 @@ body.show-table .tableview { display: block; }
 }
 
 /* Detail pane before the selected destination's grid has arrived. The ranked list is on
-   screen after one discovery call now, so this state is briefly visible on every search
-   rather than never. */
+   screen after one discovery call now, so this state is visible on every search rather
+   than never, and on a cold board it can hold for a while.
+
+   It reuses .card and .card-head, so it carries the same city heading and the same phone
+   "‹ All" control as a filled card. No skeleton grid: the axes are not known until the
+   fill returns, and a shimmering placeholder of the wrong shape is a worse lie than a
+   sentence. Held to the left with the head rather than centred in the pane, so the card
+   does not jump when the real grid replaces it. */
 .detail-waiting {
   margin: 0;
-  padding: 24px 0;
+  padding: 20px 0 0;
   color: var(--text-secondary);
   font-size: 13px;
+}
+
+/* The waiting card has no grid to bound it, so it needs its own breathing room; a filled
+   card gets that from the matrix itself. */
+.card.is-waiting { padding-bottom: 24px; }
+
+/* Touch comfort. WCAG 2.5.8 (AA) asks for 24x24 CSS px and these already clear it, but on
+   a real phone the theme toggle at 30px and the traveller steppers at 3ch are fiddly
+   next to a 42px-tall input. Widen only where the pointer is actually coarse, so the
+   dense desktop instrument is untouched. */
+@media (pointer: coarse) {
+  .theme-btn {
+    width: 44px;
+    height: 44px;
+    top: 4px;
+    right: 6px;
+  }
+
+  /* The number itself stays centred and compact; the tap area is what grows. */
+  .pax-cell input {
+    width: 3.5ch;
+    min-height: 44px;
+  }
+
+  .dow button { min-height: 44px; }
+}
+
+/* The table's own way out. Like .detail-back it is phone-only: on desktop the table sits
+   in the grid pane with the toolbar toggle above it, never covered. */
+.table-back { margin: 0 0 8px; }
+
+@media (max-width: 860px) {
+  .table-back { display: inline-flex; }
+  /* The table layer is fixed and full-bleed, so its back control needs the padding the
+     layer itself does not have. */
+  body.show-table .tableview { padding: 10px 14px 40px; }
+}
+
+/* Board-tools controls are the densest chrome on the page and sat well under the touch
+   minimum: the Per person checkbox measured 13x13 and the currency select 20px tall,
+   both under WCAG 2.5.8's 24x24. Only relaxed for coarse pointers. */
+@media (pointer: coarse) {
+  .board-tools select,
+  .board-tools button,
+  #ctrybtn,
+  #tabletoggle,
+  #listtoggle {
+    min-height: 44px;
+  }
+
+  .board-tools input[type='checkbox'] {
+    width: 24px;
+    height: 24px;
+  }
+
+  /* The whole label is the target, not just the box. */
+  .board-tools label {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    min-height: 44px;
+  }
+
+  .field input,
+  .field select { min-height: 44px; }
+}
+
+/* The bar's own buttons on a touch device. The <=720px block already gives them height on
+   a portrait phone; a landscape phone (740-860px wide) misses that block but is still a
+   finger, so pin the comfort height on the pointer instead of the width. */
+@media (pointer: coarse) {
+  #go,
+  #stop,
+  .opts-toggle,
+  #panelclose { min-height: 44px; }
+
+  #panelclose { min-width: 44px; }
+}
+
+/* WCAG 2.5.8 (AA) is 24x24 CSS px and applies to a mouse as well as a finger. The board
+   toolbar and the small card actions sat under it on desktop: the Per person checkbox at
+   13x13, the currency select at 19px tall, the locate button at 27x19. Raising the floor
+   to 24 costs the dense instrument nothing at this scale.
+
+   The fare cells are deliberately NOT included. They are sized by --cell-h/--cell-w and
+   are the artifact itself; growing them to 24px would rebuild the grid, not fix a control. */
+.board-tools select,
+.board-tools button,
+.fillbtn { min-height: 24px; }
+
+/* 24px, not 18: this is the AA floor itself, and a checkbox has no smaller safe size.
+   Declared once here rather than only under `pointer: coarse`, because 2.5.8 applies to a
+   mouse too - and because a later 18px rule here would otherwise beat the coarse one. */
+.board-tools input[type='checkbox'] {
+  width: 24px;
+  height: 24px;
+}
+.board-tools label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 24px;
 }
