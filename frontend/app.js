@@ -427,8 +427,13 @@ function render() {
   // Without this every not-yet-filled destination sorts to the bottom and the list
   // visibly reshuffles as each grid lands.
   const rank = (d) => {
-    if (d.shownBest) return cellValue(d.shownBest);
+    // A grid that is still streaming ranks on discovery's price, never on its partial
+    // cells. Ranking a half-filled grid makes its row climb the list as cheaper columns
+    // land, so the thing the user is reading moves under them, and the position it moves
+    // to is not final anyway. It settles once the destination event lands.
     const pv = previewValue(d);
+    if (d.filling && pv != null) return pv;
+    if (d.shownBest) return cellValue(d.shownBest);
     return pv == null ? Infinity : pv;
   };
   const ordered = visible.sort((a, b) => rank(a) - rank(b));
@@ -1804,6 +1809,47 @@ function stopSearch() {
   markSearchStale();
 }
 
+/* Live grid fill ------------------------------------------------------------------
+ *
+ * The backend streams one `cells` event per calendar column, so a grid paints as it
+ * fills instead of appearing whole. Two things keep that from being expensive:
+ *
+ *  - Only the OPEN grid is on screen. Columns for the other nineteen destinations are
+ *    merged into state and never trigger a paint; their card renders once, complete,
+ *    when its `destination` event lands.
+ *  - Bursts coalesce. Four workers finishing at once would otherwise be four renders of
+ *    the same table, so a paint is scheduled on the next frame and repeated requests
+ *    collapse into it.
+ *
+ * The colour ramp is recomputed as cells arrive, so a half-filled grid is ranked against
+ * what is known so far and the colours settle as the rest lands. That is honest to the
+ * per-matrix scale rule: green means cheapest *here*, and "here" grows.
+ */
+let paintQueued = false;
+
+function schedulePaint() {
+  if (paintQueued) return;
+  paintQueued = true;
+  requestAnimationFrame(() => {
+    paintQueued = false;
+    render();
+  });
+}
+
+function mergeCells(code, cells) {
+  const dest = state.destinations.get(code);
+  if (!dest || !cells || !cells.length) return;
+  // Key by the date pair: a column can legitimately be re-sent (a re-fill at a wider
+  // window), and the later value is the fresher one.
+  const byPair = new Map((dest.cells || []).map((c) => [`${c.depart}|${c.ret}`, c]));
+  for (const cell of cells) byPair.set(`${cell.depart}|${cell.ret}`, cell);
+  dest.cells = [...byPair.values()].sort(
+    (a, b) => (a.depart === b.depart ? a.ret.localeCompare(b.ret) : a.depart.localeCompare(b.depart)));
+  dest.filling = true;
+  // Painting is only worth it for the grid the user is actually looking at.
+  if (state.selected === code) schedulePaint();
+}
+
 function consume(searchId) {
   const source = new EventSource(`/api/search/${searchId}/stream`);
   state.source = source;
@@ -1834,6 +1880,8 @@ function consume(searchId) {
       $('empty').hidden = true;
       $('empty').classList.remove('is-searching');
       render();
+    } else if (msg.type === 'cells') {
+      mergeCells(msg.destination, msg.cells);
     } else if (msg.type === 'destination_empty') {
       seen += 1;
     } else if (msg.type === 'destination_error') {

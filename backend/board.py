@@ -229,6 +229,21 @@ def _apply_verified(
         # once under the wrong name.
 
 
+def cells_event(request: SearchRequest, destination: str, cells: list[Cell]) -> dict[str, Any]:
+    """One streamed calendar column, shaped like the cells inside a destination payload.
+
+    Kept here rather than in the API layer so a cell is serialised by the same code and
+    the same child-factor and staleness rules whether it arrives live or in the settled
+    board. The frontend merges these into the card by date pair.
+    """
+    return {
+        "type": "cells",
+        "destination": destination.upper(),
+        "cells": [c.to_json(request, config.CHILD_FACTOR, config.STALE_AFTER_HOURS)
+                  for c in cells],
+    }
+
+
 def _preview_payload(
     request: SearchRequest,
     provider: Any,
@@ -293,6 +308,12 @@ def build(
     # onto the live stream; otherwise fall back to the generator's own emit.
     if hasattr(provider, "on_status") and provider.on_status is None:
         provider.on_status = lambda m: emit({"type": "provider_status", "message": m})
+
+    # Live grid fill is NOT wired here. `emit` routes through `on_event`, and the API layer
+    # consumes this generator without passing one (passing it would double-deliver every
+    # yielded event). So, exactly like provider_status, the caller sets `provider.on_cells`
+    # itself and uses `cells_event` below to build the payload. The CLI and the snapshot
+    # endpoint set nothing and never stream, which is what they want.
 
     yield emit(
         {

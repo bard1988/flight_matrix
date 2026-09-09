@@ -25,7 +25,7 @@ from __future__ import annotations
 import json
 import threading
 import time
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import date, timedelta
 from typing import Any
 
@@ -248,6 +248,10 @@ class KiwiProvider:
         self._timeout = timeout
         self._lock = threading.Lock()
         self.on_status = on_status
+        # Called with (destination, [Cell, ...]) as each calendar column lands, so the grid
+        # can paint while it fills instead of appearing whole. Set by board.build; the
+        # other providers do not have it and simply never stream. Same idea as on_status.
+        self.on_cells: Any = None
         # Use the proxy only if one is configured AND its budget is not already spent.
         self._proxy: str | None = (
             config.KIWI_PROXY
@@ -708,11 +712,24 @@ class KiwiProvider:
                 self.rate_limited = True
                 return []
 
+        # as_completed, not map: map yields in submission order, so a column that finished
+        # early would still wait behind a slow one before it could be streamed. Nothing
+        # downstream cares about column order, and the point here is to emit each one the
+        # moment it lands.
         with ThreadPoolExecutor(max_workers=config.KIWI_WORKERS) as pool:
-            for cells in pool.map(run, columns):
-                for cell in cells:
+            futures = [pool.submit(run, ret) for ret in columns]
+            for future in as_completed(futures):
+                fresh = []
+                for cell in future.result():
                     if lo_d <= cell.depart_date <= hi_d:
                         matrix.add(cell)
+                        fresh.append(cell)
+                if fresh and self.on_cells:
+                    # A listener must never be able to kill a grid fill.
+                    try:
+                        self.on_cells(destination, fresh)
+                    except Exception:
+                        pass
 
         info = getattr(self, "cities", {}).get(destination.upper())
         if info:

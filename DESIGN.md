@@ -155,7 +155,7 @@ The stance is **a quiet instrument, explicitly not a consumer travel site**. No 
 
 **The composition is master-detail, in a full-viewport app shell.** Once a search returns, the results take over the whole screen and the page itself stops scrolling. On the left, a fixed-width **ranked list** - one tight row per destination, cheapest first, each row carrying the essence of that destination's grid. On the right, the **one selected destination's full departure x return grid**, filling its pane. The two panes scroll independently: running down the list never moves the grid. On a phone the list is the whole screen and the grid slides in over it as a fixed layer.
 
-Because the board now previews every destination from a single discovery call and fills the grids behind it, the detail pane has a **third state**: selected, priced, but not yet gridded. That state is a real card with a real heading and a real way back, never a bare sentence.
+Because the board now previews every destination from a single discovery call and fills the grids behind it, the detail pane has two states beyond the settled one. **Selected, priced, but not yet gridded** is a real card with a real heading and a real way back, never a bare sentence. **Filling** is the grid painting a calendar column at a time as each provider call lands, so the matrix is visibly being built rather than appearing whole after a wait. The card's headline fare and date pair update live as cheaper cells arrive; its position in the ranked list does not, because a row that climbs while you are reading it is worse than a number that settles.
 
 Motion is minimal - a panel slide, a locate pulse, a slow "searching" breathe, a card fade-in as each destination streams. Surfaces are flat.
 

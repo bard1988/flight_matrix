@@ -126,11 +126,22 @@ def _run_search(search_id: str, request: SearchRequest) -> None:
     # rather than "hung".
     if hasattr(provider, "on_status"):
         provider.on_status = lambda m: channel.put({"type": "provider_status", "message": m})
+    # Paint each calendar column as it lands rather than only when the whole grid is done.
+    # Wired here, not in board.build, because that generator's `emit` needs an `on_event`
+    # and passing one would double-deliver every yielded event (see the note there).
+    if hasattr(provider, "on_cells"):
+        provider.on_cells = lambda dest, cells: channel.put(
+            board.cells_event(request, dest, cells))
     try:
         for event in board.build(
             request, provider=provider, should_stop=lambda: search_id in _cancelled
         ):
-            collected.append(event)
+            # `cells` is a live paint of one calendar column and is superseded by the
+            # destination event that follows it. Streaming it is the point; keeping it is
+            # not, so it stays out of the snapshot buffer rather than holding a few
+            # hundred throwaway payloads in memory for the length of the search.
+            if event.get("type") != "cells":
+                collected.append(event)
             channel.put(event)
     except Exception as exc:                    # never leave the client hanging
         channel.put({"type": "error", "message": str(exc)})
