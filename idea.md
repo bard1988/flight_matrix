@@ -10,6 +10,7 @@ Things worth doing, not yet scheduled.
 |---|---|---|---|
 | 1 | **Filter by airline** — bundled airline-name DB, refreshed periodically (and/or from what searches return) | M | todo |
 | 9 | **Filter by region** — collapsible continent → subregion → country tree | M–L | **done** (2026-09-08: tree UI in the Advanced panel) |
+| 9.1 | **Airport / city leaves in the region tree** — a fourth level under each country: pick a specific airport or city (by name or IATA), not just the whole country. Needs the airport list grouped by country (`backend/airports.py` has country_code per airport), a typeahead so a 4-level tree stays usable, and the search filter to accept airport codes alongside country codes. Pairs with #15 (seeding known airports into discovery). | M | todo |
 | 11 | **Kids' ages** — per-child age (infant/child buckets), not just a count; changes the price. Must propagate to providers + `party_key` cache key + child-factor scaling | M–L | todo |
 | 6 | **Cabin class** selector (economy / premium / business) — thread through provider → API → UI | M | todo |
 | 4 | **One search model: period + trip length** — drop the "Dates mean" dropdown | M | **done** (2026-09-07/08: dropdown gone, range default; anchors plumbing removed + widen reworked for the period model by the redesign pass) |
