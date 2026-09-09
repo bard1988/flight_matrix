@@ -16,6 +16,7 @@ FM_SSH=${FM_SSH:-ubuntu@129.159.140.194}
 FM_KEY=${FM_KEY:-$HOME/.ssh/oracle-skymatrix.key}
 FM_URL=${FM_URL:-https://flightmatrix.duckdns.org}
 APP_DIR=${FM_APP_DIR:-/opt/flight_matrix}
+FM_APP_USER=${FM_APP_USER:-skymatrix}
 
 ssh_vm() { ssh -i "$FM_KEY" -o ConnectTimeout=20 "$FM_SSH" "$@"; }
 
@@ -24,7 +25,7 @@ echo ">> target: $FM_SSH   ($FM_URL)"
 # Show what is about to go live vs what is live now.
 remote_main=$(git ls-remote origin -h refs/heads/main | cut -f1)
 echo ">> origin/main:  ${remote_main:0:9}  $(git log -1 --format=%s "$remote_main" 2>/dev/null || echo '(fetch to see subject)')"
-live=$(ssh_vm "cd $APP_DIR && git rev-parse HEAD" 2>/dev/null || echo unknown)
+live=$(ssh_vm "sudo -u $FM_APP_USER git -C $APP_DIR rev-parse HEAD" 2>/dev/null || echo unknown)
 echo ">> VM is at:     ${live:0:9}"
 [ "$remote_main" = "$live" ] && echo ">> already deployed; redeploy will just restart."
 
