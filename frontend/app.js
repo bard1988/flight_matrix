@@ -707,7 +707,7 @@ function listRow(dest, isSel) {
   const when = bc
     ? `${weekday(bc.depart)} ${shortDate(bc.depart)} &rarr; ${weekday(bc.ret)} ${shortDate(bc.ret)}` +
       `, ${bc.nights}n`
-    : isPreview ? 'Finding dates&hellip;'
+    : isPreview ? 'Finding dates<span class="ellipsis" aria-hidden="true"></span>'
     : 'no fare yet';
 
   b.innerHTML =
