@@ -91,22 +91,51 @@ password).
 No token? The board still loads in **demo mode** if you set `FM_DEMO=1` in
 `/opt/flight_matrix/.env` — synthetic data, good for showing the UI.
 
-## 5. Day-to-day
+## 5. Deploy a new version
+
+The live box (`flightmatrix.duckdns.org`) was first provisioned under the old name
+"SkyMatrix", so on **that** VM the systemd unit and the system user are both
+**`skymatrix`**, not `flightmatrix`. The scripts below default to that; override with
+`FM_SERVICE` / `FM_APP_USER` on a box provisioned fresh from `provision.sh`.
+
+### From your workstation (any session)
 
 ```bash
-systemctl status flightmatrix caddy
-journalctl -u flightmatrix -f            # app logs (rate-limit waits, errors)
+# 1. get your commit onto origin/main
+git push origin HEAD:main            # or: git push  (if your branch tracks main)
 
-# deploy a new version
-sudo -E bash /opt/flight_matrix/deploy/provision.sh   # pulls, reinstalls, restarts
-# or just:
-sudo -u flightmatrix git -C /opt/flight_matrix pull && sudo systemctl restart flightmatrix
+# 2. ship it
+bash deploy/deploy.sh
+```
+
+`deploy/deploy.sh` SSHes to the VM, runs `deploy/redeploy.sh` there, and health-checks
+`https://flightmatrix.duckdns.org/api/health`. Connection details are its defaults and
+are overridable by env var (`FM_SSH`, `FM_KEY`, `FM_URL`) — see the header of the file.
+Current defaults: `ubuntu@129.159.140.194`, key `~/.ssh/oracle-skymatrix.key`.
+
+### On the VM directly
+
+```bash
+sudo bash /opt/flight_matrix/deploy/redeploy.sh
+```
+
+`redeploy.sh` is idempotent: it stashes the runtime-rewritten `data/kiwi_slugs.json`
+if dirty, `git pull --ff-only origin main`, re-installs deps **only** if
+`requirements.txt` changed, restarts the service, and checks `/api/health`. The
+heavier `sudo -E bash deploy/provision.sh` re-runs the whole install (Caddy, cert,
+DuckDNS, deps) and is only needed after infra changes.
+
+### Watch / roll back
+
+```bash
+systemctl status skymatrix caddy
+journalctl -u skymatrix -f                    # app logs (rate-limit waits, errors)
+sudo -u skymatrix git -C /opt/flight_matrix reset --hard <good-sha> && sudo systemctl restart skymatrix
 ```
 
 Config knobs (all `FM_*`, documented in `README.md`) go in `/opt/flight_matrix/.env`,
-then `sudo systemctl restart flightmatrix`. `provision.sh` already sets
-`FM_FILL_WORKERS=2` and `FM_KIWI_WORKERS=1` for the 1 GB shape — raise them only if
-`free -m` shows plenty of headroom during a fill.
+then `sudo systemctl restart skymatrix`. The 1 GB shape runs with `FM_FILL_WORKERS=2`
+and `FM_KIWI_WORKERS=1` — raise them only if `free -m` shows headroom during a fill.
 
 ---
 
