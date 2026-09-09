@@ -852,9 +852,16 @@ function buildCardHead(dest, domain, card) {
   // board exists to remove.
   const locate = document.createElement('button');
   locate.className = 'fillbtn locate';
-  locate.textContent = '⌖';
-  locate.title = 'Jump to this destination’s cheapest date pair';
-  locate.setAttribute('aria-label', `Jump to ${dest.city}'s cheapest date pair`);
+  // The little plane from the FlightMatrix mark — "take me to the cheapest fare".
+  locate.innerHTML =
+    '<svg viewBox="12 8 24 24" aria-hidden="true" focusable="false">' +
+    '<path fill="currentColor" d="M 35.30 8.70 C 35.90 9.62 34.69 11.74 33.32 13.42 ' +
+    'L 29.82 17.22 L 33.17 28.47 Q 33.32 29.84 31.80 29.53 L 25.26 22.39 L 20.09 26.95 ' +
+    'L 20.25 31.36 Q 20.25 32.27 19.03 31.66 L 15.53 28.47 L 12.34 24.97 Q 11.73 23.75 ' +
+    '12.64 23.75 L 17.05 23.91 L 21.61 18.74 L 14.47 12.20 Q 14.16 10.68 15.53 10.83 ' +
+    'L 26.78 14.18 L 30.58 10.68 C 32.26 9.31 34.38 8.10 35.30 8.70 Z"/></svg>';
+  locate.title = 'Jump to this destination’s cheapest fare';
+  locate.setAttribute('aria-label', `Jump to ${dest.city}'s cheapest fare`);
   locate.onclick = () => locateBest(card, dest);
   head.appendChild(locate);
 

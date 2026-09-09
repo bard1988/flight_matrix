@@ -1383,9 +1383,13 @@ table.matrix th.corner {
 table.matrix td.flash { animation: locate-flash 0.4s ease-in-out 4; }
 
 .card-head .locate {
-  font-size: 14px;
-  line-height: 1;
-  padding: 2px 7px;
+  line-height: 0;
+  padding: 4px 7px;
+}
+.card-head .locate svg {
+  display: block;
+  width: 15px;
+  height: 15px;
 }
 
 .card-head .fillbtn {
