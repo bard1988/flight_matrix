@@ -1833,6 +1833,18 @@ body.show-table .tableview { display: block; }
   .status { font-size: 12px; }
   .board-tools { font-size: 14px; }
 
+  /* Once results are up, a phone has no room for the grey reference prose that stacks in
+     the status strip. Keep only the live progress line and errors; the colour key, the
+     orientation hints, the footnote and the filter counts all go. (First run still shows
+     them — nothing else is on screen competing then.) */
+  body.has-board .status .legend,
+  body.has-board #datehint,
+  body.has-board #stalenote,
+  body.has-board #filtercount,
+  body.has-board #note,
+  body.has-board #constraintnote:not(.warn) { display: none; }
+  body.has-board .status { padding: 2px 12px; gap: 2px; }
+
   /* The table can be wider than a phone; let it scroll sideways rather than crush the
      date columns. It already scrolls vertically inside its full-screen layer. */
   body.has-board .tableview { overflow: auto; }
