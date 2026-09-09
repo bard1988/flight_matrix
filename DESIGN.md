@@ -2,20 +2,21 @@
 name: FlightMatrix
 description: A flexible-date, any-destination fare board - a ranked list of destinations beside the selected one's departure x return price grid
 colors:
-  ink: "#0b0b0b"
-  ink-secondary: "#52514e"
-  ink-muted: "#6c6960"
-  ink-on-fill: "#0b0b0b"
-  ink-flipped: "#fcfcfb"
-  surface-raised: "#fcfcfb"
-  surface-page: "#f9f9f7"
-  surface-canvas: "#f4f3ef"
-  gridline: "#e1e0d9"
-  axis: "#c3c2b7"
-  hairline: "rgba(11, 11, 11, 0.1)"
-  hatch: "rgba(11, 11, 11, 0.05)"
+  ink: "#12171d"
+  ink-secondary: "#48525c"
+  ink-muted: "#5f6b7b"
+  ink-on-fill: "#12171d"
+  ink-flipped: "#fbfcfd"
+  ink-on-warm: "#12171d"
+  surface-raised: "#fbfcfd"
+  surface-page: "#f1f4f6"
+  surface-canvas: "#e8ecf0"
+  gridline: "#d5dbe1"
+  axis: "#b0b9c3"
+  hairline: "rgba(18, 23, 29, 0.12)"
+  hatch: "rgba(18, 23, 29, 0.05)"
   marker-yellow: "#f2b705"
-  verified-green: "#0a7d0a"
+  verified-green: "#097c09"
   error-red: "#c0261f"
   advisory-amber: "#fab219"
   fare-0: "#0f9246"
@@ -25,22 +26,22 @@ colors:
   fare-4: "#ef4723"
   fare-5: "#bc1f26"
   fare-6: "#7f0a13"
-  ink-dark: "#fcfcfb"
-  ink-secondary-dark: "#c3c2b7"
-  ink-muted-dark: "#97938a"
-  surface-raised-dark: "#1a1a19"
-  surface-page-dark: "#0d0d0d"
-  gridline-dark: "#2c2c2a"
-  axis-dark: "#383835"
-  hairline-dark: "rgba(255, 255, 255, 0.1)"
-  hatch-dark: "rgba(255, 255, 255, 0.06)"
+  ink-dark: "#f2f5f8"
+  ink-secondary-dark: "#b4bec9"
+  ink-muted-dark: "#8b96a3"
+  surface-raised-dark: "#161b21"
+  surface-page-dark: "#0b0e12"
+  gridline-dark: "#242b33"
+  axis-dark: "#323b45"
+  hairline-dark: "rgba(242, 245, 248, 0.12)"
+  hatch-dark: "rgba(242, 245, 248, 0.06)"
   marker-yellow-dark: "#ffcf33"
   verified-green-dark: "#0ca30c"
   error-red-dark: "#ff8078"
 typography:
   display:
     fontFamily: "Geist, system-ui, -apple-system, 'Segoe UI', sans-serif"
-    fontSize: "26px"
+    fontSize: "28px"
     fontWeight: 600
     lineHeight: 1.15
   headline:
@@ -50,42 +51,17 @@ typography:
     lineHeight: 1.2
   title:
     fontFamily: "Geist, system-ui, -apple-system, 'Segoe UI', sans-serif"
-    fontSize: "19px"
-    fontWeight: 600
-    lineHeight: 1.2
-  title-touch:
-    fontFamily: "Geist, system-ui, -apple-system, 'Segoe UI', sans-serif"
     fontSize: "18px"
-    fontWeight: 600
-    lineHeight: 1.2
-  title-compact:
-    fontFamily: "Geist, system-ui, -apple-system, 'Segoe UI', sans-serif"
-    fontSize: "17px"
-    fontWeight: 600
-    lineHeight: 1.2
-  subtitle:
-    fontFamily: "Geist, system-ui, -apple-system, 'Segoe UI', sans-serif"
-    fontSize: "15px"
-    fontWeight: 600
-    lineHeight: 1.3
-  body-lg:
-    fontFamily: "Geist, system-ui, -apple-system, 'Segoe UI', sans-serif"
-    fontSize: "14px"
-    fontWeight: 400
-    lineHeight: 1.4
-  list-city:
-    fontFamily: "Geist, system-ui, -apple-system, 'Segoe UI', sans-serif"
-    fontSize: "13.5px"
     fontWeight: 600
     lineHeight: 1.25
   body:
     fontFamily: "Geist, system-ui, -apple-system, 'Segoe UI', sans-serif"
-    fontSize: "13px"
+    fontSize: "14px"
     fontWeight: 400
     lineHeight: 1.45
-  meta:
+  label:
     fontFamily: "Geist, system-ui, -apple-system, 'Segoe UI', sans-serif"
-    fontSize: "12.5px"
+    fontSize: "11px"
     fontWeight: 400
     lineHeight: 1.25
   cell:
@@ -94,16 +70,6 @@ typography:
     fontWeight: 400
     lineHeight: "18px"
     fontFeature: "tabular-nums"
-  label:
-    fontFamily: "Geist, system-ui, -apple-system, 'Segoe UI', sans-serif"
-    fontSize: "11px"
-    fontWeight: 400
-    lineHeight: 1.25
-  icon-glyph:
-    fontFamily: "Geist, system-ui, -apple-system, 'Segoe UI', sans-serif"
-    fontSize: "10px"
-    fontWeight: 400
-    lineHeight: 1
   input-touch:
     fontFamily: "Geist, system-ui, -apple-system, 'Segoe UI', sans-serif"
     fontSize: "16px"
@@ -145,7 +111,7 @@ components:
     rounded: "{rounded.md}"
     padding: "11px 18px"
     height: "44px"
-    typography: "{typography.subtitle}"
+    typography: "{typography.body}"
   button-quiet:
     backgroundColor: "{colors.surface-raised}"
     textColor: "{colors.ink-secondary}"
@@ -183,7 +149,7 @@ components:
 
 **Creative North Star: "The Departures Board"**
 
-FlightMatrix looks like the analog board in an airport concourse: tabular, glanceable, numbers first, and stripped of decoration. Its job is to get out of the way of a dense grid of prices so the eye can scan across departure and return dates and land on the cheap one. Every element is sized to the information it carries - a fare cell is 32x23px because that is what a four-figure price needs, not a pixel more - and the chrome around the grid is deliberately quiet: hairline borders, a faint warm-paper ground, one workhorse typeface doing all the hierarchy by weight and size.
+FlightMatrix looks like the analog board in an airport concourse: tabular, glanceable, numbers first, and stripped of decoration. Its job is to get out of the way of a dense grid of prices so the eye can scan across departure and return dates and land on the cheap one. Every element is sized to the information it carries - a fare cell is 32x23px because that is what a four-figure price needs, not a pixel more - and the chrome around the grid is deliberately quiet: hairline borders, a cool grey ground, one workhorse typeface doing all the hierarchy by weight and size. The ground is cold on purpose. A departures board is a backlit instrument in a terminal, not paper on a desk, so the only warm thing on screen is the fare ramp itself.
 
 The stance is **a quiet instrument, explicitly not a consumer travel site**. No hero images, no gradients, no urgency banners, no "1 seat left" theatre, no decorative colour. The one place colour is loud - the green to red fare heatmap - is load-bearing data, and even there the number is always printed on the cell so colour is never the only signal. The voice is candid about the product's limits (estimates are a ranking, not a quote; a hatched cell means "no cached data", not "expensive") and the design carries that honesty: states are labelled in words, warnings ship with text, nothing is styled to look more certain than it is.
 
@@ -196,7 +162,7 @@ Motion is minimal - a panel slide, a locate pulse, a slow "searching" breathe, a
 **Key Characteristics:**
 - Numbers-first: tabular figures everywhere comparison happens; the grid is the hero.
 - Master-detail: a ranked list you scan, one grid you study. Independent scroll regions in a viewport-filling shell.
-- Two families (Geist for chrome, Geist Mono for every numeral), one warm-neutral palette, hairline separation.
+- Two families (Geist for chrome, Geist Mono for every numeral), one cool-neutral palette, hairline separation.
 - Flat by default: depth is a 1px border or a tonal step, not a shadow.
 - Colour is a second channel, never the only one; yellow is reserved for the "cheapest" marker.
 - Honest states: labelled in words, never over-styled for false confidence.
@@ -205,25 +171,25 @@ Motion is minimal - a panel slide, a locate pulse, a slow "searching" breathe, a
 
 ## Colors
 
-A warm near-monochrome - cream-tinted paper, near-black ink, warm greys - with colour admitted only where it carries meaning: the fare heatmap, the reserved "cheapest" yellow, and three small status hues. Every colour is a CSS custom property defined in all three roots (`:root`, `@media (prefers-color-scheme: dark)`, `:root[data-theme='dark']`).
+A cool near-monochrome - grey glass, blue-black ink, cold greys - with colour admitted only where it carries meaning: the fare heatmap, the reserved "cheapest" yellow, and three small status hues. The neutrals were warm paper (a `#f4f3ef` cream under a `#0b0b0b` tinted near-black) until the board's own vernacular won the argument: those two values are the exact pair generated interfaces default to, and neither belongs on an instrument. Every colour is a CSS custom property defined in all three roots (`:root`, `@media (prefers-color-scheme: dark)`, `:root[data-theme='dark']`).
 
 ### Primary
 - **Marker Yellow** (`#f2b705` light / `#ffcf33` dark): the cheapest-cell marker, and nothing else.
 
 ### Neutral
-- **Ink** (`#0b0b0b` / `#fcfcfb`): primary text, focus rings, selection rules.
-- **Ink Secondary** (`#52514e` / `#c3c2b7`): supporting text, list-row detail, the waiting note.
-- **Ink Muted** (`#6c6960` / `#97938a`): labels, captions, disclosure carets.
-- **Surface Raised** (`#fcfcfb` / `#1a1a19`): inputs, popovers, the selected list row.
-- **Surface Page** (`#f9f9f7` / `#0d0d0d`): the control bar ground.
-- **Surface Canvas** (`#f4f3ef` / `#0d0d0d`): the app canvas behind the panes.
-- **Gridline** (`#e1e0d9` / `#2c2c2a`): hairline separation between rows and cells.
-- **Axis** (`#c3c2b7` / `#383835`): the grid's own date axes and input borders.
-- **Hairline** (`rgba(11,11,11,.1)` / `rgba(255,255,255,.1)`): generic borders.
-- **Hatch** (`rgba(11,11,11,.05)` / `rgba(255,255,255,.06)`): the no-data cell fill.
+- **Ink** (`#12171d` / `#f2f5f8`): primary text, focus rings, selection rules.
+- **Ink Secondary** (`#48525c` / `#b4bec9`): supporting text, list-row detail, the waiting note.
+- **Ink Muted** (`#5f6b7b` / `#8b96a3`): labels, captions, disclosure carets.
+- **Surface Raised** (`#fbfcfd` / `#161b21`): inputs, popovers, the selected list row.
+- **Surface Page** (`#f1f4f6` / `#0b0e12`): the control bar ground.
+- **Surface Canvas** (`#e8ecf0` / `#0b0e12`): the app canvas behind the panes.
+- **Gridline** (`#d5dbe1` / `#242b33`): hairline separation between rows and cells.
+- **Axis** (`#b0b9c3` / `#323b45`): the grid's own date axes and input borders.
+- **Hairline** (`rgba(18,23,29,.12)` / `rgba(242,245,248,.12)`): generic borders.
+- **Hatch** (`rgba(18,23,29,.05)` / `rgba(242,245,248,.06)`): the no-data cell fill.
 
 ### Status
-- **Verified Green** (`#0a7d0a` / `#0ca30c`): a price confirmed by a real search.
+- **Verified Green** (`#097c09` / `#0ca30c`): a price confirmed by a real search.
 - **Error Red** (`#c0261f` / `#ff8078`): failures, unbookable pairs.
 - **Advisory Amber** (`#fab219`): staleness and rate-limit notices.
 
@@ -232,7 +198,9 @@ Seven art-directed steps, cheap to expensive, each with its own paired ink token
 
 `#0f9246` -> `#7ebb42` -> `#fdcb08` -> `#f68e1f` -> `#ef4723` -> `#bc1f26` -> `#7f0a13`
 
-Ink flips to `#fcfcfb` on the last two steps only; the first five carry `#0b0b0b`.
+Ink flips to `#fcfcfb` on the last two steps only; the first five carry `#0b0b0b`. These two ramp inks are deliberately NOT the neutral tokens: they are measured against the seven fills, not against the page, so retuning the ground does not touch them. Worst pair is 4.89.
+
+**Ink on warm** (`#12171d`, theme independent) is the text colour for anything sitting on `marker-yellow` or `advisory-amber`. Those fills are the same in both themes, so their ink cannot follow `--text-primary` or it inverts to white on yellow in dark mode.
 
 ### Named Rules
 
@@ -252,25 +220,25 @@ Ink flips to `#fcfcfb` on the last two steps only; the first five carry `#0b0b0b
 **Character:** One neutral grotesque doing all the hierarchy by weight and size, paired with its own monospace for every figure. The pairing is unshowy on purpose: the type is a delivery mechanism for numbers, and the numbers are the design.
 
 ### Hierarchy
-- **Display** (600, 26px): the verified total in the cell panel; the first-run headline on desktop.
+
+Five prose steps at a ratio of about 1.27, plus two functional exceptions. The ramp used to carry fourteen sizes with five of them inside a 2px band (12 / 12.5 / 13 / 13.5 / 14); steps that close cannot be read as hierarchy, so they were accretion, not a scale.
+
+- **Display** (600, 28px): the verified total in the cell panel; the first-run headline on desktop.
 - **Headline** (600, 22px): the first-run headline at <=720px and in the short-viewport branch.
-- **Title** (600, 19px): the card headline fare.
-- **Title Touch** (600, 18px): the card headline fare at <=720px.
-- **Title Compact** (600, 17px): the card headline in its tighter variant.
-- **Subtitle** (600, 15px): panel section headings; the primary and options buttons at <=720px.
-- **Body Large** (400, 14px): the board tools strip at <=720px.
-- **List City** (600, 13.5px): the destination name in a ranked list row.
-- **Body** (400, 13px): default UI text, table cells, the detail-pane waiting note.
-- **Meta** (12.5px): the card's date-pair line.
-- **Cell** (Geist Mono, 12px / 18px, tabular): the fare matrix. 13px on mobile in a 38px cell.
-- **Label** (400, 11px): field labels, tags, hints, legend text. The floor.
-- **Icon Glyph** (10px): disclosure carets only - `.ctry-caret` and `.dest-caret`, both pure glyphs.
-- **Input Touch** (16px): every field at <=720px, to stop iOS zooming the viewport on focus.
+- **Title** (600, 18px): the card headline fare, panel section headings, the primary action on touch.
+- **Body** (400, 14px): the document default. UI text, table cells, list-row city, the waiting note.
+- **Label** (400, 11px): field labels, tags, hints, legend text, list-row detail, disclosure carets. The floor.
+
+Two exceptions, both functional rather than typographic:
+
+- **Cell** (Geist Mono, 12px / 18px, tabular): the fare matrix, sized to `--cell-w` / `--cell-h` rather than to the scale. 13px on mobile in a 38px cell.
+- **Input on touch** (16px): every field at <=720px. This is an iOS workaround, not a type decision: anything under 16px makes Safari zoom the viewport on focus.
 
 ### Named Rules
 
-**The 11px Floor Rule.** Functional text - labels, tags, hints, buttons, meta, list-row detail, and the fare matrix - is never below 11px. The single exception is a **disclosure caret**, a decorative glyph carrying no reading load, set at 10px. If a new 10px value is not a caret, it is drift.
+**The 11px Floor Rule.** Functional text is never below 11px, and there is no exception. The two 10px disclosure carets that used to sit under the floor were raised onto it; a caret is not a good enough reason to have a fourteenth size.
 
+**The Sentence Case Rule.** Labels are sentence case with no tracking. Uppercase plus letter-spacing on an 11px label is the single most recognisable piece of generated-interface chrome, and it is harder to read than lower case at that size. The search bar was de-capsed for this reason; the Options group headings, the provenance chip and the flight-times heading followed.
 **The Tabular Numbers Rule.** Any number a user might compare, sort, or watch update carries `font-variant-numeric: tabular-nums`: the matrix, every list-row price and range, the panel, and the table view.
 
 **The Two Families Rule.** Geist for chrome, Geist Mono for numerals. No third typeface, and no monospace on prose.
@@ -364,7 +332,7 @@ Square where the data lives, gently rounded where the chrome does.
 - **Do** let colour rank *within* the one grid on screen; compare across destinations by the list's order.
 - **Do** ship every warning and state with a word or icon, not colour alone.
 - **Do** give any full-screen layer its own dismiss control, inside the layer.
-- **Do** keep the warm-paper neutrals - they are the system's character, not an accident.
+- **Do** keep the neutrals cold. The warmth on screen belongs to the fare ramp and nothing else.
 - **Do** support light and dark equally - every colour a token in all three roots.
 - **Do** keep the results in the app shell: the panes scroll, the page does not.
 

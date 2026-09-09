@@ -102,30 +102,41 @@
   /* Three grounds, deliberately stepped so the page has a structure instead of one flat
      wash: --surface-1 is raised chrome (the control bar, tooltip, panel), --page is the
      document ground that controls sit on, --canvas is the recessed board area. The old
-     palette had chrome at #fcfcfb on a #f9f9f7 page, a 3-in-255 step that was invisible,
+     palette had chrome and page a 3-in-255 step apart, which was invisible,
      so the toolbar was held up by a single hairline. --canvas is separate from --page on
      purpose: darkening --page itself would have restyled every button and input too. */
-  --surface-1: #fcfcfb;
-  --page: #f9f9f7;
-  --canvas: #f4f3ef;
-  --text-primary: #0b0b0b;
-  --text-secondary: #52514e;
-  --text-muted: #6c6960;
-  --gridline: #e1e0d9;
-  --axis: #c3c2b7;
-  --border: rgba(11, 11, 11, 0.1);
+  /* COLD, not warm. The neutrals used to be a cream ground (#f4f3ef) under a tinted
+     near-black (#0b0b0b). Both are the exact values generated design defaults to, and
+     neither is true to the subject: a departures board is a backlit instrument in a
+     terminal, not paper on a desk. The ladder below is the same three steps at the same
+     spacing, rotated off warm-paper onto a cool grey that reads as glass and metal. The
+     board is the only warm thing on screen now, which is where the warmth belongs. */
+  --surface-1: #fbfcfd;
+  --page: #f1f4f6;
+  --canvas: #e8ecf0;
+  --text-primary: #12171d;
+  --text-secondary: #48525c;
+  --text-muted: #5f6b7b;
+  --gridline: #d5dbe1;
+  --axis: #b0b9c3;
+  --border: rgba(18, 23, 29, 0.12);
   /* Semantic text colours, per theme. These used to be single values shared by both, which
      cannot work: the two canvases sit at opposite ends of lightness, so one green cannot
-     clear 4.5 against #f4f3ef AND #0d0d0d. Measured, the old --good (#0ca30c) came out at
+     clear 4.5 against the light canvas AND the dark one. Measured, the old --good (#0ca30c) came out at
      3.02 on the light canvas, which is what made every "live" chip on a light board fail.
-     --warning stays single-valued because it is only ever a BACKGROUND carrying #0b0b0b
+     --warning stays single-valued because it is only ever a BACKGROUND carrying --ink-on-warm
      text, or a decorative dot that ships with words; it is never text itself. */
-  --good: #0a7d0a;      /* 4.79 on canvas, 5.18 on chrome */
-  --critical: #c0261f;  /* 5.35 worst case in light */
+  --good: #097c09;      /* 4.54 on canvas, 5.24 on chrome */
+  --critical: #c0261f;  /* 5.00 worst case in light */
   --warning: #fab219;
-  --ink-on-fill: #0b0b0b;
-  --ink-flipped: #fcfcfb;
+  --ink-on-fill: #12171d;
+  --ink-flipped: #fbfcfd;
   --cheapest: #f2b705;   /* reserved for the cheapest-cell marker, never used as a fill */
+  /* Ink for text sitting on one of the warm fills (--cheapest, --warning). Theme-
+     INDEPENDENT on purpose: those fills are the same yellow in light and dark, so their
+     ink cannot follow --text-primary or it inverts to white on yellow in dark mode. Was
+     two hard-coded #0b0b0b literals before. */
+  --ink-on-warm: #12171d;
 
   /* Price ramp, ONE ramp for both themes. Validated (not derived) by
      data/emit_fare_ramp.py, which holds the provenance and the gates; --qiN is the
@@ -156,54 +167,54 @@
   --q4: #ef4723;  --qi4: #0b0b0b;
   --q5: #bc1f26;  --qi5: #fcfcfb;
   --q6: #7f0a13;  --qi6: #fcfcfb;
-  --hatch: rgba(11, 11, 11, 0.05);
+  --hatch: rgba(18, 23, 29, 0.05);
 }
 
 @media (prefers-color-scheme: dark) {
   :root:where(:not([data-theme='light'])) {
     color-scheme: dark;
-    --surface-1: #1a1a19;
-    --page: #0d0d0d;
-    --canvas: #0d0d0d;
-    --text-primary: #fcfcfb;
-    --text-secondary: #c3c2b7;
-    --text-muted: #97938a;
-    --gridline: #2c2c2a;
-    --axis: #383835;
-    --border: rgba(255, 255, 255, 0.1);
+    --surface-1: #161b21;
+    --page: #0b0e12;
+    --canvas: #0b0e12;
+    --text-primary: #f2f5f8;
+    --text-secondary: #b4bec9;
+    --text-muted: #8b96a3;
+    --gridline: #242b33;
+    --axis: #323b45;
+    --border: rgba(242, 245, 248, 0.12);
     /* Lighter on near-black: the light-theme values measure 3.6-4.1 here. */
-    --good: #0ca30c;      /* 5.19 on chrome, 5.79 on canvas */
-    --critical: #ff8078;  /* 7.14 worst case in dark */
-    --ink-on-fill: #fcfcfb;
-    --ink-flipped: #0b0b0b;
+    --good: #0ca30c;      /* 5.16 on chrome, 5.77 on canvas */
+    --critical: #ff8078;  /* 7.10 worst case in dark */
+    --ink-on-fill: #f2f5f8;
+    --ink-flipped: #12171d;
     --cheapest: #ffcf33;
     /* No ramp override here: the fare ramp is theme-independent now. Every step sits at
        mid-to-high lightness with its own measured ink, so the same seven fills read on
        warm paper and on near-black alike. Two mirrored ramps were only ever needed
        because the light one climbed in lightness while the dark one fell. */
-    --hatch: rgba(255, 255, 255, 0.06);
+    --hatch: rgba(242, 245, 248, 0.06);
   }
 }
 
 :root[data-theme='dark'] {
   color-scheme: dark;
-  --surface-1: #1a1a19;
-  --page: #0d0d0d;
-  --canvas: #0d0d0d;
-  --text-primary: #fcfcfb;
-  --text-secondary: #c3c2b7;
-  --text-muted: #97938a;
-  --gridline: #2c2c2a;
-  --axis: #383835;
-  --border: rgba(255, 255, 255, 0.1);
+  --surface-1: #161b21;
+  --page: #0b0e12;
+  --canvas: #0b0e12;
+  --text-primary: #f2f5f8;
+  --text-secondary: #b4bec9;
+  --text-muted: #8b96a3;
+  --gridline: #242b33;
+  --axis: #323b45;
+  --border: rgba(242, 245, 248, 0.12);
   /* Lighter on near-black: the light-theme values measure 3.6-4.1 here. */
-  --good: #0ca30c;      /* 5.19 on chrome, 5.79 on canvas */
-  --critical: #ff8078;  /* 7.14 worst case in dark */
-  --ink-on-fill: #fcfcfb;
-  --ink-flipped: #0b0b0b;
+  --good: #0ca30c;      /* 5.16 on chrome, 5.77 on canvas */
+  --critical: #ff8078;  /* 7.10 worst case in dark */
+  --ink-on-fill: #f2f5f8;
+  --ink-flipped: #12171d;
   --cheapest: #ffcf33;
   /* No ramp override: theme-independent, as above. */
-  --hatch: rgba(255, 255, 255, 0.06);
+  --hatch: rgba(242, 245, 248, 0.06);
 }
 
 * { box-sizing: border-box; }
@@ -336,7 +347,7 @@ header.controls {
   align-items: center;
   gap: 14px;
   margin: 0 0 12px;
-  font-size: 13px;
+  font-size: 14px;
   color: var(--text-secondary);
 }
 .board-tools .bt-spacer { flex: 1 1 auto; }
@@ -351,7 +362,7 @@ header.controls {
   align-items: center;
   gap: 6px;
   font: inherit;
-  font-size: 13px;
+  font-size: 14px;
   color: var(--text-primary);
   background: var(--surface-1);
   border: 1px solid var(--axis);
@@ -359,7 +370,7 @@ header.controls {
   padding: 3px 9px;
   cursor: pointer;
 }
-.ctry-caret { color: var(--text-muted); font-size: 10px; }
+.ctry-caret { color: var(--text-muted); font-size: 11px; }
 .ctry-pop {
   position: absolute;
   z-index: 40;
@@ -381,7 +392,7 @@ header.controls {
   padding: 5px 7px;
   border-radius: 4px;
   cursor: pointer;
-  font-size: 13px;
+  font-size: 14px;
 }
 .ctry-pop label:hover { background: var(--page); }
 .ctry-n { margin-left: auto; font-family: var(--mono); font-size: 11px; color: var(--text-muted); }
@@ -541,7 +552,7 @@ button.primary.running { opacity: .75; }
 button.primary.stale {
   background: var(--cheapest);
   border-color: var(--cheapest);
-  color: #0b0b0b;
+  color: var(--ink-on-warm);
 }
 
 
@@ -557,7 +568,7 @@ button.primary.stale {
 }
 
 .opts-chevron {
-  font-size: 13px;
+  font-size: 14px;
   line-height: 1;
   transition: transform 0.15s ease;
 }
@@ -585,12 +596,12 @@ body.opts-open .controls-adv {
 
 .adv-group { flex: 0 1 340px; min-width: 0; }
 
+/* Sentence case, no tracking. The bar's own labels were de-capsed for exactly this
+   reason; these five group headings inside the Options panel were missed at the time. */
 .adv-group-label {
   display: block;
   font-size: 11px;
   font-weight: 600;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
   color: var(--text-muted);
   padding-bottom: 8px;
   margin-bottom: 10px;
@@ -664,7 +675,7 @@ body.opts-open .controls-adv {
   border: none;
   background: none;
   color: inherit;
-  font-size: 13px;
+  font-size: 14px;
   line-height: 1;
   cursor: pointer;
   padding: 0 2px;
@@ -690,7 +701,7 @@ body.opts-open .controls-adv {
   top: 50%;
   transform: translateY(-50%);
   color: var(--text-muted);
-  font-size: 10px;
+  font-size: 11px;
   pointer-events: none;
 }
 
@@ -726,7 +737,7 @@ body.opts-open .controls-adv {
   overflow-y: auto;
   padding: 2px;
   background: var(--surface-1);
-  font-size: 13px;
+  font-size: 14px;
   font-family: var(--sans);
 }
 
@@ -843,7 +854,7 @@ button.primary.stale:hover:not([disabled]) {
 .status {
   padding: 8px 16px 0;
   color: var(--text-secondary);
-  font-size: 13px;
+  font-size: 14px;
   display: flex;
   flex-direction: column;
   align-items: flex-start;
@@ -1116,7 +1127,7 @@ body.list-collapsed .dlist { display: none; }
 
 .lrow-city {
   grid-column: 1;
-  font-size: 13.5px;
+  font-size: 14px;
   font-weight: 600;
   letter-spacing: -0.01em;
   line-height: 1.2;
@@ -1125,7 +1136,7 @@ body.list-collapsed .dlist { display: none; }
 .lrow-price {
   grid-column: 2;
   text-align: right;
-  font-size: 13.5px;
+  font-size: 14px;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
@@ -1267,7 +1278,7 @@ table.matrix th.corner {
 .card-head h2 {
   order: 1;
   margin: 0;
-  font-size: 19px;
+  font-size: 18px;
   font-weight: 600;
   letter-spacing: -0.02em;
   line-height: 1.15;
@@ -1276,14 +1287,14 @@ table.matrix th.corner {
 .card-head .best {
   order: 2;
   margin-left: auto;
-  font-size: 17px;
+  font-size: 18px;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
 }
 
 .card-head .best .card-range {
   margin-left: 4px;
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 400;
   color: var(--text-muted);
 }
@@ -1291,15 +1302,15 @@ table.matrix th.corner {
 .card-head button { order: 3; align-self: center; }
 .card-head::after { content: ''; order: 4; flex-basis: 100%; height: 0; }
 
-.card-head .card-country { font-size: 13px; font-weight: 400; color: var(--text-muted); }
-.card-head .card-when { order: 5; color: var(--text-secondary); font-size: 12.5px; font-variant-numeric: tabular-nums; }
+.card-head .card-country { font-size: 14px; font-weight: 400; color: var(--text-muted); }
+.card-head .card-when { order: 5; color: var(--text-secondary); font-size: 11px; font-variant-numeric: tabular-nums; }
 
 /* order 7: the calendar-drift warning belongs with the metadata on row 2, not competing
    with the city name. Without an explicit order it would default to 0 and sort first. */
 .card-head .drift {
   order: 7;
   font-size: 11px;
-  color: #0b0b0b;
+  color: var(--ink-on-warm);
   background: var(--warning);
   border-radius: 3px;
   padding: 1px 5px;
@@ -1312,8 +1323,6 @@ table.matrix th.corner {
   display: inline-block;
   font-size: 11px;
   font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.03em;
   color: var(--text-muted);
   border: 1px solid var(--border);
   border-radius: 3px;
@@ -1583,12 +1592,12 @@ table.matrix td.cross-at {
 }
 #panelbody a:hover { border-color: var(--text-muted); }
 #panelbody a:focus-visible { outline: none; border-color: var(--text-primary); box-shadow: 0 0 0 1px var(--text-primary); }
-#panel h3 { margin: 0 0 4px; font-size: 15px; font-weight: 600; }
+#panel h3 { margin: 0 0 4px; font-size: 14px; font-weight: 600; }
 #panel dl { display: grid; grid-template-columns: auto 1fr; gap: 4px 10px; margin: 12px 0; }
 #panel dt { color: var(--text-muted); }
 #panel dd { margin: 0; font-variant-numeric: tabular-nums; }
 .segments { font-size: 12px; margin: 8px 0; }
-.segments-head { font-size: 11px; text-transform: uppercase; letter-spacing: .03em;
+.segments-head { font-size: 11px;
   color: var(--text-muted); margin-top: 14px; border-top: 1px solid var(--border); padding-top: 8px; }
 .segments div { padding: 2px 0; font-variant-numeric: tabular-nums; }
 
@@ -1614,7 +1623,7 @@ table.matrix td.cross-at {
 
 .segments .route { flex: 0 0 auto; font-weight: 600; }
 
-#panel .big { font-size: 26px; font-weight: 600; font-variant-numeric: tabular-nums; }
+#panel .big { font-size: 28px; font-weight: 600; font-variant-numeric: tabular-nums; }
 #panel .close { position: absolute; top: 10px; right: 12px; border: none; background: none; font-size: 18px; }
 
 /* No rule above this. The footnote is held to a 72ch measure, so a border-top drew a short
@@ -1642,7 +1651,7 @@ table.matrix td.cross-at {
    from scale; the board is the loud thing on this page. */
 .firstrun h1 {
   margin: 0 0 8px;
-  font-size: 26px;
+  font-size: 28px;
   font-weight: 600;
   letter-spacing: -0.02em;
   line-height: 1.15;
@@ -1651,7 +1660,7 @@ table.matrix td.cross-at {
 .firstrun-lede {
   margin: 0;
   max-width: 62ch;
-  font-size: 15px;
+  font-size: 14px;
   line-height: 1.5;
   color: var(--text-secondary);
 }
@@ -1680,7 +1689,7 @@ body.show-table .tableview { display: block; }
   border-bottom: 1px solid var(--gridline);
   padding: 4px 10px;
   text-align: left;
-  font-size: 13px;
+  font-size: 14px;
   white-space: nowrap;
 }
 .tableview th {
@@ -1761,8 +1770,8 @@ body.show-table .tableview { display: block; }
 
   .bar-actions { flex: 1 1 100%; gap: 8px; }
   .bar-actions > #go,
-  .bar-actions > #stop { flex: 2 1 0; padding: 11px; font-size: 15px; }
-  .bar-actions > .opts-toggle { flex: 1 1 0; justify-content: center; padding: 11px; font-size: 15px; }
+  .bar-actions > #stop { flex: 2 1 0; padding: 11px; font-size: 14px; }
+  .bar-actions > .opts-toggle { flex: 1 1 0; justify-content: center; padding: 11px; font-size: 14px; }
 
   /* Filters panel: one column, groups stacked. */
   body.opts-open .controls-adv {
@@ -1831,7 +1840,7 @@ body.show-table .tableview { display: block; }
   margin: 0;
   padding: 20px 0 0;
   color: var(--text-secondary);
-  font-size: 13px;
+  font-size: 14px;
 }
 
 /* The waiting card has no grid to bound it, so it needs its own breathing room; a filled

@@ -317,7 +317,7 @@ function tooltipFor(dest, cell) {
   const cur = state.meta.currency;
   const rows = [];
   rows.push(`<b>${dest.city} (${dest.destination})</b>`);
-  rows.push(`${weekday(cell.depart)} ${shortDate(cell.depart)} &rarr; ${weekday(cell.ret)} ${shortDate(cell.ret)} &middot; ${cell.nights} nights`);
+  rows.push(`${weekday(cell.depart)} ${shortDate(cell.depart)} &rarr; ${weekday(cell.ret)} ${shortDate(cell.ret)}, ${cell.nights} nights`);
   const who = `${state.meta.adults} adults` + (state.meta.children ? ` + ${state.meta.children} children` : '');
   if (cell.total != null) {
     rows.push(`<b>${fmtMoney(cell.total, cur)}</b> verified on Google Flights`);
@@ -451,11 +451,11 @@ function render() {
       const hi = Math.max(...lengths);
       const c = state.constraints;
       if ((c.min != null && c.min > hi) || (c.max != null && c.max < lo)) {
-        text += ` · this window only contains ${lo}-${hi} night trips. ` +
+        text += `. This window only contains ${lo}-${hi} night trips. ` +
                 `Your dates are ${Math.round((new Date(state.meta.return_dates[Math.floor(state.meta.return_dates.length / 2)]) - new Date(state.meta.depart_dates[Math.floor(state.meta.depart_dates.length / 2)])) / 86400000)} days apart. ` +
                 `Move "Return around" closer to "Depart around" to look for short trips.`;
       } else {
-        text += ' · nothing matches; try fewer days or a wider nights range.';
+        text += '. Nothing matches; try fewer days or a wider nights range.';
       }
     }
     $('constraintnote').textContent = text;
@@ -671,9 +671,9 @@ function listRow(dest, isSel) {
     ? `<span class="lrow-range">&ndash;&#8202;${fmtMoney(hi, meta.currency)}</span>` : '';
   const bc = dest.shownBest;
   const when = bc
-    ? `${weekday(bc.depart)} ${shortDate(bc.depart)} &rarr; ${weekday(bc.ret)} ${shortDate(bc.ret)} ` +
-      `&middot; ${bc.nights}n`
-    : isPreview ? 'from &middot; finding dates&hellip;'
+    ? `${weekday(bc.depart)} ${shortDate(bc.depart)} &rarr; ${weekday(bc.ret)} ${shortDate(bc.ret)}` +
+      `, ${bc.nights}n`
+    : isPreview ? 'Finding dates&hellip;'
     : 'no fare yet';
 
   b.innerHTML =
@@ -751,7 +751,7 @@ function renderCard(dest, domain) {
   const bc = dest.shownBest;
   const when = bc
     ? `${weekday(bc.depart)} ${shortDate(bc.depart)} &rarr; ${weekday(bc.ret)} ${shortDate(bc.ret)}` +
-      ` &middot; ${bc.nights} night${bc.nights === 1 ? '' : 's'}`
+      `, ${bc.nights} night${bc.nights === 1 ? '' : 's'}`
     : '';
   // The essence of a matrix in two numbers: what the cheapest date pair costs, and the
   // ceiling across every priced pair. A deal-hunter scanning the list wants the spread
@@ -1032,7 +1032,7 @@ function renderTable(ordered) {
     { key: 'total', label: 'Total', num: true, cell: (r) => fmtMoney(r.value, cur),
       cmp: (a, b) => a.value - b.value },
     { key: 'source', label: 'Source',
-      cell: (r) => `<span class="tag${r.cell.verified ? ' live' : ''}">${r.cell.verified ? 'live' : 'est'}</span>`,
+      cell: (r) => `<span class="tag${r.cell.verified ? ' live' : ''}">${r.cell.verified ? 'Live' : 'Est'}</span>`,
       cmp: (a, b) => (a.cell.verified ? 1 : 0) - (b.cell.verified ? 1 : 0) },
     { key: 'stops', label: 'Stops', cell: (r) => fmtStops(r.cell.transfers),
       cmp: (a, b) => (a.cell.transfers == null ? 9 : a.cell.transfers) - (b.cell.transfers == null ? 9 : b.cell.transfers) },
@@ -1104,19 +1104,19 @@ function renderTimes(details) {
       const num = s.legs.length > 1 ? `<span class="legno">${i + 1}</span>` : '';
       return `<div class="leg">${num}<span class="route">${l.from || '?'} → ${l.to || '?'}</span>` +
         `<span class="muted">${dep}${arr ? ' → ' + arr : ''}` +
-        `${l.carrier ? ' · ' + l.carrier : ''}${l.code ? ' ' + l.code : ''}</span></div>`;
+        `${l.carrier ? ', ' + l.carrier : ''}${l.code ? ' ' + l.code : ''}</span></div>`;
     }).join('');
     return `<div class="segments"><b>${label}</b>` +
       // One middle dot per line: duration and stop count used to take one each, which made
       // the summary read as a dot-separated list rather than a sentence.
       `<div class="sector-summary">${s.departs || ''} → ${split(s.arrives).time || ''}` +
-      `<span class="muted">${s.duration ? ' · ' + s.duration : ''}` +
-      `${s.duration ? ', ' : ' · '}${fmtStops(s.stops || 0)}</span></div>` +
+      `<span class="muted">${s.duration ? ', ' + s.duration : ''}` +
+      `${s.duration ? ', ' : ', '}${fmtStops(s.stops || 0)}</span></div>` +
       legs + '</div>';
   };
   // Name the source and its price: the cross-check's cheapest is often a DIFFERENT
   // itinerary from the board's, so two unlabelled "departs" times read as a contradiction.
-  const head = `<div class="segments-head">Flight times · ${details.price != null
+  const head = `<div class="segments-head">Flight times, ${details.price != null
     ? fmtMoney(details.price, state.meta.currency) + ' via Kiwi' : 'Kiwi'}</div>`;
   return head + way('Outbound', details.outbound) + way('Return', details.inbound);
 }
@@ -1223,7 +1223,7 @@ async function verifyCell(dest, cell) {
   const delta = cell.estimate ? ((data.total - cell.estimate) / cell.estimate) * 100 : null;
   openPanel(
     `<h3>${dest.city} (${dest.destination})</h3>` +
-      `<div class="muted">${weekday(cell.depart)} ${shortDate(cell.depart)} &rarr; ${weekday(cell.ret)} ${shortDate(cell.ret)} &middot; ${cell.nights || ''} nights</div>` +
+      `<div class="muted">${weekday(cell.depart)} ${shortDate(cell.depart)} &rarr; ${weekday(cell.ret)} ${shortDate(cell.ret)}, ${cell.nights || ''} nights</div>` +
       `<div class="big">${fmtMoney(data.total, cur)}</div>` +
       `<div class="muted">live total for ${meta.adults} adults${meta.children ? ' + ' + meta.children + ' children' : ''}</div>` +
       '<dl>' +

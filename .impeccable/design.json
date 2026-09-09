@@ -1,55 +1,55 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-09-09T15:04:01Z",
+  "generatedAt": "2026-09-09T15:40:25Z",
   "title": "Design System: FlightMatrix",
   "extensions": {
     "colorMeta": {
       "ink": {
         "role": "primary",
         "displayName": "Near-Black Ink",
-        "canonical": "#0b0b0b",
-        "darkValue": "#ffffff",
+        "canonical": "#12171d",
+        "darkValue": "#f2f5f8",
         "tonalRamp": [
-          "#0b0b0b",
-          "#232320",
-          "#3d3c38",
-          "#575650",
-          "#767469",
-          "#9d9a8d",
-          "#c6c2b4",
-          "#ece8dd"
+          "#12171d",
+          "#33373d",
+          "#53585d",
+          "#74787d",
+          "#95999c",
+          "#b6b9bc",
+          "#d6dadc",
+          "#f7fafc"
         ]
       },
       "ink-secondary": {
         "role": "neutral",
         "displayName": "Warm Slate",
-        "canonical": "#52514e",
-        "darkValue": "#c3c2b7",
+        "canonical": "#48525c",
+        "darkValue": "#b4bec9",
         "tonalRamp": [
-          "#1a1a18",
-          "#2e2d2a",
-          "#42413d",
-          "#52514e",
-          "#6e6c67",
-          "#928f86",
-          "#bdb9ac",
-          "#e6e2d7"
+          "#48525c",
+          "#616a73",
+          "#7a828a",
+          "#939aa1",
+          "#acb2b7",
+          "#c5cace",
+          "#dee2e5",
+          "#f7fafc"
         ]
       },
       "ink-muted": {
         "role": "neutral",
         "displayName": "Quiet Stone",
-        "canonical": "#6c6960",
-        "darkValue": "#97938a",
+        "canonical": "#5f6b7b",
+        "darkValue": "#8b96a3",
         "tonalRamp": [
-          "#0f0d07",
-          "#2a271f",
-          "#47443b",
-          "#66635a",
-          "#87837a",
-          "#a9a69c",
-          "#cdc9bf",
-          "#f2eee4"
+          "#5f6b7b",
+          "#757f8d",
+          "#8a94a0",
+          "#a0a8b2",
+          "#b6bdc5",
+          "#ccd1d7",
+          "#e1e6ea",
+          "#f7fafc"
         ]
       },
       "paper": {
@@ -87,33 +87,33 @@
       "gridline": {
         "role": "neutral",
         "displayName": "Gridline",
-        "canonical": "#e1e0d9",
-        "darkValue": "#2c2c2a",
+        "canonical": "#d5dbe1",
+        "darkValue": "#242b33",
         "tonalRamp": [
-          "#1c1c1a",
-          "#2c2c2a",
-          "#43423d",
-          "#5d5b53",
-          "#7d7b70",
-          "#a4a294",
-          "#c6c4b8",
-          "#e1e0d9"
+          "#d5dbe1",
+          "#dadfe5",
+          "#dfe4e9",
+          "#e4e8ed",
+          "#e8edf0",
+          "#edf1f4",
+          "#f2f6f8",
+          "#f7fafc"
         ]
       },
       "axis": {
         "role": "neutral",
         "displayName": "Axis Grey",
-        "canonical": "#c3c2b7",
-        "darkValue": "#383835",
+        "canonical": "#b0b9c3",
+        "darkValue": "#323b45",
         "tonalRamp": [
-          "#232320",
-          "#383835",
-          "#4f4e48",
-          "#67655d",
-          "#87857a",
-          "#a5a398",
-          "#c3c2b7",
-          "#e7e6dc"
+          "#b0b9c3",
+          "#bac2cb",
+          "#c4ccd3",
+          "#ced5db",
+          "#d9dee4",
+          "#e3e7ec",
+          "#edf1f4",
+          "#f7fafc"
         ]
       },
       "hairline": {
@@ -151,17 +151,17 @@
       "verified-green": {
         "role": "tertiary",
         "displayName": "Verified Green",
-        "canonical": "#0ca30c",
+        "canonical": "#097c09",
         "darkValue": "#0ca30c",
         "tonalRamp": [
-          "#032f03",
-          "#054605",
-          "#075f07",
-          "#0a7d0a",
-          "#0c9a0c",
-          "#0ca30c",
-          "#5fd35f",
-          "#b8f0b8"
+          "#097c09",
+          "#2b8e2c",
+          "#4da04e",
+          "#6fb271",
+          "#91c494",
+          "#b3d6b7",
+          "#d5e8d9",
+          "#f7fafc"
         ]
       },
       "error-red": {
@@ -307,64 +307,42 @@
           "#eabdba",
           "#f6eceb"
         ]
+      },
+      "ink-on-warm": {
+        "role": "neutral",
+        "displayName": "Ink on Warm",
+        "canonical": "#12171d",
+        "darkValue": "#12171d"
       }
     },
     "typographyMeta": {
       "display": {
         "displayName": "Display",
-        "purpose": "The verified total in the cell panel; the first-run headline on desktop. 26px/600."
+        "purpose": "Verified total in the cell panel; first-run headline on desktop. 28px/600."
       },
       "headline": {
         "displayName": "Headline",
-        "purpose": "First-run headline at <=720px and in the short-viewport branch. 22px/600."
+        "purpose": "First-run headline at <=720px and the short-viewport branch. 22px/600."
       },
       "title": {
         "displayName": "Title",
-        "purpose": "The card headline fare. 19px/600, dropping to 18px at <=720px."
-      },
-      "title-touch": {
-        "displayName": "Title (touch)",
-        "purpose": "The card headline fare at <=720px. 18px/600."
-      },
-      "title-compact": {
-        "displayName": "Title Compact",
-        "purpose": "The card headline in its tighter variant. 17px/600."
-      },
-      "subtitle": {
-        "displayName": "Subtitle",
-        "purpose": "Panel section headings; primary and options buttons at <=720px. 15px/600."
-      },
-      "body-lg": {
-        "displayName": "Body Large",
-        "purpose": "The board tools strip at <=720px. 14px."
-      },
-      "list-city": {
-        "displayName": "List City",
-        "purpose": "Destination name in a ranked list row. 13.5px/600."
+        "purpose": "Card headline fare, panel section headings, primary action on touch. 18px/600."
       },
       "body": {
         "displayName": "Body",
-        "purpose": "Default UI text, table cells, the detail-pane waiting note. 13px."
-      },
-      "meta": {
-        "displayName": "Meta",
-        "purpose": "The card date-pair line. 12.5px."
-      },
-      "cell": {
-        "displayName": "Cell",
-        "purpose": "The fare matrix. Geist Mono 12px/18px tabular; 13px on mobile in a 38px cell."
+        "purpose": "Document default. UI text, table cells, list-row city, waiting note. 14px."
       },
       "label": {
         "displayName": "Label",
-        "purpose": "Field labels, tags, hints, legend text. The 11px floor for functional text."
+        "purpose": "Field labels, tags, hints, legend, list-row detail, carets. The 11px floor."
       },
-      "icon-glyph": {
-        "displayName": "Icon Glyph",
-        "purpose": "Disclosure carets only (.ctry-caret, .dest-caret). 10px, the documented exception to the floor."
+      "cell": {
+        "displayName": "Cell",
+        "purpose": "Fare matrix. Geist Mono 12px/18px tabular, sized to --cell-w/--cell-h, not to the scale."
       },
       "input-touch": {
         "displayName": "Input (touch)",
-        "purpose": "Every field at <=720px at 16px, to stop iOS zooming the viewport on focus."
+        "purpose": "Fields at <=720px at 16px. An iOS zoom workaround, not a type decision."
       }
     },
     "shadows": [
@@ -558,7 +536,7 @@
     "keyCharacteristics": [
       "Numbers-first: tabular figures everywhere comparison happens; the grid is the hero.",
       "Master-detail: a ranked list you scan, one grid you study, in independent scroll regions.",
-      "Two families (Geist for chrome, Geist Mono for every numeral), one warm-neutral palette.",
+      "Two families (Geist for chrome, Geist Mono for every numeral), one cool-neutral palette.",
       "Flat by default: depth is a 1px border or a tonal step, not a shadow.",
       "Colour is a second channel, never the only one; yellow is reserved for the cheapest marker.",
       "Honest states: labelled in words, never over-styled for false confidence.",
@@ -570,7 +548,8 @@
       "The Reserved Yellow Rule. marker-yellow marks the cheapest cell only, and never as a fill.",
       "The Per-Matrix Scale Rule. Heatmap colour ranks within the destination on screen, never across destinations.",
       "The Key Follows The Grid Rule. The colour key shows only while a grid is actually rendered.",
-      "The 11px Floor Rule. Functional text is never below 11px; the only exception is a 10px disclosure caret.",
+      "The 11px Floor Rule. Functional text is never below 11px, with no exception; the two 10px carets were raised onto the floor.",
+      "The Sentence Case Rule. Labels are sentence case with no tracking. Uppercase plus letter-spacing on an 11px label is generated-interface chrome and is harder to read at that size.",
       "The Tabular Numbers Rule. Any comparable number carries font-variant-numeric: tabular-nums.",
       "The Two Families Rule. Geist for chrome, Geist Mono for numerals. No third typeface.",
       "The Panes Scroll, The Page Does Not Rule. Once a board exists, .dlist and .matrix-wrap own the only scrollbars.",
