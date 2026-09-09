@@ -761,10 +761,12 @@ function renderWaiting(dest) {
   // aria-live so a screen reader hears the grid arrive rather than sitting in silence.
   wait.setAttribute('role', 'status');
   const price = previewValue(dest);
-  wait.textContent = price != null
-    ? `Cheapest found so far ${fmtMoney(price, dest.currency || state.meta.currency)}. `
-      + 'Finding the dates behind it…'
-    : 'Loading this destination’s dates…';
+  const stem = price != null
+    ? `Cheapest so far ${fmtMoney(price, dest.currency || state.meta.currency)}. Finding the dates`
+    : 'Finding this destination’s dates';
+  // The trailing dots animate (CSS); aria-hidden so a screen reader just hears the stem.
+  wait.append(stem, Object.assign(document.createElement('span'),
+    { className: 'ellipsis', ariaHidden: 'true' }));
   card.appendChild(wait);
   return card;
 }
@@ -1804,7 +1806,8 @@ function startSearch() {
   // there so the wait reads as work in progress, not a broken page.
   $('empty').hidden = false;
   $('empty').classList.add('is-searching');
-  $('empty').textContent = 'Finding cheap destinations…';
+  $('empty').replaceChildren('Finding cheap destinations',
+    Object.assign(document.createElement('span'), { className: 'ellipsis', ariaHidden: 'true' }));
   $('boardtools').hidden = true;   // no results yet
   // Orientation is a first-run thing; once you've searched, you know. The date hint is
   // part of that same orientation (the field labels and the first-run lede already say

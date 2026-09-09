@@ -132,6 +132,7 @@
   --ink-on-fill: #12171d;
   --ink-flipped: #fbfcfd;
   --cheapest: #f2b705;   /* reserved for the cheapest-cell marker, never used as a fill */
+  --brand: #0e9e77;      /* the wordmark green: the plane mark, and the jump-to-cheapest icon */
   /* Ink for text sitting on one of the warm fills (--cheapest, --warning). Theme-
      INDEPENDENT on purpose: those fills are the same yellow in light and dark, so their
      ink cannot follow --text-primary or it inverts to white on yellow in dark mode. Was
@@ -1385,7 +1386,9 @@ table.matrix td.flash { animation: locate-flash 0.4s ease-in-out 4; }
 .card-head .locate {
   line-height: 0;
   padding: 4px 7px;
+  color: var(--brand);
 }
+.card-head .locate:hover { border-color: var(--brand); }
 .card-head .locate svg {
   display: block;
   width: 15px;
@@ -1750,10 +1753,23 @@ body.show-table .tableview { display: block; }
 .tableview td .tag { border: 0; padding: 0; }
 
 .empty { color: var(--text-muted); padding: 40px 16px; text-align: center; }
-/* The pre-first-result placeholder. A slow opacity breathe so a long provider wait reads
-   as work, not a hang; damped to nothing under prefers-reduced-motion by the global rule. */
-.empty.is-searching { animation: searching-breathe 1.6s var(--ease) infinite; }
-@keyframes searching-breathe { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+
+/* Trailing dots that cycle . -> .. -> ... on a "still working" line ("Finding dates",
+   "Finding cheap destinations"). It is three mono dots revealed a character at a time by a
+   stepped width animation — works in every engine (a keyframed `content` swap does not).
+   The 3ch box is always reserved so the line never jitters, and prefers-reduced-motion
+   freezes it (the global rule) at one dot. */
+.ellipsis {
+  display: inline-block;
+  width: 3ch;
+  overflow: hidden;
+  vertical-align: bottom;
+  font-family: var(--mono);
+  white-space: nowrap;
+  animation: ellipsis 1.4s steps(3, start) infinite;
+}
+.ellipsis::before { content: '...'; }
+@keyframes ellipsis { from { width: 0; } }
 
 .sr-only {
   position: absolute;
