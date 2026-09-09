@@ -2470,6 +2470,19 @@ $('depart').addEventListener('input', syncReturnDate);
 loadFx();
 buildRegionTree();
 
+/* One ticker for every "Finding…" ellipsis on the page (list rows, the placeholder card,
+   the pre-first-result line). CSS reads body[data-dots]; driving it from here rather than a
+   per-element CSS animation means a list re-render — which recreates the rows while the
+   board fills — cannot restart the cycle. Runs only while something is actually pending. */
+if (REDUCE_MOTION.matches) {
+  document.body.dataset.dots = '2';
+} else {
+  setInterval(() => {
+    if (!document.querySelector('.ellipsis')) return;
+    document.body.dataset.dots = String((Number(document.body.dataset.dots || 0) + 1) % 3);
+  }, 420);
+}
+
 /* "When" is a plain month picker plus an "anytime" span. It just writes the two exact
    date fields (which still drive everything); Options exposes those directly for anyone
    who wants a precise window. */
