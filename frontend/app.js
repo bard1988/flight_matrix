@@ -707,7 +707,7 @@ function listRow(dest, isSel) {
   const when = bc
     ? `${weekday(bc.depart)} ${shortDate(bc.depart)} &rarr; ${weekday(bc.ret)} ${shortDate(bc.ret)}` +
       `, ${bc.nights}n`
-    : isPreview ? 'Finding dates<span class="ellipsis" aria-hidden="true"></span>'
+    : isPreview ? 'Finding dates<span class="ellipsis" aria-hidden="true">...</span>'
     : 'no fare yet';
 
   b.innerHTML =
@@ -764,9 +764,10 @@ function renderWaiting(dest) {
   const stem = price != null
     ? `Cheapest so far ${fmtMoney(price, dest.currency || state.meta.currency)}. Finding the dates`
     : 'Finding this destination’s dates';
-  // The trailing dots animate (CSS); aria-hidden so a screen reader just hears the stem.
+  // The trailing dots cycle (the tickDots ticker); aria-hidden so a screen reader just
+  // hears the stem.
   wait.append(stem, Object.assign(document.createElement('span'),
-    { className: 'ellipsis', ariaHidden: 'true' }));
+    { className: 'ellipsis', ariaHidden: 'true', textContent: '...' }));
   card.appendChild(wait);
   return card;
 }
@@ -1807,7 +1808,8 @@ function startSearch() {
   $('empty').hidden = false;
   $('empty').classList.add('is-searching');
   $('empty').replaceChildren('Finding cheap destinations',
-    Object.assign(document.createElement('span'), { className: 'ellipsis', ariaHidden: 'true' }));
+    Object.assign(document.createElement('span'),
+      { className: 'ellipsis', ariaHidden: 'true', textContent: '...' }));
   $('boardtools').hidden = true;   // no results yet
   // Orientation is a first-run thing; once you've searched, you know. The date hint is
   // part of that same orientation (the field labels and the first-run lede already say
@@ -2470,18 +2472,24 @@ $('depart').addEventListener('input', syncReturnDate);
 loadFx();
 buildRegionTree();
 
-/* One ticker for every "Finding…" ellipsis on the page (list rows, the placeholder card,
-   the pre-first-result line). CSS reads body[data-dots]; driving it from here rather than a
-   per-element CSS animation means a list re-render — which recreates the rows while the
-   board fills — cannot restart the cycle. Runs only while something is actually pending. */
-if (REDUCE_MOTION.matches) {
-  document.body.dataset.dots = '2';
-} else {
-  setInterval(() => {
-    if (!document.querySelector('.ellipsis')) return;
-    document.body.dataset.dots = String((Number(document.body.dataset.dots || 0) + 1) % 3);
-  }, 420);
-}
+/* One ticker writes the dots into every "Finding…" ellipsis on the page (the list rows,
+   the placeholder card, the pre-first-result line). Writing the text directly — rather than
+   a per-element CSS animation — means a list re-render, which recreates the rows several
+   times a second while the board fills, can't restart or freeze the cycle: the next tick
+   just fills the fresh spans in. */
+(function tickDots() {
+  const frames = ['.', '..', '...'];
+  let i = 0;
+  const paint = () => {
+    const els = document.getElementsByClassName('ellipsis');
+    if (!els.length) return;
+    const s = REDUCE_MOTION.matches ? '...' : frames[i % frames.length];
+    for (const el of els) el.textContent = s;
+    i += 1;
+  };
+  paint();
+  if (!REDUCE_MOTION.matches) setInterval(paint, 400);
+})();
 
 /* "When" is a plain month picker plus an "anytime" span. It just writes the two exact
    date fields (which still drive everything); Options exposes those directly for anyone

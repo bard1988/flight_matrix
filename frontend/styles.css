@@ -1755,19 +1755,14 @@ body.show-table .tableview { display: block; }
 .empty { color: var(--text-muted); padding: 40px 16px; text-align: center; }
 
 /* Trailing dots that cycle . -> .. -> ... on a "still working" line ("Finding dates",
-   "Finding cheap destinations"). Driven by body[data-dots], stepped by one JS ticker
-   (see app.js) rather than a CSS animation, so a list re-render — which recreates the
-   rows several times a second while the board fills — never restarts the cycle. The 3ch
-   mono box is always reserved so the line never jitters. */
+   "Finding cheap destinations"). The text is written by one JS ticker (app.js); a 3ch mono
+   box is reserved so the line never jitters as the dot count changes. */
 .ellipsis {
   display: inline-block;
   width: 3ch;
   text-align: left;
   font-family: var(--mono);
 }
-.ellipsis::after { content: '.'; }
-body[data-dots='1'] .ellipsis::after { content: '..'; }
-body[data-dots='2'] .ellipsis::after { content: '...'; }
 
 .sr-only {
   position: absolute;
