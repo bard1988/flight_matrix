@@ -776,6 +776,7 @@ function listRow(dest, isSel) {
     userPickedDest = true;
     state.selected = dest.destination;
     document.body.classList.add('detail-open');
+    pushOverlay('detail');
     render();
   });
   return b;
@@ -803,7 +804,7 @@ function renderWaiting(dest) {
   back.textContent = '‹ All destinations';
   back.title = 'Back to the destination list';
   back.setAttribute('aria-label', 'Back to the destination list');
-  back.onclick = () => { document.body.classList.remove('detail-open'); render(); };
+  back.onclick = () => leaveOverlay();
   head.appendChild(back);
 
   const city = document.createElement('h2');
@@ -899,7 +900,7 @@ function buildCardHead(dest, domain, card) {
   back.textContent = '‹ All destinations';
   back.title = 'Back to the destination list';
   back.setAttribute('aria-label', 'Back to the destination list');
-  back.onclick = () => { document.body.classList.remove('detail-open'); };
+  back.onclick = () => leaveOverlay();
   head.appendChild(back);
 
   // No bulk "price every date" here: the cached estimates are close enough to shortlist on,
@@ -1171,6 +1172,40 @@ function tableBack() {
   back.onclick = () => setTableView(false);
   return back;
 }
+
+/* --- Browser Back steps out of an overlay, it doesn't leave the board -----------------
+   Opening a destination's focus layer (or the cell sheet over it) pushes a history entry,
+   so the phone/desktop Back gesture pops it and collapses that one layer -- the same
+   thing the "‹ All destinations" / sheet-close controls do. Without this the board is a
+   single history entry, so Back left the page entirely, which read as the app breaking.
+   The date fields, filters and the ranked list are all one entry (the board); only the
+   two full-window overlays get their own. */
+function pushOverlay(kind) {                 // 'detail' | 'panel'
+  if (history.state && history.state.fmOverlay === kind) return;
+  history.pushState({ fmOverlay: kind }, '');
+}
+function leaveOverlay() {
+  // Pop the entry and let popstate do the collapse; fall back to a direct close if there
+  // is no entry to pop (e.g. the layer was opened before this code ran).
+  if (history.state && history.state.fmOverlay) history.back();
+  else applyOverlayState('board');
+}
+function applyOverlayState(kind) {           // 'board' | 'detail' | 'panel'
+  const wantDetail = kind === 'detail' || kind === 'panel';
+  if (kind !== 'panel') $('panel').classList.remove('open');
+  const hasDetail = document.body.classList.contains('detail-open');
+  if (wantDetail && !hasDetail && state.selected) {
+    document.body.classList.add('detail-open');
+    render();
+  } else if (!wantDetail && hasDetail) {
+    document.body.classList.remove('detail-open');
+    if (document.body.classList.contains('show-table')) setTableView(false);  // calls render()
+    else render();
+  }
+}
+window.addEventListener('popstate', (e) => {
+  applyOverlayState((e.state && e.state.fmOverlay) || 'board');
+});
 
 function renderTable(ordered) {
   renderTable._list = ordered;
@@ -1968,9 +2003,10 @@ function recomputeBest(code) {
 function openPanel(html) {
   $('panelbody').innerHTML = html;
   $('panel').classList.add('open');
+  pushOverlay('panel');   // so Back closes the sheet before the focus layer
 }
 
-$('panelclose').addEventListener('click', () => $('panel').classList.remove('open'));
+$('panelclose').addEventListener('click', () => leaveOverlay());
 
 /* ------------------------------------------------------------------- search */
 
