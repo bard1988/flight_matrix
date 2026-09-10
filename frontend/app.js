@@ -1289,7 +1289,13 @@ function renderTimes(details) {
       const dep = d.day && d.day !== startDay ? `${d.day} ${d.time}` : d.time;
       const arr = a.day && a.day !== d.day ? `${a.day} ${a.time}` : a.time;
       const num = s.legs.length > 1 ? `<span class="legno">${i + 1}</span>` : '';
-      return `<div class="leg">${num}<span class="route">${l.from || '?'} → ${l.to || '?'}</span>` +
+      // The city the airport serves, with the code kept as a dimmed suffix so a
+      // connection through an unfamiliar code is still identifiable. Falls back to the
+      // bare code when the backend could not resolve a distinct city name.
+      const place = (code, city) => (city
+        ? `${city}<span class="iata">${code || ''}</span>`
+        : (code || '?'));
+      return `<div class="leg">${num}<span class="route">${place(l.from, l.from_city)} → ${place(l.to, l.to_city)}</span>` +
         `<span class="muted">${dep}${arr ? ' → ' + arr : ''}` +
         `${l.carrier ? ', ' + l.carrier : ''}${l.code ? ' ' + l.code : ''}</span></div>`;
     }).join('');

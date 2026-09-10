@@ -520,8 +520,29 @@ def cell_details(body: VerifyBody) -> dict[str, Any]:
         "depart_date": body.depart_date,
         "return_date": body.return_date,
         "currency": body.currency,
-        **details,
+        **_name_leg_airports(details),
     }
+
+
+def _name_leg_airports(details: dict[str, Any]) -> dict[str, Any]:
+    """Annotate each leg with the city its from/to airport serves (#10).
+
+    The board sources give legs as bare IATA codes; the panel should say "Vienna", not
+    "VIE" -- especially for a connection through a city the user does not recognise by
+    code. `from_city` / `to_city` are added only when the code actually resolves to a
+    distinct city name, so the frontend can fall back to the code when it does not.
+    """
+    for key in ("outbound", "inbound"):
+        sector = details.get(key)
+        if not isinstance(sector, dict):
+            continue
+        for leg in sector.get("legs") or []:
+            for end in ("from", "to"):
+                code = (leg.get(end) or "").upper()
+                city = airports.describe(code).get("city") if code else ""
+                if city and city.upper() != code:
+                    leg[f"{end}_city"] = city
+    return details
 
 
 @app.get("/api/airport/{code}")

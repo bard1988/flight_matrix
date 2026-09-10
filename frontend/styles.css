@@ -1994,7 +1994,8 @@ table.matrix td.cross-at {
 
 .segments .leg {
   display: flex;
-  gap: 6px;
+  flex-wrap: wrap;
+  gap: 2px 6px;
   align-items: baseline;
   padding-left: 14px;
   border-left: 2px solid var(--gridline);
@@ -2009,6 +2010,14 @@ table.matrix td.cross-at {
 }
 
 .segments .route { flex: 0 0 auto; font-weight: 600; }
+/* The IATA code trailing each city name: present for identifying a connection, but the
+   city is what the eye should land on. */
+.segments .route .iata {
+  margin-left: 3px;
+  font-weight: 400;
+  font-size: 10px;
+  color: var(--text-muted);
+}
 
 #panel .big { font-size: 28px; font-weight: 600; font-variant-numeric: tabular-nums; }
 #panel .close { position: absolute; top: 10px; right: 12px; border: none; background: none; font-size: 18px; }

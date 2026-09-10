@@ -44,6 +44,36 @@ class TestRegionTree:
         assert ("Asia", "Middle East") in placed
 
 
+class TestLegAirportCities:
+    """#10: the flight-details panel should name the city each leg's airport serves,
+    not just the IATA code."""
+
+    def test_name_leg_airports_annotates_known_codes(self):
+        from app import _name_leg_airports
+
+        details = {
+            "price": 210.0,
+            "outbound": {"legs": [
+                {"from": "TLV", "to": "VIE"},
+                {"from": "VIE", "to": "LHR"},
+            ]},
+            "inbound": {"legs": [{"from": "LHR", "to": "TLV"}]},
+        }
+        out = _name_leg_airports(details)
+        assert out["outbound"]["legs"][0]["from_city"] == "Tel Aviv Yafo"
+        assert out["outbound"]["legs"][0]["to_city"] == "Vienna"
+        assert out["outbound"]["legs"][1]["to_city"] == "London"
+        assert out["inbound"]["legs"][0]["to_city"] == "Tel Aviv Yafo"
+
+    def test_unknown_code_is_left_bare(self):
+        from app import _name_leg_airports
+
+        details = {"outbound": {"legs": [{"from": "TLV", "to": "ZZZ"}]}, "inbound": None}
+        out = _name_leg_airports(details)
+        assert out["outbound"]["legs"][0]["from_city"] == "Tel Aviv Yafo"
+        assert "to_city" not in out["outbound"]["legs"][0]
+
+
 class TestAirportLookup:
     def test_known_code(self, client):
         body = client.get("/api/airport/ATH").json()
