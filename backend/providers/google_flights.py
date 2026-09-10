@@ -127,18 +127,45 @@ def _airlines(result: Any) -> str | None:
     return ", ".join(names) or None
 
 
-def _duration(result: Any) -> str | None:
-    """Duration lives on the individual segments, not on the itinerary."""
-    value = getattr(result, "duration", None)
-    if value is None:
-        legs = getattr(result, "flights", None)
-        if isinstance(legs, list) and legs:
-            value = getattr(legs[0], "duration", None)
-    if value is None:
+def _stamp(date_parts: Any, time_parts: Any) -> "datetime | None":
+    """A Google [y,m,d] / [h,m] pair (trailing zeros omitted, null for a leading zero) as
+    a datetime, for measuring elapsed trip time."""
+    from datetime import datetime
+    try:
+        y, m, d = (list(date_parts or []) + [None, None, None])[:3]
+        t = list(time_parts or []) + [None, None]
+        return datetime(int(y), int(m), int(d), int(t[0] or 0), int(t[1] or 0))
+    except Exception:
         return None
+
+
+def _elapsed_minutes(dep_date: Any, dep_time: Any, arr_date: Any, arr_time: Any) -> int | None:
+    """Whole-trip time: first segment's departure to last segment's arrival, layovers
+    included. Google's per-segment [11] is one flight only, so a bare `segments[0][11]`
+    reports a leg (e.g. "4h" for a 20h TLV->HAN itinerary) and summing legs still drops
+    the layovers."""
+    dep, arr = _stamp(dep_date, dep_time), _stamp(arr_date, arr_time)
+    if dep is None or arr is None or arr <= dep:
+        return None
+    return int((arr - dep).total_seconds() // 60)
+
+
+def _duration(result: Any) -> str | None:
+    """Whole-trip elapsed time, first leg's departure to last leg's arrival."""
+    legs = getattr(result, "flights", None)
+    if isinstance(legs, list) and legs:
+        first_dep = getattr(legs[0], "departure", None)
+        last_arr = getattr(legs[-1], "arrival", None)
+        mins = _elapsed_minutes(
+            getattr(first_dep, "date", None), getattr(first_dep, "time", None),
+            getattr(last_arr, "date", None), getattr(last_arr, "time", None),
+        )
+        if mins is not None:
+            return f"{mins // 60}h {mins % 60:02d}m"
+    value = getattr(result, "duration", None)          # last resort: whatever it carries
     if isinstance(value, int):
         return f"{value // 60}h {value % 60:02d}m"
-    return str(value)
+    return str(value) if value else None
 
 
 def _explain(exc: Exception) -> str:
@@ -225,7 +252,11 @@ def _parse_all_itineraries(html: str) -> list[dict[str, Any]]:
                         "price": float(price),
                         "airlines": ", ".join(flight[1] or []) or None,
                         "stops": max(0, len(segments) - 1),
-                        "duration_minutes": segments[0][11] if segments else None,
+                        # Whole-trip elapsed time (layovers included), not segment[0]'s.
+                        "duration_minutes": _elapsed_minutes(
+                            segments[0][20], segments[0][8],
+                            segments[-1][21], segments[-1][10],
+                        ) if segments else None,
                         "departs": legs[0]["departs"] if legs else None,
                         "arrives": legs[-1]["arrives"] if legs else None,
                         "segments": legs,

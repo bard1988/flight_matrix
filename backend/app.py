@@ -20,7 +20,7 @@ import board
 import cache
 import config
 import filler
-from models import SearchRequest
+from models import SearchRequest, parse_ts, utcnow
 from providers.base import ProviderError
 from providers import verifier as _verifier_provider
 from providers.google_flights import google_flights_url
@@ -221,28 +221,24 @@ def search_snapshot(search_id: str) -> dict[str, Any]:
     return record
 
 
+def _minutes_since(ts: str | None) -> int | None:
+    stamp = parse_ts(ts)
+    return None if stamp is None else max(0, int((utcnow() - stamp).total_seconds() // 60))
+
+
 @app.post("/api/verify")
 def verify(body: VerifyBody) -> dict[str, Any]:
-    """One live Google Flights query for a single cell, with the real passenger mix."""
-    if not body.force:
-        cached = cache.get_verified(
-            body.origin, body.destination, body.depart_date, body.return_date,
-            body.adults, body.children, body.currency,
-        )
-        if cached and cached.get("total") is not None:
-            # Rebuild the link instead of serving the stored one. It is a pure function of
-            # route, dates, party and currency, so caching it buys nothing and goes stale
-            # for real: records written before the URL format changed kept handing out the
-            # old free-text search, which is the form that opens an empty Flights page.
-            return {
-                **cached,
-                "link": google_flights_url(
-                    body.origin, body.destination, body.depart_date, body.return_date,
-                    body.adults, body.children, body.currency, body.nonstop_only,
-                ),
-                "cached": True,
-            }
+    """One live Google Flights query for a single cell, with the real passenger mix.
 
+    A cell click never trusts the cache: fares move too fast for an hour-old "live total"
+    to still be a quote (FM_VERIFY_FRESH_MINUTES). The stored verification is used only as
+    a labelled fallback when the live check itself fails, so a transient Google/network
+    blip degrades to "the last check, N minutes ago" instead of a dead end.
+    """
+    link = google_flights_url(
+        body.origin, body.destination, body.depart_date, body.return_date,
+        body.adults, body.children, body.currency, body.nonstop_only,
+    )
     base = {
         "origin": body.origin.upper(),
         "destination": body.destination.upper(),
@@ -266,14 +262,25 @@ def verify(body: VerifyBody) -> dict[str, Any]:
     except ProviderError as exc:
         record = {
             **base, "total": None, "airline": None, "stops_out": None, "stops_back": None,
-            "duration": None,
-            "link": google_flights_url(
-                body.origin, body.destination, body.depart_date, body.return_date,
-                body.adults, body.children, body.currency, body.nonstop_only,
-            ),
-            "error": str(exc),
+            "duration": None, "link": link, "error": str(exc),
         }
-        cache.put_verified(record)
+        cache.put_verified(record)   # a no-op if a real price is already stored (cache.py)
+
+        # Fall back to the last good verification for this exact cell + party, clearly
+        # aged, rather than leaving the user with nothing to book from.
+        if not body.force:
+            stored = cache.get_verified(
+                body.origin, body.destination, body.depart_date, body.return_date,
+                body.adults, body.children, body.currency,
+            )
+            if stored and stored.get("total") is not None:
+                age_min = _minutes_since(stored.get("fetched_at"))
+                return {
+                    **stored, "link": link, "cached": True,
+                    "cache_age_minutes": age_min,
+                    "stale": age_min is None or age_min > config.VERIFY_FRESH_MINUTES,
+                    "live_error": str(exc),
+                }
         return {**record, "cached": False}
 
     record = {

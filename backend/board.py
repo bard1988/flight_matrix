@@ -220,7 +220,8 @@ def fill_one(
     matrix.city, matrix.country = info["city"], info["country"]
     matrix.country_name = airports.country_name(info["country"])
     payload = matrix.to_json(request, depart_dates, return_dates,
-                             config.CHILD_FACTOR, config.STALE_AFTER_HOURS)
+                             config.CHILD_FACTOR, config.STALE_AFTER_HOURS,
+                             config.VERIFY_STALE_HOURS)
     payload["type"] = "destination"
     return payload
 
@@ -356,6 +357,11 @@ def _apply_verified(
         cell.verified = True
         cell.verified_total = record["total"]
         cell.verified_at = record.get("fetched_at")
+        # Staleness for a verified cell tracks the verification, not the estimate behind
+        # it: the number on screen is `verified_total`, so `found_at` is when THAT was
+        # checked. A verification older than VERIFY_FRESH_MINUTES then shows the stale
+        # marker and the background cross-check re-runs it.
+        cell.found_at = record.get("fetched_at")
         # record["link"] is deliberately NOT copied onto cell.link. It used to be, so a
         # verified Travelpayouts cell offered "Book on Aviasales" pointing at Google
         # Flights: the booking deeplink was destroyed and the Google link served twice,
@@ -372,7 +378,8 @@ def cells_event(request: SearchRequest, destination: str, cells: list[Cell]) -> 
     return {
         "type": "cells",
         "destination": destination.upper(),
-        "cells": [c.to_json(request, config.CHILD_FACTOR, config.STALE_AFTER_HOURS)
+        "cells": [c.to_json(request, config.CHILD_FACTOR, config.STALE_AFTER_HOURS,
+                            config.VERIFY_STALE_HOURS)
                   for c in cells],
     }
 
@@ -714,7 +721,8 @@ def build(
                 cache.put_cells(request.origin, destination, request.currency,
                                 cached.cells.values(), party=request.party_key)
             payload = cached.to_json(request, depart_dates, return_dates,
-                                     config.CHILD_FACTOR, config.STALE_AFTER_HOURS)
+                                     config.CHILD_FACTOR, config.STALE_AFTER_HOURS,
+                                     config.VERIFY_STALE_HOURS)
             payload.update(checked)
             payload.update({"type": "destination", "index": index,
                             "total_candidates": len(candidates), "from_cache": True})
@@ -819,7 +827,8 @@ def build(
         if getattr(provider, "name", "") == "kiwi":
             real_totals += 1
         checked = _check_headline(request, matrix, provider)
-        payload = matrix.to_json(request, depart_dates, return_dates, config.CHILD_FACTOR, config.STALE_AFTER_HOURS)
+        payload = matrix.to_json(request, depart_dates, return_dates, config.CHILD_FACTOR,
+                                 config.STALE_AFTER_HOURS, config.VERIFY_STALE_HOURS)
         payload.update(checked)
         payload.update({"type": "destination", "index": index, "total_candidates": len(candidates)})
         yield emit(payload)

@@ -36,7 +36,8 @@ def pending_cells(
         done = {
             (d, r)
             for (dest, d, r) in cache.get_all_verified(
-                request.origin, request.adults, request.children, request.currency
+                request.origin, request.adults, request.children, request.currency,
+                fresh_minutes=config.VERIFY_FRESH_MINUTES,
             )
             if dest == destination.upper()
         }
@@ -66,7 +67,10 @@ def verify_cells(
     contact with five passengers.
     """
     workers = workers or config.FILL_WORKERS
-    already = cache.get_all_verified(request.origin, request.adults, request.children, request.currency)
+    already = cache.get_all_verified(
+        request.origin, request.adults, request.children, request.currency,
+        fresh_minutes=config.VERIFY_FRESH_MINUTES,
+    )
     # Routes Google has never once managed to price: stop spending the budget on them.
     dead = cache.unpriceable_destinations(
         request.origin, request.adults, request.children, request.currency

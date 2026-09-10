@@ -257,6 +257,21 @@ def get_matrix(
 def put_verified(record: dict[str, Any]) -> None:
     conn = connect()
     with _lock:
+        if record.get("total") is None:
+            # A failed re-check must never clobber a real price we already have (nor bump
+            # its timestamp -- the old number stays visibly aged so the background check
+            # keeps trying). Only the first-ever failure for a cell is recorded, so
+            # `unpriceable_destinations` can still learn a route Google cannot price.
+            existing = conn.execute(
+                "SELECT total FROM verified WHERE origin=? AND destination=? AND"
+                " depart_date=? AND return_date=? AND adults=? AND children=? AND currency=?",
+                (record["origin"].upper(), record["destination"].upper(),
+                 record["depart_date"], record["return_date"], record["adults"],
+                 record["children"], record["currency"]),
+            ).fetchone()
+            if existing is not None:
+                conn.commit()
+                return
         conn.execute(
             "INSERT OR REPLACE INTO verified (origin, destination, depart_date, return_date,"
             " adults, children, currency, total, airline, stops_out, stops_back, duration,"
@@ -293,16 +308,25 @@ def get_verified(
 
 
 def get_all_verified(
-    origin: str, adults: int, children: int, currency: str
+    origin: str, adults: int, children: int, currency: str,
+    fresh_minutes: int | None = None,
 ) -> dict[tuple[str, str, str], dict[str, Any]]:
-    """Every verified cell for this origin and passenger mix, keyed by (dest, depart, return)."""
+    """Every verified cell for this origin and passenger mix, keyed by (dest, depart, return).
+
+    With `fresh_minutes`, only rows checked within that window come back -- the caller
+    wants "what is still current", not "what has ever been checked" (the background
+    cross-check uses this to decide what to re-verify).
+    """
     conn = connect()
+    sql = ("SELECT * FROM verified WHERE origin=? AND adults=? AND children=? AND currency=?"
+           " AND total IS NOT NULL AND parser_version >= ?")
+    params: list[Any] = [origin.upper(), adults, children, currency, config.PARSER_VERSION]
+    if fresh_minutes is not None:
+        cutoff = (utcnow() - timedelta(minutes=fresh_minutes)).isoformat()
+        sql += " AND fetched_at >= ?"
+        params.append(cutoff)
     with _lock:
-        rows = conn.execute(
-            "SELECT * FROM verified WHERE origin=? AND adults=? AND children=? AND currency=?"
-            " AND total IS NOT NULL AND parser_version >= ?",
-            (origin.upper(), adults, children, currency, config.PARSER_VERSION),
-        ).fetchall()
+        rows = conn.execute(sql, params).fetchall()
     return {(r["destination"], r["depart_date"], r["return_date"]): dict(r) for r in rows}
 
 

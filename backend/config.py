@@ -92,6 +92,14 @@ CHILD_FACTOR = float(os.environ.get("FM_CHILD_FACTOR", "1.0"))
 # Cached rows older than this are still shown but flagged stale in the UI.
 STALE_AFTER_HOURS = int(os.environ.get("FM_STALE_AFTER_HOURS", "24"))
 
+# A live Google Flights verification is only "current" for this long. After it, the
+# background cross-check re-checks the cell, the panel labels the number as aged, and a
+# manual click always re-verifies regardless. Fares move fast enough that an hour-old
+# "live total" is no longer a quote. A manual cell click never trusts the cache at all;
+# this only governs the background refresh and the staleness label.
+VERIFY_FRESH_MINUTES = int(os.environ.get("FM_VERIFY_FRESH_MINUTES", "60"))
+VERIFY_STALE_HOURS = VERIFY_FRESH_MINUTES / 60.0   # same bound, in the unit to_json wants
+
 # Which Travelpayouts endpoint fills a destination grid. Measured: /v2/prices/latest
 # strictly dominated every alternative (see providers/travelpayouts.py). Override with
 # FM_GRID_STRATEGY=prices_for_dates to compare.

@@ -226,8 +226,13 @@ class Cell:
             return None
         return ((now or utcnow()) - found).total_seconds() / 3600.0
 
-    def to_json(self, request: SearchRequest, child_factor: float, stale_after_hours: int) -> dict[str, Any]:
+    def to_json(self, request: SearchRequest, child_factor: float, stale_after_hours: int,
+                verified_stale_hours: float | None = None) -> dict[str, Any]:
         age = self.age_hours()
+        # A verified cell is showing a live-checked total, which ages far faster than an
+        # estimate: it is stale a lot sooner (VERIFY_FRESH_MINUTES) than a cached estimate.
+        limit = (verified_stale_hours if (self.verified and verified_stale_hours is not None)
+                 else stale_after_hours)
         return {
             "depart": self.depart_date,
             "ret": self.return_date,
@@ -242,7 +247,7 @@ class Cell:
             "transfers": self.max_transfers,
             "nonstop": self.is_nonstop,
             "age_hours": round(age, 1) if age is not None else None,
-            "stale": age is not None and age > stale_after_hours,
+            "stale": age is not None and age > limit,
             "verified": self.verified,
             "checked": self.checked,
             "link": self.booking_link(request),
@@ -313,6 +318,7 @@ class DestinationMatrix:
         return_dates: list[date],
         child_factor: float,
         stale_after_hours: int,
+        verified_stale_hours: float | None = None,
     ) -> dict[str, Any]:
         populated, valid = self.coverage(
             depart_dates, return_dates,
@@ -325,10 +331,11 @@ class DestinationMatrix:
             "city": self.city or self.destination,
             "country": self.country,
             "country_name": self.country_name,
-            "best": best.to_json(request, child_factor, stale_after_hours) if best else None,
+            "best": (best.to_json(request, child_factor, stale_after_hours, verified_stale_hours)
+                     if best else None),
             "coverage": {"populated": populated, "valid": valid},
             "cells": [
-                cell.to_json(request, child_factor, stale_after_hours)
+                cell.to_json(request, child_factor, stale_after_hours, verified_stale_hours)
                 for cell in sorted(self.cells.values(), key=lambda c: (c.depart_date, c.return_date))
             ],
         }

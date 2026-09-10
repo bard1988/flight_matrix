@@ -59,6 +59,16 @@ const srcRank = (cell) => (cell.verified ? 2 : isAirlineFare(cell) ? 1 : 0);
 const fmtStops = (n) =>
   n == null ? '' : n === 0 ? 'nonstop' : `${n} stop${n > 1 ? 's' : ''}`;
 
+/* "just now" / "12 min ago" / "3 h ago" / "2 days ago" from a minute count. */
+const fmtAge = (min) => {
+  if (min == null) return '';
+  if (min < 2) return 'just now';
+  if (min < 90) return `${Math.round(min)} min ago`;
+  const h = min / 60;
+  if (h < 36) return `${Math.round(h)} h ago`;
+  return `${Math.round(h / 24)} days ago`;
+};
+
 const REDUCE_MOTION = window.matchMedia('(prefers-reduced-motion: reduce)');
 
 /* Cycling dots for the "still working" lines ("Finding dates", "Finding cheap
@@ -1349,19 +1359,43 @@ function renderTimes(details) {
   return head + way('Outbound', details.outbound) + way('Return', details.inbound);
 }
 
+/* POST JSON with a timeout and a couple of silent retries. A transient failure -- the
+   single worker on the box busy with a board fill, a phone dropping a packet -- should
+   heal itself rather than dead-end the user. Resolves with the parsed body, or throws
+   after the last attempt. */
+async function postJSON(url, payload, { tries = 3, timeoutMs = 15000 } = {}) {
+  let lastErr;
+  for (let i = 0; i < tries; i++) {
+    const ctl = new AbortController();
+    const timer = setTimeout(() => ctl.abort(), timeoutMs);
+    try {
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+        signal: ctl.signal,
+      });
+      clearTimeout(timer);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      return await res.json();
+    } catch (err) {
+      clearTimeout(timer);
+      lastErr = err;
+      if (i < tries - 1) await new Promise((r) => setTimeout(r, 600 * (i + 1)));
+    }
+  }
+  throw lastErr;
+}
+
 /** Times come from the board source, so they work at any horizon. */
 function fetchTimes(dest, cell) {
   const meta = state.meta;
-  return fetch('/api/details', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      origin: meta.origin, destination: dest.destination,
-      depart_date: cell.depart, return_date: cell.ret,
-      adults: meta.adults, children: meta.children,
-      currency: meta.currency, nonstop_only: meta.nonstop_only,
-    }),
-  }).then((r) => r.json()).catch((e) => ({ error: String(e) }));
+  return postJSON('/api/details', {
+    origin: meta.origin, destination: dest.destination,
+    depart_date: cell.depart, return_date: cell.ret,
+    adults: meta.adults, children: meta.children,
+    currency: meta.currency, nonstop_only: meta.nonstop_only,
+  }).catch((e) => ({ error: String(e) }));
 }
 
 async function verifyCell(dest, cell) {
@@ -1419,29 +1453,21 @@ async function verifyCell(dest, cell) {
 
   let data;
   try {
-    const res = await fetch('/api/verify', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        origin: meta.origin,
-        destination: dest.destination,
-        depart_date: cell.depart,
-        return_date: cell.ret,
-        adults: meta.adults,
-        children: meta.children,
-        currency: meta.currency,
-        nonstop_only: meta.nonstop_only,
-      }),
+    data = await postJSON('/api/verify', {
+      origin: meta.origin,
+      destination: dest.destination,
+      depart_date: cell.depart,
+      return_date: cell.ret,
+      adults: meta.adults,
+      children: meta.children,
+      currency: meta.currency,
+      nonstop_only: meta.nonstop_only,
     });
-    data = await res.json();
   } catch (err) {
-    console.debug('cross-check request failed:', err);
-    openPanel(
-      `<h3>${dest.city} (${dest.destination})</h3>` +
-        `<p class="err">Couldn't reach the live cross-check. Check your connection and try again.</p>`
-    );
-    donePending();
-    return;
+    // Retries are spent. Don't dead-end: fall through the "no live price" branch below,
+    // which keeps the board's own number and the booking link on screen.
+    console.debug('cross-check request failed after retries:', err);
+    data = { error: 'unreachable', total: null, link: null };
   }
 
   const cur = meta.currency;
@@ -1463,7 +1489,9 @@ async function verifyCell(dest, cell) {
     if (data.link) {
       links.push(`<a href="${data.link}" target="_blank" rel="noopener">Open on Google Flights</a>`);
     }
-    const explain = isAirlineFare(cell)
+    const explain = data.error === 'unreachable'
+      ? `The live check didn't respond just now${cell.estimate != null ? ` — the price above is the board${isFirmPrice(cell) ? ' total' : ' estimate'}` : ''}. The booking links below are live; tap the cell again in a moment to re-check.`
+      : isAirlineFare(cell)
       ? `${AIRLINE_SOURCES[cell.source]} fares don't always show on Google Flights. The price above is ${AIRLINE_SOURCES[cell.source]}'s own fare for these exact dates (lowest fare, one carry-on, per traveller × your party); book it on the link below.`
       : cell.estimate != null
         ? `Couldn't verify this fare live. Not every route is in Google Flights. The price above is the board's ${isFirmPrice(cell) ? 'total' : 'estimate'}; the booking links below are live.`
@@ -1481,20 +1509,27 @@ async function verifyCell(dest, cell) {
     return;
   }
 
-  const delta = cell.estimate ? ((data.total - cell.estimate) / cell.estimate) * 100 : null;
+  // `data.cached` means the live check failed and we fell back to the last stored
+  // verification. Don't show the "Estimate was … (+0%)" line then: for a fallback the
+  // estimate is often derived from this very number, so the delta is a circular 0.
+  const delta = (!data.cached && cell.estimate) ? ((data.total - cell.estimate) / cell.estimate) * 100 : null;
+  const age = data.cache_age_minutes != null ? fmtAge(data.cache_age_minutes) : null;
+  const headNote = data.cached
+    ? `last verified ${age || 'earlier'}${data.stale ? ' — may be out of date' : ''}`
+    : `live total for ${meta.adults} adults${meta.children ? ' + ' + meta.children + ' children' : ''}`;
   openPanel(
     `<h3>${dest.city} (${dest.destination})</h3>` +
       `<div class="muted">${weekday(cell.depart)} ${shortDate(cell.depart)} &rarr; ${weekday(cell.ret)} ${shortDate(cell.ret)}, ${cell.nights || ''} nights</div>` +
       `<div class="big">${fmtMoney(data.total, cur)}</div>` +
-      `<div class="muted">live total for ${meta.adults} adults${meta.children ? ' + ' + meta.children + ' children' : ''}</div>` +
+      `<div class="muted">${headNote}</div>` +
+      (data.cached ? `<p class="muted">The live re-check didn't respond; showing the last one. Tap the cell again to retry.</p>` : '') +
       '<dl>' +
-      `<dt>Estimate was</dt><dd>${estimate}${delta != null ? ` (${delta >= 0 ? '+' : ''}${delta.toFixed(0)}%)` : ''}</dd>` +
+      (delta != null ? `<dt>Estimate was</dt><dd>${estimate} (${delta >= 0 ? '+' : ''}${delta.toFixed(0)}%)</dd>` : '') +
       (data.departs ? `<dt>Outbound departs</dt><dd>${data.departs}</dd>` : '') +
       (data.arrives ? `<dt>Outbound arrives</dt><dd>${data.arrives}</dd>` : '') +
       (data.airline ? `<dt>Airline</dt><dd>${data.airline}</dd>` : '') +
       (data.duration ? `<dt>Duration</dt><dd>${data.duration}</dd>` : '') +
       (data.stops_out != null ? `<dt>Stops</dt><dd>${fmtStops(data.stops_out)}</dd>` : '') +
-      (data.cached ? '<dt>Source</dt><dd>previously verified</dd>' : '') +
       '</dl>' +
       // Filled in by the parallel times request from the board source, which covers both
       // legs and works at horizons the Google cross-check cannot reach.
@@ -1514,6 +1549,7 @@ async function verifyCell(dest, cell) {
     }
     target.total = data.total;
     target.verified = true;
+    target.stale = !!data.stale;   // a fallback to an aged verification stays marked aged
     target.airline = data.airline;
     if (data.stops_out != null) target.transfers = data.stops_out;
     // `best` arrives as its own object, not a reference into `cells`, so recompute it

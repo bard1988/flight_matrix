@@ -342,6 +342,30 @@ correctly no-ops on the VM; a proxy integration should not resurrect it.
 
 ## Done features
 
+### Verified-price freshness + verify self-healing (2026-09-10)
+
+Three linked fixes after a cell showed ₪22,848 as a "live total" when Google Flights
+actually had ₪12,977 — a verification frozen since who-knows-when.
+
+- **Verifications go stale.** `FM_VERIFY_FRESH_MINUTES` (default 60). The background
+  cross-check re-checks any cell whose verification is older than that (was: *skip a
+  verified cell forever*); the board grid marks it stale (`Cell.found_at` now set from the
+  verification time, `to_json` uses the shorter bound for verified cells); a manual cell
+  click **never** trusts the cache — it always re-verifies live.
+- **A failed re-check never clobbers a good price.** `cache.put_verified` drops a
+  null-total write when a real price is already stored, so the aged number survives as the
+  fallback. `/api/verify` serves that stored verification — clearly labelled "last verified
+  N ago / may be out of date" — only when the live check fails.
+- **The verify request self-heals.** `postJSON` wraps the fetch with a 15s timeout and two
+  silent retries; on final failure the panel keeps the board price + booking link and says
+  "the live check didn't respond, tap again" instead of the old "check your connection"
+  dead end. `/api/details` uses the same helper.
+- **Trip duration** was the first segment only ("4h" for a 20h TLV→HAN); now first
+  departure → last arrival, layovers included (`_elapsed_minutes`).
+
+Files: `config.py`, `cache.py`, `filler.py`, `board.py`, `models.py`, `app.py`,
+`providers/google_flights.py`, `frontend/app.js`.
+
 ### #14 — Fast graceful Kiwi -> Travelpayouts failover (2026-09-07)
 
 The board already fell back to Travelpayouts if Kiwi's *discovery* call failed, but a

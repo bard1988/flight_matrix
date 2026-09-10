@@ -135,6 +135,38 @@ def test_verified_rows_are_keyed_by_the_passenger_mix(isolated_cache):
     assert ("ATH", "2026-10-01", "2026-10-08") in everything
 
 
+def _vrecord(**kw):
+    base = dict(origin="TLV", destination="ATH", depart_date="2026-10-01",
+                return_date="2026-10-08", adults=2, children=0, currency="ils",
+                total=1500.0, airline="A3", stops_out=0, stops_back=0,
+                duration="3h", link="https://example.com", error=None)
+    base.update(kw)
+    return base
+
+
+def test_a_failed_recheck_never_clobbers_a_stored_price(isolated_cache):
+    """#10-ish: /api/verify writes a null-total record when Google returns nothing. That
+    must not overwrite a real price we already have -- the aged number is the fallback."""
+    cache = isolated_cache
+    cache.put_verified(_vrecord(total=1500.0))
+    cache.put_verified(_vrecord(total=None, error="Google Flights found no flights."))
+
+    row = cache.get_verified("TLV", "ATH", "2026-10-01", "2026-10-08", 2, 0, "ils")
+    assert row["total"] == 1500.0
+
+
+def test_fresh_minutes_filters_out_aged_verifications(isolated_cache, monkeypatch):
+    cache = isolated_cache
+    cache.put_verified(_vrecord(total=1500.0))
+    # Backdate the row well past any freshness window.
+    conn = cache.connect()
+    conn.execute("UPDATE verified SET fetched_at = ?", ("2020-01-01T00:00:00",))
+    conn.commit()
+
+    assert cache.get_all_verified("TLV", 2, 0, "ils") != {}                       # no filter: still there
+    assert cache.get_all_verified("TLV", 2, 0, "ils", fresh_minutes=60) == {}      # filtered: too old
+
+
 def test_search_history_is_pruned(isolated_cache, monkeypatch):
     """Saved boards run to megabytes and nothing used to delete one; 324 rows had grown to
     69 MB of a 77 MB database."""
