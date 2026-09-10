@@ -6,8 +6,12 @@ rather than strict UN geography:
 
   - "Western Asia" is presented as "Middle East"
   - the Caucasus (Georgia, Armenia, Azerbaijan) is its own subregion, not Middle East
-  - Egypt and Iran are Middle East (convention: "West Asia except the Caucasus, plus
-    Egypt and Turkey"); Turkey is already Western Asia so it lands there naturally
+  - Iran is Middle East (convention: "West Asia except the Caucasus, plus Egypt and
+    Turkey"); Turkey is already Western Asia so it lands there naturally
+  - Egypt keeps its primary UN M49 home in Africa / Northern Africa but is ALSO listed
+    under Middle East (see ALSO_IN) -- Sharm / Hurghada / Cairo are the best-connected
+    "Middle East" break from TLV, and the Africa filter needs the one well-connected part
+    of Africa in it. `region_of()` returns the primary; `taxonomy()` lists both.
   - Cyprus is Southern Europe (EU member)
 
 Re-run when the upstream list changes:  py -3 data/build_countries.py
@@ -35,10 +39,21 @@ OVERRIDES = {
     "GE": ("Asia", "Caucasus"),
     "AM": ("Asia", "Caucasus"),
     "AZ": ("Asia", "Caucasus"),
-    "EG": ("Asia", "Middle East"),
     "IR": ("Asia", "Middle East"),
     "RU": ("Europe", "Eastern Europe"),
     "MX": ("Americas", "Central America"),   # a Latin-America trip, not a US/Canada one
+}
+
+# code -> extra (continent, subregion) placements, ON TOP of the primary above. The
+# country's primary home (what `region_of()` returns, what the typeahead shows) is
+# unchanged; `taxonomy()` also files it under each placement here, so either branch of
+# the region tree selects it.
+ALSO_IN = {
+    # Egypt's primary is Africa / Northern Africa (UN M49). Also list it under Middle
+    # East: from TLV, Sharm / Hurghada / Cairo are the archetypal Middle East break, and
+    # without this the Africa filter would exclude the best-connected part of Africa
+    # while the Middle East filter would drop the obvious pick. (idea.md #15.1)
+    "EG": [("Asia", "Middle East")],
 }
 
 # A couple of names read better short.
@@ -77,7 +92,10 @@ def main() -> None:
         subregion = SUBREGION_RENAME.get(subregion, subregion)
         if code in OVERRIDES:
             continent, subregion = OVERRIDES[code]
-        out[code] = {"name": name, "continent": continent, "subregion": subregion}
+        entry = {"name": name, "continent": continent, "subregion": subregion}
+        if code in ALSO_IN:
+            entry["also"] = [[c, s] for c, s in ALSO_IN[code]]
+        out[code] = entry
 
     # Kosovo isn't ISO-official; mledoze uses "XK" which some feeds also use.
     out.setdefault("XK", {"name": "Kosovo", "continent": "Europe", "subregion": "Southern Europe"})

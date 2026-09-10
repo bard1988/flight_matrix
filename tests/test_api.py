@@ -29,6 +29,21 @@ class TestHealth:
         assert client.get("/api/regions").status_code == 200
 
 
+class TestRegionTree:
+    def test_egypt_is_listed_under_both_africa_and_middle_east(self, client):
+        """#15.1: Egypt's primary home is Africa/Northern Africa, but it is also filed
+        under Middle East so neither filter drops the obvious TLV pick."""
+        tree = client.get("/api/regions").json()["tree"]
+        placed = {
+            (cont["continent"], sub["name"])
+            for cont in tree
+            for sub in cont["subregions"]
+            if any(c["code"] == "EG" for c in sub["countries"])
+        }
+        assert ("Africa", "Northern Africa") in placed
+        assert ("Asia", "Middle East") in placed
+
+
 class TestAirportLookup:
     def test_known_code(self, client):
         body = client.get("/api/airport/ATH").json()

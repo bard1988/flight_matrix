@@ -60,13 +60,19 @@ def region_of(code: str) -> tuple[str, str]:
 
 
 def taxonomy() -> list[dict[str, Any]]:
-    """The region tree: continents -> subregions -> countries, for /api/regions."""
+    """The region tree: continents -> subregions -> countries, for /api/regions.
+
+    A country with an `also` list (e.g. Egypt: primary Africa/Northern Africa, also
+    Asia/Middle East) is filed under every placement, so checking either branch of the
+    tree adds its code to the search filter.
+    """
     tree: dict[str, dict[str, list[dict[str, str]]]] = {}
     for code, e in _country_table().items():
-        cont, sub = e["continent"], e["subregion"]
-        if cont in ("", "Antarctic"):
-            continue
-        tree.setdefault(cont, {}).setdefault(sub, []).append({"code": code, "name": e["name"]})
+        placements = [(e["continent"], e["subregion"]), *(tuple(p) for p in e.get("also", []))]
+        for cont, sub in placements:
+            if cont in ("", "Antarctic"):
+                continue
+            tree.setdefault(cont, {}).setdefault(sub, []).append({"code": code, "name": e["name"]})
     return [
         {
             "continent": cont,

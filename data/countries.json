@@ -321,8 +321,14 @@
 },
 "EG": {
 "name": "Egypt",
-"continent": "Asia",
-"subregion": "Middle East"
+"continent": "Africa",
+"subregion": "Northern Africa",
+"also": [
+[
+"Asia",
+"Middle East"
+]
+]
 },
 "EH": {
 "name": "Western Sahara",
