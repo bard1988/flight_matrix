@@ -740,8 +740,19 @@ def build(
                                 "message": str(exc2)})
                     continue
 
-        # The aggregator has nothing for this route (or nothing at the asked trip length).
-        # If Wizz flies it, fill the grid from Wizz's own booking calendar instead.
+        if matrix is not None:
+            # Cache the full aggregator grid, then narrow it to the asked trip lengths.
+            # Order matters: the Wizz fallback below has to see the POST-prune grid, or a
+            # route the aggregator carries only at other lengths silently skips it.
+            if not request.has_search_filters:
+                cache.put_cells(request.origin, destination, request.currency,
+                                matrix.cells.values(), party=request.party_key)
+            _apply_verified(request, matrix, depart_dates, return_dates, verified)
+            _prune_to_nights(request, matrix)
+
+        # Nothing from the aggregator at the asked trip length. If Wizz flies this route,
+        # fill the grid from Wizz's own booking calendar instead (its cells are already
+        # cut to the nights range).
         if (matrix is None or not matrix.cells) and wizz is not None \
                 and wizz_fills < config.WIZZ_FILL_CAP and wizz.serves(request.origin, destination):
             try:
@@ -752,6 +763,7 @@ def build(
             wizz_fills += 1
             if wizz_matrix is not None and wizz_matrix.cells:
                 matrix = wizz_matrix
+                _apply_verified(request, matrix, depart_dates, return_dates, verified)
                 yield emit({"type": "wizz_fill", "destination": destination,
                             "cells": len(wizz_matrix.cells)})
 
@@ -759,12 +771,6 @@ def build(
             yield emit({"type": "destination_error", "destination": destination,
                         "message": "no data for this destination"})
             continue
-
-        if not request.has_search_filters:
-            cache.put_cells(request.origin, destination, request.currency, matrix.cells.values(),
-                        party=request.party_key)
-        _apply_verified(request, matrix, depart_dates, return_dates, verified)
-        _prune_to_nights(request, matrix)
 
         info = airports.describe(destination)
         matrix.city, matrix.country = info["city"], info["country"]
