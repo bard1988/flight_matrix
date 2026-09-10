@@ -40,14 +40,15 @@ _META_CACHE = config.DATA_DIR / "wizz_meta.json"
 _ROUTES_CACHE = config.DATA_DIR / "wizz_routes.json"
 _META_TTL = 12 * 3600
 _ROUTES_TTL = 7 * 24 * 3600
-_CALL_SPACING = 4.0
-# Backoff before retrying a call Wizz rejected with InvalidProtocol (its rate-limit
-# signal). A cold board -- version scrape + map + timetable in a burst -- is the usual
-# trigger, and one longer pause clears it.
-_RETRY_BACKOFF = (7.0, 14.0)
-# Query the timetable a few days past the axis bounds so a flight sitting on the edge of
-# the window is still returned; cells are only built for pairs that fall inside it.
-_QUERY_PAD = timedelta(days=3)
+_CALL_SPACING = 1.5
+# Wizz answers the SECOND call on a reused connection with 400 {"handlerError":
+# "InvalidProtocol"} and stays locked for minutes -- but a fresh client every call sails
+# through (tested: 30 back-to-back). So each request gets its own short-lived client; the
+# retry is only for a genuine network blip.
+_RETRY_BACKOFF = (4.0,)
+# The timetable rejects a leg span past ~6 weeks with InvalidTimeDateRange. Axis spans are
+# normally far under this; clamp so a very wide search still gets the near end from Wizz.
+_MAX_QUERY_DAYS = 30
 
 _UA = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
@@ -68,8 +69,7 @@ class WizzProvider:
     strategy = "wizz-timetable"
 
     def __init__(self, timeout: float = 25.0) -> None:
-        self._client = httpx.Client(timeout=timeout, headers=_UA, verify=config.CA_BUNDLE,
-                                    follow_redirects=True)
+        self._timeout = timeout
         self._lock = threading.Lock()
         self._next_call = 0.0
         self._version: str | None = None
@@ -78,6 +78,11 @@ class WizzProvider:
         self.cities: dict[str, dict[str, str]] = {}
 
     # ------------------------------------------------------------------ transport
+
+    def _new_client(self) -> httpx.Client:
+        # A fresh connection per call: Wizz locks a reused connection out after one request.
+        return httpx.Client(timeout=self._timeout, headers=_UA, verify=config.CA_BUNDLE,
+                            follow_redirects=True)
 
     def _pace(self) -> None:
         with self._lock:
@@ -100,7 +105,8 @@ class WizzProvider:
             pass
         version = _LAST_KNOWN_VERSION
         try:
-            html = self._client.get(_HOME).text
+            with self._new_client() as c:
+                html = c.get(_HOME).text
             m = re.search(r"be\.wizzair\.com/(\d+\.\d+\.\d+)/Api", html)
             if m:
                 version = m.group(1)
@@ -116,7 +122,8 @@ class WizzProvider:
     def _post(self, path: str, body: dict[str, Any], attempt: int = 0) -> dict[str, Any]:
         self._pace()
         try:
-            r = self._client.post(f"{self._api()}/{path}", content=json.dumps(body))
+            with self._new_client() as c:
+                r = c.post(f"{self._api()}/{path}", content=json.dumps(body))
         except httpx.HTTPError as exc:
             raise ProviderError(f"Wizz {path}: {exc}") from exc
         if r.status_code == 400 and "InvalidProtocol" in r.text:
@@ -164,8 +171,9 @@ class WizzProvider:
     def _fetch_map(self) -> dict[str, set[str]]:
         self._pace()
         try:
-            data = self._client.get(f"{self._api()}/asset/map",
-                                    params={"languageCode": "en-gb"}).json()
+            with self._new_client() as c:
+                data = c.get(f"{self._api()}/asset/map",
+                             params={"languageCode": "en-gb"}).json()
         except (httpx.HTTPError, ValueError) as exc:
             raise ProviderError(f"Wizz asset/map: {exc}") from exc
         routes: dict[str, set[str]] = {}
@@ -255,15 +263,17 @@ class WizzProvider:
         if not self.serves(origin, dest):
             return matrix
 
-        # Query a few days past the axis so an edge flight is still returned; keep only the
-        # pairs that fall inside the period. Iterate Wizz's own priced days (a handful for
-        # a 2-3x/week route) rather than the dense axis -- same cells, and robust to an
-        # off-by-one in the axis bounds.
+        # Iterate Wizz's own priced days (a handful for a 2-3x/week route) rather than the
+        # dense axis. Clamp each leg's query span so a very wide search does not trip the
+        # ~3-week timetable limit; pairs are still filtered to the real period below.
         first_dep, last_dep = depart_dates[0], depart_dates[-1]
         first_ret, last_ret = return_dates[0], return_dates[-1]
-        out, back = self._timetable(origin, dest,
-                                    first_dep - _QUERY_PAD, last_dep + _QUERY_PAD,
-                                    first_ret - _QUERY_PAD, last_ret + _QUERY_PAD)
+        cap = timedelta(days=_MAX_QUERY_DAYS)
+        out, back = self._timetable(
+            origin, dest,
+            first_dep, min(last_dep, first_dep + cap),
+            first_ret, min(last_ret, first_ret + cap),
+        )
         if not out or not back:
             return matrix
 
@@ -310,4 +320,5 @@ class WizzProvider:
         )
 
     def close(self) -> None:
-        self._client.close()
+        # Clients are per-call and context-managed; nothing to close.
+        pass
