@@ -91,9 +91,13 @@
           </div>
         </div>
       </div>
-      <div class="field field-where">
-        <label for="whenselect">When</label>
-        <select id="whenselect"></select>
+      <div class="field field-date field-from-date">
+        <label for="depart" id="departlabel">Travel from</label>
+        <input id="depart" type="date" />
+      </div>
+      <div class="field field-date field-until-date">
+        <label for="ret" id="retlabel">Travel until</label>
+        <input id="ret" type="date" />
       </div>
       <div class="field field-trip">
         <label for="tripselect">Trip length</label>
@@ -137,16 +141,8 @@
     </div>
 
     <div class="adv-group">
-      <span class="adv-group-label">Exact dates &amp; nights</span>
+      <span class="adv-group-label">Exact nights</span>
       <div class="adv-fields">
-        <div class="field field-date">
-          <label for="depart" id="departlabel">Travel from</label>
-          <input id="depart" type="date" />
-        </div>
-        <div class="field field-date">
-          <label for="ret" id="retlabel">Travel until</label>
-          <input id="ret" type="date" />
-        </div>
         <div class="field field-nights">
           <label for="nmin">Nights (min / max)</label>
           <span class="nights">

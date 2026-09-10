@@ -28,6 +28,16 @@ Things worth doing, not yet scheduled.
 
 ### Notes on specific items
 
+### Search bar: back to explicit dates (2026-09-10)
+
+The "When" preset dropdown ("Anytime (next 3 months)" / a month name) that fronted the
+two date fields is gone. **"Travel from" and "Travel until" are now the actual date
+inputs, in the primary bar** — the preset only ever wrote to those fields, and picking a
+real window is clearer than translating a month label. "Trip length" (nights preset)
+stays in the bar; Options keeps the raw Nights min/max. Files: `frontend/index.html`,
+`app.js` (dropped `buildWhenOptions`/`applyWhen`, `setDefaultDates` fills only what a
+shared URL left blank), `styles.css`.
+
 ### #4 — One search model (spec, decided)
 
 **Rationale.** The two things people can always state about a trip are *roughly how

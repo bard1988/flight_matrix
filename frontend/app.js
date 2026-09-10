@@ -2926,12 +2926,15 @@ function renderEditSummary() {
         : `${state.regions.size} places`)
     : 'Anywhere';
   // Terse on purpose — this has to fit one line on a narrow phone. Origin, where to, and
-  // roughly when; the rest is a tap away.
-  const w = $('whenselect');
-  const label = w.options[w.selectedIndex]?.text || '';
-  const when = w.value === 'flex'
-    ? 'anytime'
-    : label.replace(/^(\w{3})\w*/, '$1');   // "October 2026" -> "Oct 2026"
+  // the travel window; the rest is a tap away.
+  const fmt = (iso) => {
+    if (!iso) return '';
+    const d = new Date(iso + 'T00:00:00');
+    return d.toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
+  };
+  const from = fmt($('depart').value);
+  const to = fmt($('ret').value);
+  const when = from && to ? `${from} – ${to}` : (from || to || 'anytime');
   $('editsearchtext').textContent =
     `${($('origin').value || '').toUpperCase()} → ${dests} · ${when}`;
   $('editsearch').querySelector('.edit-search-cue').textContent =
@@ -2983,20 +2986,15 @@ setInterval(() => {
   for (let i = 0; i < els.length; i += 1) els[i].textContent = s;
 }, 300);
 
-/* "When" is a plain month picker plus an "anytime" span. It just writes the two exact
-   date fields (which still drive everything); Options exposes those directly for anyone
-   who wants a precise window. */
-function buildWhenOptions() {
-  const sel = $('whenselect');
-  const now = new Date();
-  const opts = [new Option('Anytime (next 3 months)', 'flex')];
-  // Airlines load schedules ~11-12 months out; past that the board comes back empty.
-  for (let i = 0; i < 13; i++) {
-    const d = new Date(now.getFullYear(), now.getMonth() + i, 1);
-    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-    opts.push(new Option(d.toLocaleDateString(undefined, { month: 'long', year: 'numeric' }), key));
-  }
-  sel.replaceChildren(...opts);
+/* The window is the two date fields, in the bar. Default to a ~3-month span starting
+   three weeks out (close enough to be well-covered, far enough to leave planning room);
+   a shared/bookmarked URL overrides this. `min` keeps the picker off past dates. */
+function setDefaultDates() {
+  const today = isoLocal(new Date());
+  $('depart').min = today;
+  $('ret').min = today;
+  if (!$('depart').value) $('depart').value = isoToday(21);
+  if (!$('ret').value) $('ret').value = isoToday(21 + 90);
 }
 
 /** Reflect a preset's day-of-week choice in the picker and the constraint state. */
@@ -3006,22 +3004,6 @@ function setDow(key, days) {
   for (const d of days) set.add(d);
   const host = $(key === 'dep' ? 'dowdep' : 'dowret');
   [...host.children].forEach((btn, i) => btn.classList.toggle('on', set.has(i)));
-}
-
-function applyWhen() {
-  const v = $('whenselect').value;
-  if (v === 'flex') {
-    $('depart').value = isoToday(21);
-    $('ret').value = isoToday(21 + 90);
-  } else {
-    const [y, m] = v.split('-').map(Number);
-    const first = new Date(y, m - 1, 1);
-    const last = new Date(y, m, 0);
-    const today = new Date(); today.setHours(0, 0, 0, 0);
-    $('depart').value = isoLocal(first < today ? today : first);
-    $('ret').value = isoLocal(last);
-  }
-  syncReturnDate();
 }
 
 function applyTrip() {
@@ -3035,20 +3017,22 @@ function applyTrip() {
   setDow('ret', weekendish ? [0, 1] : []);       // Sun, Mon
 }
 
-buildWhenOptions();
-$('whenselect').addEventListener('change', () => { applyWhen(); markSearchStale(); });
+setDefaultDates();
+for (const id of ['depart', 'ret']) {
+  $(id).addEventListener('change', () => { syncReturnDate(); markSearchStale(); renderEditSummary(); });
+}
 $('tripselect').addEventListener('change', () => {
   applyTrip();
   markSearchStale();
   if (state.meta) render();   // the day-of-week part is a view filter
 });
 
-applyWhen();
 applyTrip();
 
 // A shared/bookmarked board carries its search in the query string; it wins over the
 // defaults and prefills the form.
 const urlBoard = boardFromUrl(new URLSearchParams(location.search));
+setDefaultDates();        // fill only what the URL left blank
 syncDateMode();
 syncReturnDate();
 if (state.regions.size || state.places.size) renderDestTags();
