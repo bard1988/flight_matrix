@@ -352,6 +352,19 @@ correctly no-ops on the VM; a proxy integration should not resurrect it.
 
 ## Done features
 
+### Nights min/max, live on the grid (2026-09-10)
+
+`− / +` steppers for the trip-length band, in the Single card head and the Multi chips
+row. Nights is a view filter (`state.constraints`), so **narrowing** recolours / re-ranks
+/ re-orders the board instantly with no refetch. **Widening** past the priced band
+(`state.meta.nights_span`) auto-fetches the new lengths for whatever grid is on screen
+(`/api/extend`, same date window, wider nights) — debounced. Synced with the Options
+`#nmin`/`#nmax` fields and the "Trip length" preset (which shows "Custom" once you
+diverge); `nmin`/`nmax` dropped from `SEARCH_INPUTS` so a nights change no longer marks
+Search stale. `MAX_PERIOD_DAYS` 60 → 120 so the default ~3-month window can still be
+widened. Fixed: the Multi grid no longer jumps scroll on add/remove; `± 7d` no longer
+greyed on a wide window. `tests/test_nights_stepper.py`.
+
 ### Multi view — a combined fare grid (2026-09-10)
 
 A **Single / Multi** toggle in the results toolbar. Single is unchanged (ranked list +

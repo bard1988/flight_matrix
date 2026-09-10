@@ -744,7 +744,14 @@ function renderMulti(ordered) {
     }
     html += '</tr>';
   }
+  // Rebuilding innerHTML drops the scroll offset, and the table width often changes with
+  // it (add/remove a destination, widen), so the browser lands somewhere arbitrary. Pin
+  // the wrapper's scroll across the swap.
+  const wrap = $('multiwrap');
+  const sx = wrap.scrollLeft, sy = wrap.scrollTop;
   grid.innerHTML = html + '</tbody>';
+  wrap.scrollLeft = sx;
+  wrap.scrollTop = sy;
   wireMultiGrid();
 }
 
@@ -807,7 +814,9 @@ function renderMultiChips(ordered, dests, shownCount) {
         `</span></span>`
       : '') +
     `<span class="mchip-spacer"></span>` +
-    `<button class="mchip-widen" id="mchipwiden"${canWidenMulti && !multiWidening ? '' : ' disabled'}>${multiWidening ? '…' : '± ' + WIDEN_STEP_DAYS + 'd'}</button>` +
+    (canWidenMulti || multiWidening
+      ? `<button class="mchip-widen" id="mchipwiden"${multiWidening ? ' disabled' : ''}>${multiWidening ? '…' : '± ' + WIDEN_STEP_DAYS + 'd'}</button>`
+      : '') +
     `<span class="mdensity" role="group" aria-label="Cell density">` +
     `<button data-d="stack"${multiDensity() === 'stack' ? ' aria-pressed="true"' : ''}>Stacked</button>` +
     `<button data-d="strip"${multiDensity() === 'strip' ? ' aria-pressed="true"' : ''}>Strip</button></span>`;
@@ -835,12 +844,13 @@ function renderMultiChips(ordered, dests, shownCount) {
       boardToUrl(); render();
     });
   }
-  $('mchipwiden').onclick = multiWiden;
+  if ($('mchipwiden')) $('mchipwiden').onclick = multiWiden;
   host.querySelectorAll('.mdensity button').forEach((b) => b.onclick = () => {
     state.multi.density = b.dataset.d;
     applyMultiDensity();
     render();
   });
+  host.querySelector('.mchip-spacer').after(nightsStepper('multi'));
 }
 
 function jumpToMultiCheapest(code) {
@@ -1306,6 +1316,8 @@ function buildCardHead(dest, domain, card) {
     wider.onclick = () => widenDestination(dest);
     head.appendChild(wider);
   }
+
+  head.appendChild(nightsStepper('card'));
 
   return head;
 }
@@ -2000,7 +2012,10 @@ function locateBest(card, dest, { quiet = false, flash = true } = {}) {
  * rest of the board keeps the axes it was searched on.
  */
 const WIDEN_STEP_DAYS = 7;
-const MAX_PERIOD_DAYS = 60;      // a 60-day period is already ~55x55 cells for one grid
+// The grid scrolls and only the nights-band diagonal is populated, so a wide window is
+// cheap to show; this bound is really about provider calls on a re-fetch. Raised from 60
+// so the default ~3-month window can still be widened a few times.
+const MAX_PERIOD_DAYS = 120;
 const widening = new Set();      // IATA codes currently being re-priced
 
 function periodOf(dest) {
@@ -2392,6 +2407,7 @@ function startSearch() {
   renderEditSummary();
   state.destinations.clear();
   state.meta = null;
+  state.nightsBand = null;   // the new board is priced for its own nights range
   $('dlist').replaceChildren();
   $('ddetail').replaceChildren();
   document.body.classList.remove('detail-open', 'has-board', 'show-table');
@@ -2696,12 +2712,13 @@ function buildHourPicker(id, isEnd) {
    applies instantly. Changing a date used to silently leave the old board on screen with
    no hint that it was stale. */
 const SEARCH_INPUTS = [
-  'origin', 'depart', 'ret', 'nmin', 'nmax', 'adults', 'children', 'dests', 'maxprice',
+  'origin', 'depart', 'ret', 'adults', 'children', 'dests', 'maxprice',
   'nonstop', 'dephfrom', 'dephto', 'rethfrom', 'rethto',
 ];
-// 'currency' is deliberately NOT a search input: once a board is loaded, changing it
-// just re-labels the numbers via FX conversion. A fresh search still fetches in
-// whatever the dropdown shows.
+// 'currency' is NOT a search input (a loaded board just re-labels via FX). 'nmin'/'nmax'
+// are NOT either any more: the on-grid steppers apply a nights change live -- narrowing
+// re-filters instantly, widening auto-fetches the new band. A fresh search still reads
+// the fields directly.
 
 function searchSignature() {
   const parts = SEARCH_INPUTS.map((id) => {
@@ -2724,7 +2741,7 @@ function markSearchStale() {
     : '';
 }
 
-for (const id of SEARCH_INPUTS.concat(['nmin', 'nmax'])) {
+for (const id of SEARCH_INPUTS) {
   const el = $(id);
   el.addEventListener('change', markSearchStale);
   el.addEventListener('input', markSearchStale);
@@ -3143,8 +3160,154 @@ function readNights() {
   state.constraints.max = parse('nmax');
   if (state.meta) render();
 }
-$('nmin').addEventListener('input', readNights);
-$('nmax').addEventListener('input', readNights);
+$('nmin').addEventListener('input', commitNights);
+$('nmax').addEventListener('input', commitNights);
+
+/* ---------------------------------------------------------- nights, live on the grid
+
+   Nights min/max is mostly a view filter: `state.constraints` re-colours, re-ranks and
+   re-orders the board with no refetch. The on-grid steppers (Single card head + Multi
+   chips) drive it directly; only widening PAST the trip lengths already priced needs
+   data, and that is fetched automatically for whatever grid is on screen. */
+
+let nightsExtending = false;
+let nightsExtendTimer = 0;
+
+/** Current fetched trip-length band, expanded as widening fetches fill it in. */
+function fetchedNights() {
+  const span = state.meta && state.meta.nights_span;
+  if (state.nightsBand) return state.nightsBand;
+  if (span && span.length) return { lo: Math.min(...span), hi: Math.max(...span) };
+  return null;
+}
+
+/** A compact `Nights  − 6 +   − 9 +` control, values read live from the hidden fields. */
+function nightsStepper(where) {
+  const wrap = document.createElement('span');
+  wrap.className = 'nights-stepper' + (where ? ' ns-' + where : '');
+  const cur = (id, d) => ($(id).value === '' ? d : Number($(id).value));
+  const group = (which, val) => {
+    const g = document.createElement('span');
+    g.className = 'ns-group';
+    const dec = document.createElement('button');
+    dec.type = 'button'; dec.textContent = '−';
+    dec.setAttribute('aria-label', `One fewer ${which} night`);
+    dec.onclick = () => stepNights(which, -1);
+    const n = document.createElement('span');
+    n.className = 'ns-val'; n.textContent = String(val);
+    const inc = document.createElement('button');
+    inc.type = 'button'; inc.textContent = '+';
+    inc.setAttribute('aria-label', `One more ${which} night`);
+    inc.onclick = () => stepNights(which, 1);
+    g.append(dec, n, inc);
+    return g;
+  };
+  const lab = document.createElement('span');
+  lab.className = 'ns-label'; lab.textContent = 'Nights';
+  const dash = document.createElement('span');
+  dash.className = 'ns-dash'; dash.textContent = '–';
+  wrap.append(lab, group('min', cur('nmin', 5)), dash, group('max', cur('nmax', 9)));
+  return wrap;
+}
+
+function stepNights(which, delta) {
+  const el = which === 'min' ? $('nmin') : $('nmax');
+  const other = which === 'min' ? $('nmax') : $('nmin');
+  const otherV = other.value === '' ? null : Number(other.value);
+  let v = (el.value === '' ? (which === 'min' ? 5 : 9) : Number(el.value)) + delta;
+  v = Math.max(0, Math.min(60, v));
+  if (which === 'min' && otherV != null) v = Math.min(v, otherV);
+  if (which === 'max' && otherV != null) v = Math.max(v, otherV);
+  el.value = String(v);
+  commitNights();
+}
+
+/** Apply a nights change everywhere: constraints + repaint (readNights), the preset
+ *  label, and -- if the band grew -- an auto-fetch for the visible grid. */
+function commitNights() {
+  readNights();
+  syncTripPreset();
+  markSearchStale();          // nights is not a search input any more, so this clears the marker
+  updateNightsBand();
+}
+
+function syncTripPreset() {
+  const val = `${$('nmin').value},${$('nmax').value}`;
+  const sel = $('tripselect');
+  const match = [...sel.options].some((o) => o.value === val);
+  sel.value = match ? val : 'custom';
+}
+
+function nightsRange() {
+  const b = fetchedNights();
+  const lo = state.constraints.min != null ? state.constraints.min : (b ? b.lo : 5);
+  const hi = state.constraints.max != null ? state.constraints.max : (b ? b.hi : 9);
+  return { lo: Math.min(lo, hi), hi: Math.max(lo, hi) };
+}
+
+function updateNightsBand() {
+  if (!state.meta) return;
+  const want = nightsRange();
+  const band = fetchedNights();
+  if (!band || (want.lo >= band.lo && want.hi <= band.hi)) return;   // within the priced band
+
+  // Widen the band so the grid treats the new lengths as in-range straight away; the
+  // cells fill from the fetch below.
+  state.nightsBand = { lo: Math.min(band.lo, want.lo), hi: Math.max(band.hi, want.hi) };
+  state.meta.nights_span = [];
+  for (let n = state.nightsBand.lo; n <= state.nightsBand.hi; n += 1) state.meta.nights_span.push(n);
+
+  clearTimeout(nightsExtendTimer);
+  nightsExtendTimer = setTimeout(nightsExtend, 350);
+  render();
+}
+
+/** Re-price the visible grid over the same date window with the wider nights range.
+ *  Multi: every destination on the grid, one shared axes. Single: the open card. */
+function nightsExtend() {
+  if (nightsExtending || !state.meta) return;
+  const codes = state.multi.on
+    ? [...state.multi.dests]
+    : (document.body.classList.contains('detail-open') && state.selected ? [state.selected] : []);
+  if (!codes.length) { openFilled.clear(); return; }   // list view: cards refill on open
+
+  nightsExtending = true;
+  render();
+  fetch('/api/extend', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      origin: state.meta.origin,
+      depart_date: $('depart').value, return_date: $('ret').value,   // the window is unchanged
+      destinations: codes,
+      nights_min: state.constraints.min, nights_max: state.constraints.max,
+      adults: state.meta.adults, children: state.meta.children,
+      currency: state.meta.currency, nonstop_only: state.meta.nonstop_only,
+    }),
+  })
+    .then((r) => r.json())
+    .then((data) => {
+      if (!data.extend_id) throw new Error('extend failed');
+      const source = new EventSource(`/api/extend/${data.extend_id}/stream`);
+      source.onmessage = (event) => {
+        const msg = JSON.parse(event.data);
+        if (msg.type === 'axes') {
+          const ax = { departs: msg.depart_dates, returns: msg.return_dates };
+          if (state.multi.on) state.multi.axes = ax;
+          else codes.forEach((c) => destAxes.set(c, ax));
+          render();
+        } else if (msg.type === 'destination') {
+          state.destinations.set(msg.destination, msg);
+          recomputeBest(msg.destination);
+          render();
+        }
+      };
+      const finish = () => { source.close(); nightsExtending = false; render(); };
+      source.addEventListener('end', finish);
+      source.onerror = finish;
+    })
+    .catch(() => { nightsExtending = false; render(); });
+}
 
 $('clearconstraints').addEventListener('click', () => {
   state.constraints.dep.clear();
@@ -3348,6 +3511,7 @@ function setDow(key, days) {
 }
 
 function applyTrip() {
+  if ($('tripselect').value === 'custom') return;   // "Custom" is a label, not a preset
   const [lo, hi] = $('tripselect').value.split(',');
   $('nmin').value = lo;
   $('nmax').value = hi;
@@ -3364,8 +3528,7 @@ for (const id of ['depart', 'ret']) {
 }
 $('tripselect').addEventListener('change', () => {
   applyTrip();
-  markSearchStale();
-  if (state.meta) render();   // the day-of-week part is a view filter
+  commitNights();   // preset -> fields -> live apply (+ fetch if it widened the band)
 });
 
 applyTrip();
@@ -3377,6 +3540,7 @@ setDefaultDates();        // fill only what the URL left blank
 syncDateMode();
 syncReturnDate();
 if (state.regions.size || state.places.size) renderDestTags();
+syncTripPreset();
 $('viewsingle').setAttribute('aria-pressed', String(!state.multi.on));
 $('viewmulti').setAttribute('aria-pressed', String(state.multi.on));
 applyMultiDensity();
