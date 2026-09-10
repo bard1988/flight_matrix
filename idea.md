@@ -20,9 +20,9 @@ Things worth doing, not yet scheduled.
 | 7.3 | — cell-detail panel: the ✕ close is mispositioned (far right); reconsider full-screen panel on mobile | S | todo |
 | 10 | **Show the airport's city** wherever only the IATA code appears | S | **backend done** (2026-09-07: `describe()` resolves airport→city via `city_code`); panel-leg display todo |
 | 8 | **Design pass** — use the `design` skill / a proper design system | L | in progress |
-| 15 | **Discovery coverage — the whole world, not just short-haul** — Kiwi's `returnOnePerCityItineraries` for TLV returns ~160 nearby cities and nothing long-haul (no sub-Saharan Africa, thin on Asia / S. America), so "To: Africa" yields only Marrakesh. Plan of record in **Lever 3**. Committed near-term: **15.0** (OurAirports data) + **15A** (seed discovery from the curated list). Endgame: **15C** (Google price-graph board), gated on a spike. | L | in progress (plan set) |
-| 15.0 | **OurAirports data** — replace the Travelpayouts airport dump with OurAirports (`type`, `scheduled_service`, lat/long, country). Prerequisite for 15A, 15C and #9.1. `data/build_airports.py`, same pattern as `build_countries.py`. | S–M | todo |
-| 15A | **Seed discovery from the curated list** — when a region/destination filter is set and the live board returns few/none inside it, run our own discovery: OurAirports region universe → shortlist by `type`/scheduled_service → **cheap per-airport price probe** (`prices_for_dates` with destination) to find what actually flies from the origin → fill the survivors cheapest-first via the existing `fill_matrix`. Works today on Kiwi/TP. Stepping stone to 15C. | M | todo |
+| 15 | **Discovery coverage — the whole world, not just short-haul** — Kiwi's `returnOnePerCityItineraries` for TLV returns ~160 nearby cities and nothing long-haul (no sub-Saharan Africa, thin on Asia / S. America), so "To: Africa" yields only Marrakesh. Plan of record in **Lever 3**. **15.0 + 15A shipped** (2026-09-10). Remaining: **15.1** (Egypt classification, S) and **15C** (Google price-graph board), gated on a spike. | L | in progress (15.0 + 15A done) |
+| 15.0 | **OurAirports data** — replace the Travelpayouts airport dump with OurAirports (`type`, `scheduled_service`, lat/long, country). Prerequisite for 15A, 15C and #9.1. `data/build_airports.py`, same pattern as `build_countries.py`. | S–M | **done** (2026-09-10, 7fe50c9: `data/build_airports.py` merges OurAirports + Travelpayouts metro codes → `data/airports.v3.json`; `backend/airports.py` reads v3) |
+| 15A | **Seed discovery from the curated list** — when a region/destination filter is set and the live board returns few/none inside it, run our own discovery: OurAirports region universe → shortlist by `type`/scheduled_service → **cheap per-airport price probe** to find what actually flies from the origin → fill the survivors cheapest-first via the existing `fill_matrix`. Stepping stone to 15C. | M | **done** (2026-09-10: `_seed_candidates` in `board.py`, probes with Google Flights (71ffb16) not the TP cache, honours the nights range (6b65257), a failed probe skips that airport (ef15eba); emits `region_seeding` / `region_seeded`) |
 | 15C | **Google price-graph board provider** (was "Lever 1") — promote `google_flights.py` to a first-class board provider with `discover()` + `fill_matrix()` via the keyless price-graph RPC. Google isn't IP-blocking the VM and returns real party totals (2026-09-07 spike). **Blocked:** the batched call needs the `SNlM0e` XSRF token Google withholds from anonymous clients; point-query fallback measured ~15–20 min/20 dests. Needs a spike before committing. Endgame, not near-term. | L | spike |
 | 15.1 | — Egypt (Sharm, Hurghada, Cairo) is classified `Asia / Middle East` in `data/build_countries.py`, so the **Africa** filter excludes the one well-connected part of Africa from TLV. Decide: move Egypt to `Africa / Northern Africa`, or surface it under both. | S | todo |
 
@@ -197,6 +197,12 @@ is tagged `Asia / Middle East` in `data/build_countries.py`, so the **Africa** c
 never includes it. Cheap independent fix; decide move-vs-dual-list.
 
 ### Steps, in order
+
+> **Status (2026-09-10): 15.0 and 15A are shipped.** `airports.v3.json` is built from
+> OurAirports (`data/build_airports.py`); `board._seed_candidates` runs the universe →
+> shortlist → Google-Flights probe → fill funnel whenever a region/destination filter is
+> set and the live board comes back short. Left to do: **15.1** (Egypt) and **15C** (spike).
+> The step descriptions below are kept as the design record.
 
 **15.0 — OurAirports data (prerequisite).** `S–M`
 Replace `data/airports.v2.json` (Travelpayouts dump: 10.5k airports, no hub signal) with
