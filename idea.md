@@ -157,9 +157,10 @@ miss or misprice. For TLV every candidate is already blocked:
 
 | Carrier | TLV? | API | Verdict |
 |---|---|---|---|
-| Wizz Air | yes | works: version scraped+cached, per-person fare scaled like any non-total source, calls paced | **wired in** (`providers/wizz.py`) — the aggregators share one pool that thins for small routes far out (TLV→Iași 7mo empty everywhere, Wizz selling it); its map feeds discovery, `timetable` fills the gap |
+| Wizz Air | yes | works: version scraped+cached, per-person fare scaled, fresh client per call | **wired in** (`providers/wizz.py`) — the aggregators thin for small routes far out (TLV→Iași 7mo empty everywhere, Wizz selling it); map feeds discovery, `timetable` fills the gap |
+| Ryanair | no (from IL) | keyless `farfnd` + `searchWidget/routes`, no cookies | **wired in** (`providers/ryanair.py`) — zero IL routes, but "From" is any airport now; from a Ryanair base it's most of the board |
 | El Al / Arkia / Israir | yes | none usable (WAF / Cloudflare / CMS-only) | dead |
-| Ryanair | no | keyless (`ryanair-py`) | zero Israeli airports |
+| Pegasus / Air Arabia / AJet / easyJet / flydubai | yes | not yet probed past guessed endpoints (`data/probe_lccs.py`); several look bot-walled | candidates — each needs browser recon |
 | Transavia | via AMS/ORY | had an open API, now partner-login gated | no longer self-serve |
 | Pegasus / AJet / Aegean / flydubai / Air Arabia | yes | each needs individual reverse-engineering, mostly per-person | not worth 5 brittle integrations |
 

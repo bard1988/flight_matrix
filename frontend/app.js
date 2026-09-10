@@ -39,21 +39,21 @@ const FX_FALLBACK = { eur: 1, usd: 1.16, gbp: 0.86, ils: 3.5 };
 
 const $ = (id) => document.getElementById(id);
 
-/* Board data comes from an aggregator or, for its own routes, direct from Wizz Air. */
+/* Board data comes from an aggregator, or for its own routes direct from an airline. */
+const AIRLINE_SOURCES = { wizz: 'Wizz Air', ryanair: 'Ryanair' };
 const sourceName = (s) =>
   s === 'kiwi' ? 'Kiwi.com'
     : s === 'travelpayouts' ? 'Aviasales'
-    : s === 'wizz' ? 'Wizz Air'
-    : s || 'the fare cache';
+    : AIRLINE_SOURCES[s] || s || 'the fare cache';
 
-/* A firm party price, or an extrapolation? Kiwi returns a real party total; Wizz's
-   per-person fare is an LCC price that scales linearly, so fare x party is firm too
-   (ancillaries aside, like any headline fare). Only Travelpayouts single-ticket fares
-   are the estimate. */
-const isFirmPrice = (cell) => cell.is_total || cell.source === 'wizz';
-const fareNote = (cell) => (cell.source === 'wizz' ? ' — Wizz fare, carry-on only' : '');
-/* Sort order for the table's Source column: verified, then Wizz's own fare, then estimate. */
-const srcRank = (cell) => (cell.verified ? 2 : cell.source === 'wizz' ? 1 : 0);
+/* A firm party price, or an extrapolation? Kiwi returns a real party total; an LCC's
+   per-person fare scales linearly, so fare x party is firm too (ancillaries aside, like
+   any headline fare). Only Travelpayouts single-ticket fares are the estimate. */
+const isAirlineFare = (cell) => cell.source in AIRLINE_SOURCES;
+const isFirmPrice = (cell) => cell.is_total || isAirlineFare(cell);
+const fareNote = (cell) => (isAirlineFare(cell) ? ` — ${AIRLINE_SOURCES[cell.source]} fare, carry-on only` : '');
+/* Sort order for the table's Source column: verified, then an airline's own fare, then estimate. */
+const srcRank = (cell) => (cell.verified ? 2 : isAirlineFare(cell) ? 1 : 0);
 
 /* One phrasing for stop counts everywhere: tooltip, table, panel. */
 const fmtStops = (n) =>
@@ -1196,7 +1196,7 @@ function renderTable(ordered) {
       cmp: (a, b) => a.value - b.value },
     { key: 'source', label: 'Source',
       cell: (r) => r.cell.verified ? '<span class="tag live">Live</span>'
-        : r.cell.source === 'wizz' ? '<span class="tag live">Wizz</span>'
+        : isAirlineFare(r.cell) ? `<span class="tag live">${AIRLINE_SOURCES[r.cell.source]}</span>`
         : '<span class="tag">Est</span>',
       cmp: (a, b) => srcRank(a.cell) - srcRank(b.cell) },
     { key: 'stops', label: 'Stops', cell: (r) => fmtStops(r.cell.transfers),
@@ -1420,8 +1420,8 @@ async function verifyCell(dest, cell) {
     if (data.link) {
       links.push(`<a href="${data.link}" target="_blank" rel="noopener">Open on Google Flights</a>`);
     }
-    const explain = cell.source === 'wizz'
-      ? `Wizz Air doesn't sell through Google Flights. The price above is Wizz's own fare for these exact dates (lowest fare, one carry-on, per traveller × your party); book it on the Wizz link below.`
+    const explain = isAirlineFare(cell)
+      ? `${AIRLINE_SOURCES[cell.source]} fares don't always show on Google Flights. The price above is ${AIRLINE_SOURCES[cell.source]}'s own fare for these exact dates (lowest fare, one carry-on, per traveller × your party); book it on the link below.`
       : cell.estimate != null
         ? `Couldn't verify this fare live. Not every route is in Google Flights. The price above is the board's ${isFirmPrice(cell) ? 'total' : 'estimate'}; the booking links below are live.`
         : `Google Flights has no fare for this exact date pair. If the booking source found one it is shown below and the cell is now filled with it; otherwise try a nearby cell.`;

@@ -93,10 +93,11 @@ def test_unserved_route_returns_empty_without_calling(monkeypatch):
     assert not m.cells and not called
 
 
-class _StubWizz:
-    """Fills only the routes it is told to, like the real one falling back for a gap."""
+class _StubCarrier:
+    """Fills only the routes it is told to, like a real carrier source in the gap-fill."""
 
-    def __init__(self, fills):
+    def __init__(self, name, fills):
+        self.name = name
         self._fills = fills            # {dest: price} it can fill
 
     def routes(self, origin):
@@ -109,23 +110,23 @@ class _StubWizz:
         if destination.upper() not in self._fills:
             return DestinationMatrix(origin=request.origin.upper(), destination=destination.upper())
         return fill_grid(request, destination, dd, rd, self._fills[destination.upper()],
-                         source="wizz", is_total=False)
+                         source=self.name, is_total=False)
 
 
-def test_board_fills_an_empty_route_from_wizz(req, monkeypatch):
+def test_board_fills_an_empty_route_from_a_carrier(req, monkeypatch):
     import config
     from test_board_flow import FakeProvider
 
     monkeypatch.setattr(config, "ESTIMATE_FIRST", False)
     monkeypatch.setattr(config, "WIZZ_ENABLED", True)
-    monkeypatch.setattr(board, "_wizz_singleton", _StubWizz({"CTA": 800.0}))
+    board._airline_singletons["wizz"] = _StubCarrier("wizz", {"CTA": 800.0})
 
-    # The aggregator has nothing for CTA; Wizz flies it.
+    # The aggregator has nothing for CTA; the carrier flies it.
     provider = FakeProvider("kiwi", empty={"CTA"})
     events = list(board.build(req, provider=provider))
 
-    wizz_fill = [e for e in events if e["type"] == "wizz_fill"]
-    assert wizz_fill and wizz_fill[0]["destination"] == "CTA"
+    fill = [e for e in events if e["type"] == "airline_fill"]
+    assert fill and fill[0]["destination"] == "CTA"
 
     cards = {e["destination"]: e for e in events
              if e["type"] == "destination" and not e.get("preview")}

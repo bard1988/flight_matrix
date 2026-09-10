@@ -440,7 +440,7 @@ All investigated with live probes. Kiwi won (see above); the rest are unusable h
 
 | Source | Free? | Obtainable? | Verdict |
 |---|---|---|---|
-| **Ryanair** `farfnd` | Yes, keyless | Yes | **API is perfect** — cheapest round trips to every destination over a date range, one call. But Ryanair serves **zero Israeli airports** (224 active, none in IL). Useless from TLV. |
+| **Ryanair** `farfnd` | Yes, keyless | **Yes — now wired in** | Cheapest round trips over a date range, and a per-route daily fare calendar, keyless. **Zero Israeli airports**, so nothing from TLV — but the origin box takes any airport, and from a Ryanair base it can be most of the board. See below. |
 | **Wizz Air** | Yes, keyless | **Yes — now wired in** | Dominant LCC at TLV. `metadata.json` is gone but the version string is scrapable from the homepage bundle and cached. See below. |
 | **Skyscanner** | Free for partners | No | Commercial partner application, reviewed case-by-case. No self-service key. |
 | **Kiwi Tequila** | — | No | Invite-only partner program since 2026; self-serve signup closed. |
@@ -472,11 +472,20 @@ simply doesn't, and Wizz's own calendar does.
 
 How it's used: `asset/map` feeds discovery (its ~29 TLV destinations join the candidate
 list), and `search/timetable` fills a grid — both legs in one POST — when the aggregator
-returns nothing for a route Wizz flies (`FM_WIZZ`, `FM_WIZZ_FILL_CAP`). The known caveats
-are handled: the version string is scraped and cached; the per-person fare is left
-`is_total=False` so it gets the same party scaling every non-total source gets, and
-converted to the board currency (`backend/fx.py`); repeat calls are paced ~4s apart.
+returns nothing for a route Wizz flies. The known caveats are handled: the version string
+is scraped and cached; the per-person fare is left `is_total=False` so it gets the same
+party scaling every non-total source gets, and converted to the board currency
+(`backend/fx.py`); each call uses a fresh client (Wizz locks a reused connection out).
 Cells are tagged `source: "wizz"` and deep-link to wizzair.com.
+
+**Ryanair is wired in the same way** (`backend/providers/ryanair.py`). It serves no Israeli
+airport, so from TLV it contributes nothing — but the origin box now takes any airport, and
+from one of Ryanair's ~230 European bases it can populate most of a board on its own.
+`searchWidget/routes` is the origin's route graph (for `serves()`); `farfnd/roundTripFares`
+is a short "cheapest dozen" list with real round-trip prices (discovery); and
+`farfnd/oneWayFares/{o}/{d}/cheapestPerDay` — one call per leg-month — pairs into a dense
+grid. Per-person, `is_total=False`, EUR→board currency, `source: "ryanair"`, keyless, no
+cookies or version scraping. Both carriers: `FM_WIZZ` / `FM_RYANAIR`, `FM_AIRLINE_FILL_CAP`.
 
 ## Configuration
 

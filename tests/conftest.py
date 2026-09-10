@@ -73,15 +73,17 @@ def clear_kiwi_block():
 
 
 @pytest.fixture(autouse=True)
-def no_wizz(monkeypatch):
-    """Wizz is a live HTTP source (rule 1: no network). Off by default; the Wizz tests
-    re-enable it with a stub. Also drop any singleton a prior test may have built."""
+def no_airlines(monkeypatch):
+    """The direct-carrier sources (Wizz, Ryanair) are live HTTP (rule 1: no network). Off
+    by default; the carrier tests re-enable them with a stub. Also drop any singletons a
+    prior test built."""
     import config
     import board
     monkeypatch.setattr(config, "WIZZ_ENABLED", False)
-    board._wizz_singleton = None
+    monkeypatch.setattr(config, "RYANAIR_ENABLED", False)
+    board._airline_singletons.clear()
     yield
-    board._wizz_singleton = None
+    board._airline_singletons.clear()
 
 
 def make_cell(depart: str, ret: str, price: float = 1000.0, *,

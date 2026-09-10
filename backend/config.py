@@ -243,12 +243,15 @@ CANDIDATE_MULTIPLIER = float(os.environ.get("FM_CANDIDATE_MULTIPLIER", "3.0"))
 # each, and fold in the ones that actually fly from the origin. 0 disables seeding.
 SEED_SHORTLIST = int(os.environ.get("FM_SEED_SHORTLIST", "40"))
 
-# Wizz Air's own booking calendar, layered onto discovery and used to fill a grid when the
-# aggregators return nothing for a route Wizz flies (its keyless API covers small routes
-# far out that the shared GDS/NDC pool does not). WIZZ_FILL_CAP bounds the calendar calls
-# per board -- one call per destination, paced a few seconds apart.
+# Direct-carrier sources, layered onto discovery and used to fill a grid the aggregators
+# leave empty on a route the carrier flies -- their keyless APIs cover LCC routes the
+# shared GDS/NDC pool misses or misprices. Wizz is the calendar behind small routes booked
+# far out; Ryanair (no Israeli airports, so nothing from TLV) can be most of the board from
+# one of its ~230 European bases. AIRLINE_FILL_CAP bounds the calendar calls per board.
 WIZZ_ENABLED = os.environ.get("FM_WIZZ", "1") == "1"
-WIZZ_FILL_CAP = int(os.environ.get("FM_WIZZ_FILL_CAP", "10"))
+RYANAIR_ENABLED = os.environ.get("FM_RYANAIR", "1") == "1"
+AIRLINE_FILL_CAP = int(os.environ.get(
+    "FM_AIRLINE_FILL_CAP", os.environ.get("FM_WIZZ_FILL_CAP", "12")))
 
 # Emit every destination as a headline-only PREVIEW card the moment discovery returns,
 # then upgrade each one in place as its grid fills.
