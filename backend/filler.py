@@ -20,7 +20,7 @@ import cache
 import config
 from models import SearchRequest
 from providers.base import ProviderError
-from providers.google_flights import GoogleFlightsProvider
+from providers import verifier as _verifier_provider
 
 
 def pending_cells(
@@ -83,7 +83,7 @@ def verify_cells(
                "note": "Every one of those cells was already verified."}
         return
 
-    provider = GoogleFlightsProvider()
+    provider = _verifier_provider()
     lock = threading.Lock()
     filled = failed = 0
 
@@ -166,7 +166,7 @@ def fill(
                "note": "Every cell for this destination is already verified."}
         return
 
-    provider = GoogleFlightsProvider()
+    provider = _verifier_provider()
     lock = threading.Lock()
     filled = failed = 0
 

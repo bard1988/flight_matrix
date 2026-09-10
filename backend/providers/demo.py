@@ -8,7 +8,9 @@ from __future__ import annotations
 
 import hashlib
 import random
+import time
 from datetime import date, timedelta
+from typing import Any
 
 import config
 from models import Cell, DestinationMatrix, SearchRequest, utcnow
@@ -22,7 +24,15 @@ _DESTINATIONS = [
     ("BER", 450), ("PAR", 520), ("AMS", 500), ("TBS", 340), ("IST", 330),
     ("LON", 560), ("MAD", 540), ("ZRH", 610), ("CPH", 590), ("LIS", 640),
     ("DXB", 470), ("BKK", 980), ("TIA", 290), ("PMO", 410),
+    # Named so demo prices are plausible: a long-haul hub is dear, a tiny regional field
+    # that needs two connections is dearer still. Otherwise every obscure airport priced
+    # at the 400 default and out-ranked Bangkok on a Thailand search.
+    ("DMK", 1010), ("HKT", 1180), ("CNX", 1240), ("USM", 1320), ("KBV", 1290),
+    ("HDY", 1450), ("CEI", 1520), ("UTP", 1380),
 ]
+
+# Anything not listed above is an out-of-the-way airport: expensive, needs connections.
+_UNKNOWN_BASE = 1600
 
 _AIRLINES = ["W6", "FR", "LY", "U2", "A3", "TK", "SU"]
 
@@ -47,7 +57,7 @@ class DemoProvider:
     def fill_matrix(
         self, request: SearchRequest, destination: str, depart_dates: list[date], return_dates: list[date]
     ) -> DestinationMatrix:
-        base = dict(_DESTINATIONS).get(destination.upper(), 400)
+        base = dict(_DESTINATIONS).get(destination.upper(), _UNKNOWN_BASE)
         matrix = DestinationMatrix(origin=request.origin.upper(), destination=destination.upper())
         now = utcnow()
 
@@ -104,6 +114,55 @@ class DemoProvider:
                     )
                 )
         return matrix
+
+    def verify(
+        self,
+        origin: str,
+        destination: str,
+        depart_date: str,
+        return_date: str,
+        adults: int,
+        children: int,
+        currency: str,
+        nonstop_only: bool = False,
+    ) -> dict[str, Any]:
+        """Stand in for a live Google Flights cross-check in demo mode.
+
+        Always returns a price (real coverage is near-complete for a genuine route), a
+        little off the cached estimate so it reads as a fresh check. A short sleep so the
+        grid's loading blink is actually visible while the fill runs.
+        """
+        time.sleep(random.uniform(0.05, 0.18))   # enough for the grid's loading blink to show
+        rng = self._rng("verify", origin, destination, depart_date, return_date, adults, children)
+        d = date.fromisoformat(depart_date[:10])
+        r = date.fromisoformat(return_date[:10])
+        nights = max((r - d).days, 1)
+        base = dict(_DESTINATIONS).get(destination.upper(), _UNKNOWN_BASE)
+        price = base
+        price *= 1.22 if d.weekday() in (3, 4) else 1.0
+        price *= 1.15 if r.weekday() in (6, 0) else 1.0
+        price *= 1.0 + max(0, nights - 14) * 0.04
+        price *= 1.18 if nights <= 2 else 1.0
+        price *= rng.uniform(0.9, 1.35)                 # live checks skew a touch dearer
+        pax = max(adults + children, 1)
+        transfers = 0 if rng.random() < 0.6 else rng.choice([1, 1, 2])
+        if nonstop_only and transfers:
+            transfers = 0
+        dep_h = rng.choice([6, 7, 9, 11, 14, 17, 21])
+        return {
+            "total": round(price * pax, 2),
+            "currency": currency,
+            "airline": rng.choice(_AIRLINES),
+            "stops_out": transfers,
+            "stops_back": transfers,
+            "duration": f"{rng.choice([2, 3, 4, 5, 8, 11])}h {rng.choice([5, 15, 25, 40, 55])}m",
+            "departs": f"{dep_h:02d}:{rng.choice(['05', '20', '35', '50'])}",
+            "arrives": None,
+            "segments": None,
+            "link": TravelpayoutsProvider._search_link(
+                origin, destination, depart_date[:10], return_date[:10], max(adults + children, 1)),
+            "price_level": None,
+        }
 
     def close(self) -> None:
         pass
