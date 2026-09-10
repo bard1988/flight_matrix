@@ -132,14 +132,18 @@ def ink_for(fill):
 # weakest on. Interpolating a 7th instead measured 1.3 dE on its weakest adjacency, i.e.
 # two neighbouring price steps indistinguishable; extending gives 9.4.
 RAMP = [
-    "#0f9246",   # Excellent, verbatim
+    "#0f9246",   # Excellent, verbatim -- the cheap end and the dear end are held here
     "#7ebb42",   # Very Good, verbatim
-    "#fdcb08",   # Good,      verbatim
-    "#f68e1f",   # Fair,      verbatim
-    "#ef4723",   # Poor,      verbatim
-    "#bc1f26",   # Very Bad,  verbatim
-    "#7f0a13",   # added: deeper red at L 0.38, same hue as Very Bad
+    "#f2c53a",   # Good  -- warmed off the reference gold toward the softer heatmap look
+    "#f0952f",   # Fair  -- warmed, a touch deeper
+    "#ea5f34",   # Poor  -- shifted toward terracotta rather than signal-orange
+    "#cc3630",   # Very Bad -- softened off #bc1f26
+    "#7f0a13",   # added: deeper red at L 0.38, same hue as Very Bad -- held for the ends gate
 ]
+# 2026 retune for the softer "fare calendar" surface (see DESIGN.md). q0 and q6 are
+# unchanged: the cheapest-vs-dearest deuteranopia gate (MIN_ENDS_DE_CVD) needs the vivid
+# green and the deep red at the ends, and softening either one drops it below 18.
+# q2-q5 are warmed toward the mockup's heatmap without touching the CVD result (still 18.9).
 
 HUE = [148, 138, 128, 60, 42, 32, 22]
 # The hue path deliberately jumps the yellow band between q2 and q3, rather than easing
@@ -270,7 +274,59 @@ def check(ramp: list[str]) -> bool:
     return ok
 
 
+# --- the pale ramp (the shipped DEFAULT) --------------------------------------------------
+#
+# The board ships this soft, low-saturation heatmap by default; the CVD-safe RAMP above is one
+# opt-in click away (a toggle in the board tools, persisted). The pale ramp is a tint scale
+# -- light mint -> pale lime -> cream -> peach -> coral -> rose -- matched to the marketing
+# comp. It CANNOT clear the colour-blind-friendly ramp's colour-vision-deficiency gates: pale colours
+# compress the sRGB gamut, so neighbouring steps and the two ends sit closer under
+# simulated deuteranopia (measured ~1.3 adjacency, ~16.7 ends, against 7.3 / 18.9 vivid).
+#
+# That trade is acceptable ONLY because colour is never the sole signal and the colour-blind-friendly ramp
+# is always available: every cell prints its price (dark ink, AA-clear on every pale step
+# -- that gate stays HARD below), the cheapest cell is ringed, destinations are ordered
+# cheapest-first, and the table view lists every value. A red-green colour-blind user who
+# wants the scan-by-colour affordance flips to the colour-blind-friendly ramp.
+RAMP_PALE = [
+    "#a9d8b4",   # mint
+    "#cfe6a0",   # pale lime
+    "#f5e6a0",   # cream
+    "#f6d3a2",   # pale peach
+    "#f2b39c",   # light coral
+    "#ec9088",   # coral
+    "#e06b6b",   # rose
+]
+
+# Hard for the pale ramp: label contrast only. Adjacency and ends separation are reported
+# as advisories, not gates -- the colour-blind-friendly ramp carries the accessible guarantee.
+PALE_MIN_LABEL = 4.5
+
+
+def check_pale(ramp: list[str]) -> bool:
+    inks = [ink_for(c) for c in ramp]
+    labels = [contrast(c, k) for c, k in zip(ramp, inks)]
+    Ls = [hex_to_oklch(c)[0] for c in ramp]
+    adj = worst_adjacent_de(ramp)
+    ends = delta_e(ramp[0], ramp[6], "deutan")
+    ok = min(labels) >= PALE_MIN_LABEL and all(k == INK_DARK for k in inks)
+
+    print("\n=== fare ramp (PALE, default) ===")
+    print("  fills:", ",".join(ramp))
+    print("  L    :", [round(x, 3) for x in Ls])
+    print("  label contrast:", [round(x, 2) for x in labels],
+          f" (WCAG AA floor {PALE_MIN_LABEL}; HARD)")
+    print(f"  worst adjacent ΔE (any vision): {adj:.1f}   <- advisory only for the pale ramp")
+    print(f"  cheapest vs dearest ΔE (deutan): {ends:.1f}  <- advisory only for the pale ramp")
+    print("  CSS (default :root):")
+    for i, (f, k) in enumerate(zip(ramp, inks)):
+        print(f"    --q{i}: {f};  --qi{i}: {k};")
+    return ok
+
+
 if __name__ == "__main__":
-    good = check(RAMP)
-    print("\nOK" if good else "\nFAIL: a hard check did not pass")
-    sys.exit(0 if good else 1)
+    pale_ok = check_pale(RAMP_PALE)
+    vivid_ok = check(RAMP)
+    print("\n--- colour-blind-friendly ramp is emitted under :root[data-fareramp='cvd'] ---")
+    print("pale:", "OK" if pale_ok else "FAIL", "  cvd:", "OK" if vivid_ok else "FAIL")
+    sys.exit(0 if (pale_ok and vivid_ok) else 1)
