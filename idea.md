@@ -324,10 +324,17 @@ correctly no-ops on the VM; a proxy integration should not resurrect it.
 
 ## Smaller / maybe
 
-- Migrate Travelpayouts Data API to the Nov-2025 version — the old one stops working
-  **2026-06-15**.
-- `fast-flights` is pinned `>=2.2` in `requirements.txt` but the code targets the 3.x
-  API. Pin it properly (`>=3,<4`) and retest Fill live.
+- ~~Migrate Travelpayouts Data API to the Nov-2025 version — the old one stops working
+  **2026-06-15**.~~ **Investigated 2026-09-10: nothing to do.** The 2026-06-15 shutdown is
+  the Travelpayouts *Flights Search API* (the real-time `flight_search` +
+  `flight_search_results` polling flow). FlightMatrix does not use it — `providers/
+  travelpayouts.py` only hits the **Data API** (`/v2/prices/latest`,
+  `/aviasales/v3/prices_for_dates`, `/v1/prices/calendar`), which is current with no
+  deprecation notice, and booking links are plain `aviasales.com/search/...` web URLs.
+  The original note conflated the two products.
+- ~~`fast-flights` pinned `>=2.2` but the code targets the 3.x API.~~ **Done 2026-09-10:**
+  `requirements.txt` now pins `fast-flights>=3,<4`; the live verifier was retested against
+  3.1.0 (TLV→ATH returned a real total + segments + Google link).
 - SerpApi Google Travel Explore (free 250/mo) as a discovery source — **parked** under
   Lever 3; revisit only if #15A's curated seeding proves too coarse.
 
