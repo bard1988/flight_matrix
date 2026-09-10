@@ -14,10 +14,10 @@ Things worth doing, not yet scheduled.
 | 11 | **Kids' ages** — per-child age (infant/child buckets), not just a count; changes the price. Must propagate to providers + `party_key` cache key + child-factor scaling | M–L | todo |
 | 6 | **Cabin class** selector (economy / premium / business) — thread through provider → API → UI | M | todo |
 | 4 | **One search model: period + trip length** — drop the "Dates mean" dropdown | M | **done** (2026-09-07/08: dropdown gone, range default; anchors plumbing removed + widen reworked for the period model by the redesign pass) |
-| 7 | **Mobile: more compact** | M | todo |
-| 7.1 | — passengers shown in the bar, not behind Options | S | todo |
-| 7.2 | — denser matrices on small screens | S | todo |
-| 7.3 | — cell-detail panel: the ✕ close is mispositioned (far right); reconsider full-screen panel on mobile | S | todo |
+| 7 | **Mobile: more compact** | M | mostly addressed by the 2026-09-09/10 responsive audit + mobile-sheet rework + consumer reskin (84fc501, 7c0fe2e, 5cf0328, 0585774). No standing sub-items left. |
+| 7.1 | — passengers shown in the bar, not behind Options | S | **done** (`field-pax` is a first-class field in the primary control bar; 50%-width on mobile. The post-search folded summary omits the pax count by design — 7c0fe2e.) |
+| 7.2 | — denser matrices on small screens | S | **dropped** (2026-09-10) — the reskin deliberately went the other way ("enlarged pastel matrix", 0585774). Revisit only as a concrete "the big cells cost too much scrolling on a phone" complaint. |
+| 7.3 | — cell-detail panel: the ✕ close is mispositioned (far right); reconsider full-screen panel on mobile | S | **done** (2026-09-10) — the ✕ sits correctly now (confirmed on device); panel is z-70 above the grid layers (7c0fe2e) with the current design system. Optional nicety left: no tap-outside / swipe-down to dismiss on mobile (scrim is off) — not a bug. |
 | 10 | **Show the airport's city** wherever only the IATA code appears | S | **done** (2026-09-10: `/api/details` legs carry `from_city`/`to_city` via `_name_leg_airports`; the panel shows the city with the IATA code as a dimmed suffix, legs wrap on a narrow sheet. Tooltip + table already showed the city) |
 | 8 | **Design pass** — use the `design` skill / a proper design system | L | in progress |
 | 15 | **Discovery coverage — the whole world, not just short-haul** — Kiwi's `returnOnePerCityItineraries` for TLV returns ~160 nearby cities and nothing long-haul (no sub-Saharan Africa, thin on Asia / S. America), so "To: Africa" yields only Marrakesh. Plan of record in **Lever 3**. **15.0 + 15A + 15.1 shipped** (2026-09-10) — the coverage gap that opened this item is closed. **15C** (Google price-graph board) is the only remaining sub-item and is **deferred** (see Lever 3). | L | **done for coverage** (15.0 + 15A + 15.1); 15C deferred |
@@ -277,7 +277,7 @@ the spike is a coin-flip (a plausible outcome is "the token-mint GET is CAPTCHA'
 Oracle datacenter IP → dead without a residential proxy"), and a win puts a
 reverse-engineered Google surface on the critical path with the same break-on-Google's-
 schedule fragility as the HTML parser. With ~no traffic and no latency complaints, the
-small certain UX wins (#10, #7.x, #1, #6) are the better use of time.
+small certain UX wins (#1, #6, #9.1, #11 …) are the better use of time.
 
 Revisit when either (a) board latency becomes a real complaint from real users, or
 (b) a wider launch is being prepped and the "real totals, not optimistic estimates"
