@@ -1645,6 +1645,16 @@ table.matrix th {
 table.matrix th.col { text-align: center; }
 table.matrix th.row { text-align: right; padding-right: 12px; padding-left: 4px; }
 
+/* Both axes read Day over Date. The date sits a step smaller and lighter so the weekday
+   leads the scan -- you pick a column by "Friday", then read which one. */
+table.matrix th .ax-date {
+  display: block;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-muted);
+}
+table.matrix th.weekend .ax-date { color: var(--text-secondary); }
+
 /* Weekend emphasis lives on the axis, not behind the cells. Every priced cell carries a
    full-strength ramp fill, so a tinted column under the grid would be invisible; putting
    the weight and the full ink on Fri/Sat is what actually reads. */
@@ -2108,6 +2118,12 @@ body.detail-open.show-table .ddetail { display: none; }
   body.has-board .edit-search { display: flex; }
   body.has-board.search-open .edit-search-summary { display: none; }
 
+  /* Options needs the screen on a phone. While it is open, fold the search fields away;
+     the Search / Options actions row stays, so you can still run the search or tap Options
+     again to bring the fields back. Applies before a board exists too -- that is exactly
+     when the full field card is on screen taking room. */
+  body.opts-open .controls-primary > .bar-group:not(.bar-actions) { display: none; }
+
   /* Search fields stack full-width. */
   .bar-group > .field { flex: 1 1 100%; }
   .bar-group > .field-where,
@@ -2158,7 +2174,6 @@ body.detail-open.show-table .ddetail { display: none; }
      orientation hints, the footnote and the filter counts all go. (First run still shows
      them — nothing else is on screen competing then.) */
   body.has-board .status .legend,
-  body.has-board #datehint,
   body.has-board #stalenote,
   body.has-board #filtercount,
   body.has-board #note,

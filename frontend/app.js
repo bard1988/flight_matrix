@@ -970,13 +970,13 @@ function buildMatrix(dest, domain) {
   let html = '<thead><tr><th class="corner" title="rows are return dates, columns are departure dates">ret ↓ dep →</th>';
   for (let c = 0; c < axDeparts.length; c += 1) {
     const d = axDeparts[c];
-    html += `<th class="col${isWeekend(d) ? ' weekend' : ''}" scope="col" data-c="${c}">${weekday(d)}<br>${shortDate(d)}</th>`;
+    html += `<th class="col${isWeekend(d) ? ' weekend' : ''}" scope="col" data-c="${c}">${weekday(d)}<span class="ax-date">${shortDate(d)}</span></th>`;
   }
   html += '</tr></thead><tbody>';
 
   for (let r = 0; r < axReturns.length; r += 1) {
     const ret = axReturns[r];
-    html += `<tr><th class="row${isWeekend(ret) ? ' weekend' : ''}" scope="row" data-r="${r}">${weekday(ret)} ${shortDate(ret)}</th>`;
+    html += `<tr><th class="row${isWeekend(ret) ? ' weekend' : ''}" scope="row" data-r="${r}">${weekday(ret)}<span class="ax-date">${shortDate(ret)}</span></th>`;
     for (let c = 0; c < axDeparts.length; c += 1) {
       const dep = axDeparts[c];
       if (ret < dep) { html += '<td class="void">–</td>'; continue; }
@@ -1977,11 +1977,8 @@ function startSearch() {
     Object.assign(document.createElement('span'),
       { className: 'ellipsis', ariaHidden: 'true', textContent: dots() }));
   $('boardtools').hidden = true;   // no results yet
-  // Orientation is a first-run thing; once you've searched, you know. The date hint is
-  // part of that same orientation (the field labels and the first-run lede already say
-  // it), and it was costing a permanent line in the status strip above every board.
+  // Orientation is a first-run thing; once you've searched, you know.
   $('firstrun').hidden = true;
-  $('datehint').hidden = true;
   stopAutoVerify();             // a new search invalidates any in-flight cross-check
   stopOpenFill();
   openFilled.clear();
@@ -2685,12 +2682,11 @@ function refreshRegionCounts() {
 }
 
 /* The two dates bound a PERIOD; Nights is the trip length to look for inside it.
-   (Kept as a named function because several places call it after the axes change.) */
+   The field labels and the first-run lede already say this, so there is no standing hint
+   line -- it only ever sat above the board as redundant chrome. */
 function syncDateMode() {
   $('departlabel').textContent = 'Travel from';
   $('retlabel').textContent = 'Travel until';
-  $('datehint').textContent =
-    'the two dates bound a period; Nights is the trip length to look for inside it';
   if ($('nmin').value === '' && $('nmax').value === '') {
     $('nmin').value = '5';
     $('nmax').value = '9';
