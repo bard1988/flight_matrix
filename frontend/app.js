@@ -2158,6 +2158,12 @@ function consume(searchId) {
       // the list saying "Finding dates..." for the rest of the session, for dates that do
       // not exist.
       state.destinations.delete(msg.destination);
+      // A destination the user named explicitly must not just vanish -- say why.
+      if (msg.picked) {
+        $('errors').textContent =
+          `No ${$('origin').value.toUpperCase()} → ${msg.city} flights are on sale for these dates yet. ` +
+          `Airlines load schedules for smaller routes 3–6 months ahead; try a nearer date or a larger nearby airport.`;
+      }
       seen += 1;
       render();
     } else if (msg.type === 'destination_error') {

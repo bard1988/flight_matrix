@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import traceback
 from concurrent.futures import ThreadPoolExecutor
-from datetime import date
+from datetime import date, timedelta
 from typing import Any, Callable, Iterator
 
 import airports
@@ -97,9 +97,14 @@ def _seed_candidates(
     if not shortlist:
         return [], 0
 
-    # One representative pair near the middle of the window: mid departure, ~a week later.
+    # One representative pair near the middle of the window: mid departure, and a return
+    # that honours the requested trip length -- an arbitrary "+7 return rows" pick landed a
+    # 14-night search on a 20-night pair, so a route only sold at the asked length probed
+    # empty and got dropped.
+    span = request.nights_span()
     depart = depart_dates[len(depart_dates) // 2]
-    ret = return_dates[min(len(return_dates) - 1, len(return_dates) // 2 + 7)]
+    target = depart + timedelta(days=span[len(span) // 2])
+    ret = min(return_dates, key=lambda d: abs((d - target).days))
     if ret <= depart:
         ret = return_dates[-1]
     verifier = _verifier_provider()
@@ -719,7 +724,11 @@ def build(
 
         if not matrix.cells:
             empty += 1
-            yield emit({"type": "destination_empty", "destination": destination, "city": info["city"]})
+            # A destination the user named explicitly (typeahead pick) that comes back with
+            # nothing needs to say so -- otherwise a one-destination search just vanishes.
+            picked = destination.upper() in {c.upper() for c in request.destination_codes}
+            yield emit({"type": "destination_empty", "destination": destination,
+                        "city": info["city"], "picked": picked})
             continue
 
         filled += 1
