@@ -1309,6 +1309,12 @@ body.has-board .ddetail .card {
   border: 1px solid var(--gridline);
   border-radius: var(--r-lg);
   box-shadow: var(--shadow-md);
+  /* iOS Safari routes a touch-scroll to the nearest clipping ancestor: with the card
+     `overflow: visible` the drag falls through to `.ddetail` (which is `overflow: hidden`
+     and does not scroll) and the grid never moves. Clipping the card here makes
+     `.matrix-wrap` the ancestor iOS hands the gesture to. min-height:0 alone is not
+     enough on WebKit. */
+  overflow: hidden;
 }
 body.has-board .ddetail .card-head { flex: none; }
 body.has-board .matrix-wrap {
