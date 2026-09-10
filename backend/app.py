@@ -22,7 +22,8 @@ import config
 import filler
 from models import SearchRequest
 from providers.base import ProviderError
-from providers.google_flights import GoogleFlightsProvider, google_flights_url
+from providers import verifier as _verifier_provider
+from providers.google_flights import google_flights_url
 from providers.kiwi import proxy_status as kiwi_proxy_status
 from providers.travelpayouts import TravelpayoutsProvider
 
@@ -37,7 +38,7 @@ def _make_provider():
         return DemoProvider()
     return board.make_board_provider()
 
-_verifier = GoogleFlightsProvider()
+_verifier = _verifier_provider()
 _streams: dict[str, queue.Queue] = {}
 _cancelled: set[str] = set()
 _SENTINEL = object()
@@ -55,6 +56,7 @@ class SearchBody(BaseModel):
     max_price: float | None = None
     destination_filter: str = Field(default="", max_length=60)
     country_codes: list[str] = Field(default_factory=list, max_length=260)
+    destination_codes: list[str] = Field(default_factory=list, max_length=60)
     nights_min: int | None = Field(default=None, ge=0, le=60)
     nights_max: int | None = Field(default=None, ge=0, le=60)
     # Time-of-day windows as local hours. Search parameters, not display filters.
@@ -81,6 +83,7 @@ class SearchBody(BaseModel):
             max_price=self.max_price,
             destination_filter=self.destination_filter,
             country_codes=[c.strip().upper() for c in self.country_codes if c and c.strip()],
+            destination_codes=[c.strip().upper() for c in self.destination_codes if c and c.strip()],
             nights_min=self.nights_min,
             nights_max=self.nights_max,
             depart_hours=self._pair(self.depart_hour_from, self.depart_hour_to),
@@ -530,6 +533,12 @@ def airport(code: str) -> dict[str, Any]:
 def regions() -> dict[str, Any]:
     """The region tree for the destination filter: continent -> subregion -> countries."""
     return {"tree": airports.taxonomy()}
+
+
+@app.get("/api/places")
+def places(q: str = "") -> dict[str, Any]:
+    """Typeahead for the destination combobox: matching countries and scheduled-hub airports."""
+    return {"results": airports.search_places(q, limit=12)}
 
 
 @app.middleware("http")

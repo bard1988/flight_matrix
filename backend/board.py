@@ -15,7 +15,7 @@ import cache
 import config
 from models import Cell, DestinationMatrix, SearchRequest, parse_date
 from providers.base import NoItinerariesError, ProviderError
-from providers.google_flights import GoogleFlightsProvider
+from providers import verifier as _verifier_provider
 from providers.kiwi import KiwiProvider
 from providers.travelpayouts import TravelpayoutsProvider
 
@@ -66,6 +66,7 @@ def _seed_candidates(
     have: set[str],
     depart_dates: list[date],
     return_dates: list[date],
+    codes: list[str] | None = None,
 ) -> tuple[list[tuple[str, float]], int]:
     """Discovery top-up for a region filter the board provider under-served (idea.md #15A).
 
@@ -77,14 +78,21 @@ def _seed_candidates(
 
     Returns `([(code, party_total), ...] cheapest first, airports_probed)`.
     """
-    if config.SEED_SHORTLIST <= 0:
+    if config.SEED_SHORTLIST <= 0 and codes is None:
         return [], 0
     origin = request.origin.upper()
     dead = cache.unpriceable_destinations(
         origin, request.adults, request.children, request.currency)
+    # An explicit `codes` list (the typeahead's picked airports) is probed as given -- the
+    # user asked for these by name, so they are not subject to the shortlist cap or the
+    # "unpriceable" skip. Otherwise fall back to the region's best hubs, best-first
+    # (`airports.shortlist` already orders large before medium).
+    source = codes if codes is not None else airports.shortlist(
+        request.country_codes, config.SEED_SHORTLIST)
     shortlist = [
-        code for code in airports.shortlist(request.country_codes, config.SEED_SHORTLIST)
-        if code.upper() not in have and code.upper() != origin and code.upper() not in dead
+        code for code in source
+        if code.upper() != origin and (codes is not None or (
+            code.upper() not in have and code.upper() not in dead))
     ]
     if not shortlist:
         return [], 0
@@ -94,7 +102,7 @@ def _seed_candidates(
     ret = return_dates[min(len(return_dates) - 1, len(return_dates) // 2 + 7)]
     if ret <= depart:
         ret = return_dates[-1]
-    verifier = GoogleFlightsProvider()
+    verifier = _verifier_provider()
 
     def _probe(code: str) -> tuple[str, float] | None:
         # A single route failing the probe (not in Google's data, a throttle, a blip) must
@@ -109,8 +117,18 @@ def _seed_candidates(
         return (code.upper(), round(float(total), 2)) if total else None
 
     with ThreadPoolExecutor(max_workers=config.FILL_WORKERS) as pool:
-        found = [r for r in pool.map(_probe, shortlist) if r]
-    return sorted(found, key=lambda kv: kv[1]), len(shortlist)
+        results = list(pool.map(_probe, shortlist))
+    # Keep the shortlist's hub-priority order (Bangkok before Buri Ram), NOT price order:
+    # a country search should lead with that country's major airports, and the ranked list
+    # on the client re-sorts by fare anyway.
+    found = [r for r in results if r]
+    return found, len(shortlist)
+
+
+def _hub_rank(code: str) -> int:
+    """0 for a large international hub, 1 for a medium airport, 2 for anything else -- used
+    to lead a country-filtered board with its major airports rather than its cheapest."""
+    return {"large": 0, "medium": 1}.get(airports.describe(code).get("type"), 2)
 
 
 def destination_matches(needle: str, code: str, city: str, country: str) -> bool:
@@ -468,7 +486,13 @@ def build(
             yield emit({"type": "region_seeding"})
             seeded, probed = _seed_candidates(request, have, depart_dates, return_dates)
             if probed:
-                candidates = sorted(candidates + seeded, key=lambda kv: kv[1])
+                # Rank the region's board by airport importance first (Bangkok before
+                # Buri Ram), fare second -- a country search should lead with that
+                # country's real hubs. The client list re-sorts by fare regardless.
+                merged = {c.upper(): (c, p) for c, p in candidates}
+                for c, p in seeded:
+                    merged.setdefault(c.upper(), (c, p))
+                candidates = sorted(merged.values(), key=lambda cp: (_hub_rank(cp[0]), cp[1]))
                 yield emit({
                     "type": "region_seeded",
                     "probed": probed,
@@ -494,10 +518,40 @@ def build(
         })
         candidates = kept
 
+    # Typeahead picks: the exact airports the user chose. With a country filter too, these
+    # are added to the country matches; on their own, the board IS just these. Any the
+    # board provider did not surface are probed live so a picked airport always shows.
+    if request.destination_codes:
+        picked = {c.upper() for c in request.destination_codes}
+        if request.country_codes:
+            keep_codes = {c.upper() for c, _ in candidates} | picked
+            candidates = [(c, p) for c, p in candidates if c.upper() in keep_codes]
+        else:
+            candidates = [(c, p) for c, p in candidates if c.upper() in picked]
+        have = {c.upper() for c, _ in candidates}
+        missing = [c for c in picked if c not in have]
+        if missing:
+            yield emit({"type": "region_seeding"})
+            seeded, probed = _seed_candidates(request, have, depart_dates, return_dates, codes=missing)
+            seeded_codes = {c for c, _ in seeded}
+            # A picked airport the live probe could not price is still added -- the user
+            # asked for it by name. It sorts last (unknown seed price) and the normal board
+            # fill tries the board source; a truly unreachable route just gets an empty grid.
+            forced = [(c, 10 ** 9) for c in missing if c not in seeded_codes]
+            candidates = sorted(candidates + seeded + forced, key=lambda kv: kv[1])
+            yield emit({"type": "region_seeded", "probed": probed,
+                        "added": len(seeded) + len(forced), "matched": len(candidates)})
+
     # Cached coverage is thin, so many candidates come back with an empty grid. Try more
     # than asked for and stop once enough have actually filled.
     budget = max(request.max_destinations, int(request.max_destinations * config.CANDIDATE_MULTIPLIER))
-    candidates = candidates[:budget]
+    if request.destination_codes:
+        picked = {c.upper() for c in request.destination_codes}
+        head = [cp for cp in candidates if cp[0].upper() in picked]
+        rest = [cp for cp in candidates if cp[0].upper() not in picked]
+        candidates = head + rest[:max(0, budget - len(head))]
+    else:
+        candidates = candidates[:budget]
 
     yield emit(
         {

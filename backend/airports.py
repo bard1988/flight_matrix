@@ -83,12 +83,113 @@ def describe(code: str) -> dict[str, Any]:
     entry = load().get((code or "").upper())
     if not entry:
         return {"city": (code or "").upper(), "country": ""}
+    # A handful of rows carry an admin-district parenthetical in `city` ("Paris (Orly,
+    # Val-de-Marne)"); trim it for display. Copy so the cached table stays untouched.
+    city = (entry.get("city") or "")
+    if " (" in city:
+        entry = {**entry, "city": city.split(" (")[0].strip()}
     return entry
 
 
 # Best-hub-first ordinal for discovery seeding. A metro code (LON, NYC) has no `type`
 # and sorts with the mediums — it is still a fine thing to probe.
 _TIER_RANK = {"large": 0, "medium": 1, "small": 3}
+
+
+_hub_index: list[tuple[str, dict[str, Any]]] | None = None
+
+
+def _hubs() -> list[tuple[str, dict[str, Any]]]:
+    """Scheduled large/medium airports, code + entry, best hubs first. Cached."""
+    global _hub_index
+    if _hub_index is None:
+        rows = [
+            (code, e) for code, e in load().items()
+            if e.get("scheduled") and e.get("type") in ("large", "medium")
+        ]
+        rows.sort(key=lambda ce: (_TIER_RANK.get(ce[1].get("type"), 2), ce[1].get("city") or "", ce[0]))
+        _hub_index = rows
+    return _hub_index
+
+
+def _country_hub(cc: str) -> str | None:
+    """The busiest scheduled hub in a country, or None. `_hubs()` is already best-first."""
+    cc = (cc or "").upper()
+    for code, e in _hubs():
+        if (e.get("country") or "").upper() == cc:
+            return code
+    return None
+
+
+def _clean_city(entry: dict[str, Any]) -> str:
+    """City name without the admin-district parenthetical some rows carry ('Paris (Orly…')."""
+    return ((entry.get("city") or "").split(" (")[0]).strip()
+
+
+def _airport_label(entry: dict[str, Any]) -> str:
+    """The airport's own name minus the redundant city prefix, e.g. 'Suvarnabhumi'."""
+    name = (entry.get("name") or "").strip()
+    city = _clean_city(entry)
+    if city and name.lower().startswith(city.lower()) and len(name) > len(city):
+        name = name[len(city):].lstrip(" -–")
+    return name if name and name.lower() not in ("airport", "international airport") else (entry.get("name") or "")
+
+
+def search_places(query: str, limit: int = 12) -> list[dict[str, Any]]:
+    """Typeahead over countries and scheduled-hub airports for the destination combobox.
+
+    Ranks exact IATA codes first, then prefix matches, then substrings; a short query that
+    names a country surfaces the country row above its airports so you can pick the whole
+    place in one go.
+    """
+    q = (query or "").strip().lower()
+    if len(q) < 2:
+        return []
+    out: list[tuple[int, str, dict[str, Any]]] = []
+
+    for code, e in _country_table().items():
+        name = (e.get("name") or "")
+        nl = name.lower()
+        if e.get("continent") in ("", "Antarctic"):
+            continue
+        if q == code.lower():
+            rank = 0
+        elif nl.startswith(q):
+            rank = 1
+        elif q in nl:
+            rank = 4
+        else:
+            continue
+        out.append((rank, name, {
+            "kind": "country", "code": code.upper(), "label": name,
+            "sub": " · ".join(p for p in (e.get("continent"), e.get("subregion")) if p),
+            # The busiest hub in the country, so an origin combobox can resolve a country
+            # pick to a single departure airport.
+            "hub": _country_hub(code),
+        }))
+
+    for code, e in _hubs():
+        city = _clean_city(e)
+        name = (e.get("name") or "").strip()
+        cl, nl, cd = city.lower(), name.lower(), code.lower()
+        if q == cd:
+            rank = 0
+        elif cl.startswith(q) or nl.startswith(q):
+            rank = 2
+        elif q in cl or q in nl:
+            rank = 5
+        else:
+            continue
+        # A large hub outranks a medium one at the same match strength.
+        rank = rank * 2 + _TIER_RANK.get(e.get("type"), 2)
+        cc = (e.get("country") or "").upper()
+        out.append((rank, city or code, {
+            "kind": "airport", "code": code.upper(), "label": city or code,
+            "sub": " · ".join(p for p in (_airport_label(e), country_name(cc)) if p),
+        }))
+
+    out.sort(key=lambda r: (r[0], r[1]))
+    return [item for _, _, item in out[:limit]]
 
 
 def shortlist(country_codes: "Any", limit: int = 40, hubs_only: bool = True) -> list[str]:

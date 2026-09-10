@@ -91,7 +91,9 @@ def _quiet(monkeypatch, isolated_cache):
     monkeypatch.setattr(config, "KIWI_CACHE_HOURS", 0.0)
     monkeypatch.setattr(config, "ESTIMATE_FIRST", False)
     monkeypatch.setattr(config, "SEED_SHORTLIST", 40)
-    monkeypatch.setattr(board, "GoogleFlightsProvider", _FakeVerifier)
+    # board._seed_candidates builds its verifier through the providers.verifier factory
+    # (so demo mode gets the synthetic one). Swap the factory for the price-book double.
+    monkeypatch.setattr(board, "_verifier_provider", lambda: _FakeVerifier())
 
 
 def _events(req, provider):

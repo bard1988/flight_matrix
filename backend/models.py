@@ -53,6 +53,11 @@ class SearchRequest:
     # Empty = no restriction.
     country_codes: list[str] = field(default_factory=list)
 
+    # Explicit IATA destinations the user picked from the typeahead (a city or airport).
+    # Composed with country_codes as a union at discovery; any that discovery does not
+    # surface are probed live and folded in, so a picked airport always makes the board.
+    destination_codes: list[str] = field(default_factory=list)
+
     # The two date fields bound a PERIOD ("travel from" .. "travel until"); the trip is
     # nights_min..nights_max long, somewhere inside it. There is no longer a date_mode:
     # the old "anchors" mode (a +-window around each of two anchor dates) was retired when
