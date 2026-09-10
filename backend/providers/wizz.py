@@ -41,6 +41,13 @@ _ROUTES_CACHE = config.DATA_DIR / "wizz_routes.json"
 _META_TTL = 12 * 3600
 _ROUTES_TTL = 7 * 24 * 3600
 _CALL_SPACING = 4.0
+# Backoff before retrying a call Wizz rejected with InvalidProtocol (its rate-limit
+# signal). A cold board -- version scrape + map + timetable in a burst -- is the usual
+# trigger, and one longer pause clears it.
+_RETRY_BACKOFF = (7.0, 14.0)
+# Query the timetable a few days past the axis bounds so a flight sitting on the edge of
+# the window is still returned; cells are only built for pairs that fall inside it.
+_QUERY_PAD = timedelta(days=3)
 
 _UA = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
@@ -106,14 +113,25 @@ class WizzProvider:
             pass
         return version
 
-    def _post(self, path: str, body: dict[str, Any]) -> dict[str, Any]:
+    def _post(self, path: str, body: dict[str, Any], attempt: int = 0) -> dict[str, Any]:
         self._pace()
         try:
             r = self._client.post(f"{self._api()}/{path}", content=json.dumps(body))
         except httpx.HTTPError as exc:
             raise ProviderError(f"Wizz {path}: {exc}") from exc
         if r.status_code == 400 and "InvalidProtocol" in r.text:
+            if attempt < len(_RETRY_BACKOFF):
+                time.sleep(_RETRY_BACKOFF[attempt])
+                return self._post(path, body, attempt + 1)
             raise ProviderError("Wizz rate-limited this call (InvalidProtocol).")
+        if r.status_code == 404 and attempt == 0:
+            # A stale cached version string 404s every path -- re-scrape once and retry.
+            self._version = None
+            try:
+                _META_CACHE.unlink()
+            except OSError:
+                pass
+            return self._post(path, body, attempt + 1)
         if r.status_code != 200:
             raise ProviderError(f"Wizz {path}: HTTP {r.status_code} {r.text[:120]}")
         try:
@@ -237,8 +255,15 @@ class WizzProvider:
         if not self.serves(origin, dest):
             return matrix
 
-        out, back = self._timetable(origin, dest, depart_dates[0], depart_dates[-1],
-                                    return_dates[0], return_dates[-1])
+        # Query a few days past the axis so an edge flight is still returned; keep only the
+        # pairs that fall inside the period. Iterate Wizz's own priced days (a handful for
+        # a 2-3x/week route) rather than the dense axis -- same cells, and robust to an
+        # off-by-one in the axis bounds.
+        first_dep, last_dep = depart_dates[0], depart_dates[-1]
+        first_ret, last_ret = return_dates[0], return_dates[-1]
+        out, back = self._timetable(origin, dest,
+                                    first_dep - _QUERY_PAD, last_dep + _QUERY_PAD,
+                                    first_ret - _QUERY_PAD, last_ret + _QUERY_PAD)
         if not out or not back:
             return matrix
 
@@ -248,15 +273,14 @@ class WizzProvider:
         expires = (now + timedelta(hours=18)).isoformat()
         cur = request.currency.upper()
 
-        for dep in depart_dates:
-            di = dep.isoformat()
-            if di not in out:
+        for di, (out_amt, out_ccy) in sorted(out.items()):
+            dep = date.fromisoformat(di)
+            if not first_dep <= dep <= last_dep:
                 continue
-            for ret in return_dates:
-                ri = ret.isoformat()
-                if ri not in back or ret <= dep or (ret - dep).days not in span:
+            for ri, (back_amt, back_ccy) in sorted(back.items()):
+                ret = date.fromisoformat(ri)
+                if not first_ret <= ret <= last_ret or (ret - dep).days not in span:
                     continue
-                (out_amt, out_ccy), (back_amt, back_ccy) = out[di], back[ri]
                 pp = fx.convert(out_amt, out_ccy, cur) + fx.convert(back_amt, back_ccy, cur)
                 matrix.add(Cell(
                     depart_date=di,

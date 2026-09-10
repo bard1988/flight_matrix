@@ -46,6 +46,15 @@ const sourceName = (s) =>
     : s === 'wizz' ? 'Wizz Air'
     : s || 'the fare cache';
 
+/* A firm party price, or an extrapolation? Kiwi returns a real party total; Wizz's
+   per-person fare is an LCC price that scales linearly, so fare x party is firm too
+   (ancillaries aside, like any headline fare). Only Travelpayouts single-ticket fares
+   are the estimate. */
+const isFirmPrice = (cell) => cell.is_total || cell.source === 'wizz';
+const fareNote = (cell) => (cell.source === 'wizz' ? ' — Wizz fare, carry-on only' : '');
+/* Sort order for the table's Source column: verified, then Wizz's own fare, then estimate. */
+const srcRank = (cell) => (cell.verified ? 2 : cell.source === 'wizz' ? 1 : 0);
+
 /* One phrasing for stop counts everywhere: tooltip, table, panel. */
 const fmtStops = (n) =>
   n == null ? '' : n === 0 ? 'nonstop' : `${n} stop${n > 1 ? 's' : ''}`;
@@ -348,10 +357,10 @@ function tooltipFor(dest, cell) {
   const who = `${state.meta.adults} adults` + (state.meta.children ? ` + ${state.meta.children} children` : '');
   if (cell.total != null) {
     rows.push(`<b>${fmtMoney(cell.total, cur)}</b> verified on Google Flights`);
-  } else if (cell.is_total) {
-    // Kiwi returns a real party total for the requested passenger mix, so it is not an
-    // extrapolation and must not be labelled as one.
-    rows.push(`<b>${fmtMoney(cell.estimate, cur)}</b> total for ${who} <span class="muted">via ${sourceName(cell.source)}</span>`);
+  } else if (isFirmPrice(cell)) {
+    // Kiwi returns a real party total; a Wizz LCC fare scales linearly. Neither is an
+    // extrapolation, so neither is labelled as one.
+    rows.push(`<b>${fmtMoney(cell.estimate, cur)}</b> total for ${who} <span class="muted">via ${sourceName(cell.source)}${fareNote(cell)}</span>`);
   } else {
     rows.push(`<b>${fmtMoney(cell.estimate, cur)}</b> estimated total <span class="muted">(${fmtMoney(cell.unit_price, cur)} per ticket × party)</span>`);
   }
@@ -1186,8 +1195,10 @@ function renderTable(ordered) {
     { key: 'total', label: 'Total', num: true, cell: (r) => fmtMoney(r.value, cur),
       cmp: (a, b) => a.value - b.value },
     { key: 'source', label: 'Source',
-      cell: (r) => `<span class="tag${r.cell.verified ? ' live' : ''}">${r.cell.verified ? 'Live' : 'Est'}</span>`,
-      cmp: (a, b) => (a.cell.verified ? 1 : 0) - (b.cell.verified ? 1 : 0) },
+      cell: (r) => r.cell.verified ? '<span class="tag live">Live</span>'
+        : r.cell.source === 'wizz' ? '<span class="tag live">Wizz</span>'
+        : '<span class="tag">Est</span>',
+      cmp: (a, b) => srcRank(a.cell) - srcRank(b.cell) },
     { key: 'stops', label: 'Stops', cell: (r) => fmtStops(r.cell.transfers),
       cmp: (a, b) => (a.cell.transfers == null ? 9 : a.cell.transfers) - (b.cell.transfers == null ? 9 : b.cell.transfers) },
   ];
@@ -1400,7 +1411,7 @@ async function verifyCell(dest, cell) {
     if (data.error) console.debug('cross-check unavailable:', data.error);
     const boardPrice = cell.estimate != null
       ? `<div class="big">${fmtMoney(cell.estimate, cur)}</div>` +
-        `<div class="muted">${cell.is_total ? `total for ${who}` : 'estimated'}, from ${sourceName(cell.source)}</div>`
+        `<div class="muted">${isFirmPrice(cell) ? `total for ${who}` : 'estimated'}, from ${sourceName(cell.source)}${fareNote(cell)}</div>`
       : '';
     const links = [];
     if (cell.link) {
@@ -1409,9 +1420,11 @@ async function verifyCell(dest, cell) {
     if (data.link) {
       links.push(`<a href="${data.link}" target="_blank" rel="noopener">Open on Google Flights</a>`);
     }
-    const explain = cell.estimate != null
-      ? `Couldn't verify this fare live. Not every route is in Google Flights. The price above is the board's ${cell.is_total ? 'total' : 'estimate'}; the booking links below are live.`
-      : `Google Flights has no fare for this exact date pair. If the booking source found one it is shown below and the cell is now filled with it; otherwise try a nearby cell.`;
+    const explain = cell.source === 'wizz'
+      ? `Wizz Air doesn't sell through Google Flights. The price above is Wizz's own fare for these exact dates (lowest fare, one carry-on, per traveller × your party); book it on the Wizz link below.`
+      : cell.estimate != null
+        ? `Couldn't verify this fare live. Not every route is in Google Flights. The price above is the board's ${isFirmPrice(cell) ? 'total' : 'estimate'}; the booking links below are live.`
+        : `Google Flights has no fare for this exact date pair. If the booking source found one it is shown below and the cell is now filled with it; otherwise try a nearby cell.`;
     openPanel(
       `<h3>${dest.city} (${dest.destination})</h3>` +
         `<div class="muted">${weekday(cell.depart)} ${shortDate(cell.depart)} &rarr; ${weekday(cell.ret)} ${shortDate(cell.ret)}</div>` +
