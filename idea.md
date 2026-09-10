@@ -20,10 +20,10 @@ Things worth doing, not yet scheduled.
 | 7.3 | — cell-detail panel: the ✕ close is mispositioned (far right); reconsider full-screen panel on mobile | S | todo |
 | 10 | **Show the airport's city** wherever only the IATA code appears | S | **backend done** (2026-09-07: `describe()` resolves airport→city via `city_code`); panel-leg display todo |
 | 8 | **Design pass** — use the `design` skill / a proper design system | L | in progress |
-| 15 | **Discovery coverage — the whole world, not just short-haul** — Kiwi's `returnOnePerCityItineraries` for TLV returns ~160 nearby cities and nothing long-haul (no sub-Saharan Africa, thin on Asia / S. America), so "To: Africa" yields only Marrakesh. Plan of record in **Lever 3**. **15.0 + 15A shipped** (2026-09-10). Remaining: **15.1** (Egypt classification, S) and **15C** (Google price-graph board), gated on a spike. | L | in progress (15.0 + 15A done) |
+| 15 | **Discovery coverage — the whole world, not just short-haul** — Kiwi's `returnOnePerCityItineraries` for TLV returns ~160 nearby cities and nothing long-haul (no sub-Saharan Africa, thin on Asia / S. America), so "To: Africa" yields only Marrakesh. Plan of record in **Lever 3**. **15.0 + 15A + 15.1 shipped** (2026-09-10) — the coverage gap that opened this item is closed. **15C** (Google price-graph board) is the only remaining sub-item and is **deferred** (see Lever 3). | L | **done for coverage** (15.0 + 15A + 15.1); 15C deferred |
 | 15.0 | **OurAirports data** — replace the Travelpayouts airport dump with OurAirports (`type`, `scheduled_service`, lat/long, country). Prerequisite for 15A, 15C and #9.1. `data/build_airports.py`, same pattern as `build_countries.py`. | S–M | **done** (2026-09-10, 7fe50c9: `data/build_airports.py` merges OurAirports + Travelpayouts metro codes → `data/airports.v3.json`; `backend/airports.py` reads v3) |
 | 15A | **Seed discovery from the curated list** — when a region/destination filter is set and the live board returns few/none inside it, run our own discovery: OurAirports region universe → shortlist by `type`/scheduled_service → **cheap per-airport price probe** to find what actually flies from the origin → fill the survivors cheapest-first via the existing `fill_matrix`. Stepping stone to 15C. | M | **done** (2026-09-10: `_seed_candidates` in `board.py`, probes with Google Flights (71ffb16) not the TP cache, honours the nights range (6b65257), a failed probe skips that airport (ef15eba); emits `region_seeding` / `region_seeded`) |
-| 15C | **Google price-graph board provider** (was "Lever 1") — promote `google_flights.py` to a first-class board provider with `discover()` + `fill_matrix()` via the keyless price-graph RPC. Google isn't IP-blocking the VM and returns real party totals (2026-09-07 spike). **Blocked:** the batched call needs the `SNlM0e` XSRF token Google withholds from anonymous clients; point-query fallback measured ~15–20 min/20 dests. Needs a spike before committing. Endgame, not near-term. | L | spike |
+| 15C | **Google price-graph board provider** (was "Lever 1") — promote `google_flights.py` to a first-class board provider with `discover()` + `fill_matrix()` via the keyless price-graph RPC. Google isn't IP-blocking the VM and returns real party totals (2026-09-07 spike). **Blocked:** the batched call needs the `SNlM0e` XSRF token Google withholds from anonymous clients; point-query fallback measured ~15–20 min/20 dests. Needs a spike before committing. Endgame, not near-term. | L | spike — **deferred 2026-09-10** (coverage gap closed by 15.0/15A/15.1; revisit on latency complaints or a wider launch — see Lever 3) |
 | 15.1 | — Egypt (Sharm, Hurghada, Cairo) is classified `Asia / Middle East` in `data/build_countries.py`, so the **Africa** filter excludes the one well-connected part of Africa from TLV. Decide: move Egypt to `Africa / Northern Africa`, or surface it under both. | S | todo |
 
 ### Notes on specific items
@@ -269,6 +269,21 @@ board provider that can `discover()` and `fill_matrix()`, selected with
 **Because of that blocker: 15.0 + 15A are the committed near-term work** (they fix the
 reported bug on the providers we already have). 15C stays the intended endgame but is
 gated on its own spike.
+
+**Deferred — reviewed 2026-09-10.** 15.0 + 15A + 15.1 are shipped and the coverage gap
+that opened #15 is closed. What 15C would still buy is a *faster, real-totals* primary
+board — an upgrade to plumbing that already works, not a missing capability. Against that:
+the spike is a coin-flip (a plausible outcome is "the token-mint GET is CAPTCHA'd from the
+Oracle datacenter IP → dead without a residential proxy"), and a win puts a
+reverse-engineered Google surface on the critical path with the same break-on-Google's-
+schedule fragility as the HTML parser. With ~no traffic and no latency complaints, the
+small certain UX wins (#10, #7.x, #1, #6) are the better use of time.
+
+Revisit when either (a) board latency becomes a real complaint from real users, or
+(b) a wider launch is being prepped and the "real totals, not optimistic estimates"
+accuracy story needs to be tight. Cheap hedge available first: timebox **just the
+token-mint-from-the-VM** to ~2h — whether the datacenter IP gets CAPTCHA'd is the whole
+ballgame and permanently informs the call.
 
 **Parked:** Google Travel Explore / SerpApi as a discovery source. Revisit only if 15A's
 curated seeding proves too coarse in practice.
