@@ -26,3 +26,13 @@ graphify-out/.graphify_chunk_*.json
 
 # impeccable per-run hook cache
 .impeccable/hook.cache.json
+graphify-out/.graphify_analysis.json
+graphify-out/.graphify_ast.json
+graphify-out/.graphify_detect.json
+graphify-out/.graphify_extract.json
+graphify-out/.graphify_incremental.json
+graphify-out/.graphify_old.json
+graphify-out/.graphify_semantic.json
+graphify-out/cache/last_query_stamp
+graphify-out/cache/ast/
+graphify-out/cache/semantic/
