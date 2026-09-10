@@ -39,9 +39,12 @@ const FX_FALLBACK = { eur: 1, usd: 1.16, gbp: 0.86, ils: 3.5 };
 
 const $ = (id) => document.getElementById(id);
 
-/* Board data comes from one of two aggregators; show their consumer-facing names. */
+/* Board data comes from an aggregator or, for its own routes, direct from Wizz Air. */
 const sourceName = (s) =>
-  s === 'kiwi' ? 'Kiwi.com' : s === 'travelpayouts' ? 'Aviasales' : s || 'the fare cache';
+  s === 'kiwi' ? 'Kiwi.com'
+    : s === 'travelpayouts' ? 'Aviasales'
+    : s === 'wizz' ? 'Wizz Air'
+    : s || 'the fare cache';
 
 /* One phrasing for stop counts everywhere: tooltip, table, panel. */
 const fmtStops = (n) =>

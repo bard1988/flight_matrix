@@ -72,6 +72,18 @@ def clear_kiwi_block():
     kiwi.clear_block()
 
 
+@pytest.fixture(autouse=True)
+def no_wizz(monkeypatch):
+    """Wizz is a live HTTP source (rule 1: no network). Off by default; the Wizz tests
+    re-enable it with a stub. Also drop any singleton a prior test may have built."""
+    import config
+    import board
+    monkeypatch.setattr(config, "WIZZ_ENABLED", False)
+    board._wizz_singleton = None
+    yield
+    board._wizz_singleton = None
+
+
 def make_cell(depart: str, ret: str, price: float = 1000.0, *,
               source: str = "kiwi", is_total: bool = True, **kw) -> Cell:
     return Cell(depart_date=depart, return_date=ret, price=price,

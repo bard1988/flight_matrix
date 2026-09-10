@@ -37,3 +37,6 @@ graphify-out/cache/last_query_stamp
 graphify-out/cache/ast/
 graphify-out/cache/semantic/
 /scratchpad-*
+data/wizz_meta.json
+data/wizz_routes.json
+data/fx.json

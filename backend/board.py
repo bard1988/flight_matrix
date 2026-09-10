@@ -27,6 +27,21 @@ def make_board_provider():
     return KiwiProvider()
 
 
+_wizz_singleton: Any = None
+
+
+def _wizz() -> Any:
+    """Lazy shared WizzProvider, or None when disabled. Wizz is a direct-carrier calendar
+    layered on for its own routes -- the aggregators thin out for small routes far out."""
+    global _wizz_singleton
+    if not config.WIZZ_ENABLED:
+        return None
+    if _wizz_singleton is None:
+        from providers.wizz import WizzProvider
+        _wizz_singleton = WizzProvider()
+    return _wizz_singleton
+
+
 def _base_provider(live: Any):
     """The source that paints the board first.
 
@@ -468,6 +483,23 @@ def build(
             yield emit({"type": "error", "message": str(exc2)})
             return
 
+    # Wizz Air, layered onto discovery for the routes it flies from this origin. The
+    # aggregators share one GDS+NDC+LCC pool that thins out for small routes booked far
+    # ahead (a TLV -> Iasi trip 7 months out came back empty from all of them while Wizz
+    # was selling it); its route map adds those destinations here and `fill_matrix` prices
+    # them below. Priced at the median of the real candidates so they neither lead the
+    # board nor get cut before their grid fills and re-ranks them.
+    wizz = _wizz()
+    if wizz is not None and wizz.routes(request.origin):
+        have = {code.upper() for code, _ in candidates}
+        prices = sorted(p for _, p in candidates if p and p < 10 ** 8)
+        placeholder = prices[len(prices) // 2] if prices else 1.0
+        added = [(code, placeholder) for code in wizz.routes(request.origin)
+                 if code.upper() not in have and code.upper() != request.origin.upper()]
+        if added:
+            candidates = candidates + added
+            yield emit({"type": "wizz_routes", "added": len(added)})
+
     # Region tree: restrict to the selected countries, at discovery so the budget is spent
     # inside the selection (like destination_filter). Both filters compose.
     if request.country_codes:
@@ -603,6 +635,7 @@ def build(
 
     filled = 0
     empty = 0
+    wizz_fills = 0       # grids filled from Wizz's calendar because the aggregator had none
     failovers = 0        # destinations that fell back to the cached source mid-board
     real_totals = 0      # destinations filled with genuine party totals (not estimates)
     for index, (destination, _seed_price) in enumerate(candidates):
@@ -706,6 +739,21 @@ def build(
                     yield emit({"type": "destination_error", "destination": destination,
                                 "message": str(exc2)})
                     continue
+
+        # The aggregator has nothing for this route (or nothing at the asked trip length).
+        # If Wizz flies it, fill the grid from Wizz's own booking calendar instead.
+        if (matrix is None or not matrix.cells) and wizz is not None \
+                and wizz_fills < config.WIZZ_FILL_CAP and wizz.serves(request.origin, destination):
+            try:
+                wizz_matrix = wizz.fill_matrix(request, destination, depart_dates, return_dates)
+            except ProviderError as exc:
+                wizz_matrix = None
+                yield emit({"type": "provider_status", "message": f"Wizz Air: {exc}"})
+            wizz_fills += 1
+            if wizz_matrix is not None and wizz_matrix.cells:
+                matrix = wizz_matrix
+                yield emit({"type": "wizz_fill", "destination": destination,
+                            "cells": len(wizz_matrix.cells)})
 
         if matrix is None:
             yield emit({"type": "destination_error", "destination": destination,

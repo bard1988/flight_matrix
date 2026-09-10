@@ -441,7 +441,7 @@ All investigated with live probes. Kiwi won (see above); the rest are unusable h
 | Source | Free? | Obtainable? | Verdict |
 |---|---|---|---|
 | **Ryanair** `farfnd` | Yes, keyless | Yes | **API is perfect** — cheapest round trips to every destination over a date range, one call. But Ryanair serves **zero Israeli airports** (224 active, none in IL). Useless from TLV. |
-| **Wizz Air** | Yes, keyless | No | Dominant LCC at TLV, but `metadata.json` is gone and the versioned API path has moved. Would mean reverse-engineering a SPA bundle they actively relocate. |
+| **Wizz Air** | Yes, keyless | **Yes — now wired in** | Dominant LCC at TLV. `metadata.json` is gone but the version string is scrapable from the homepage bundle and cached. See below. |
 | **Skyscanner** | Free for partners | No | Commercial partner application, reviewed case-by-case. No self-service key. |
 | **Kiwi Tequila** | — | No | Invite-only partner program since 2026; self-serve signup closed. |
 | **Amadeus** | — | No | Self-service tier shut down July 2026. |
@@ -464,16 +464,19 @@ Also investigated, with a live probe each (`data/probe_il_carriers.py`, `probe_w
 | Arkia | No | Cloudflare bot challenge ("Just a moment...") on every path, including the homepage. |
 | Israir | No | Homepage is a site-builder template; the only `/api/*` routes are CMS config, not flights. |
 
-**Wizz works but is deliberately not wired in as a price source.** Its timetable returns a
-**per-person lowest fare that ignores passenger counts** — so using it would reintroduce
-exactly the ×5 extrapolation error that Fill live eliminates, on routes where we already
-have true 5-passenger prices from Google. It also rejects repeated calls with
-`{"handlerError":"InvalidProtocol"}` and its version string moves.
+**Wizz is now wired in** (`backend/providers/wizz.py`), after a TLV→Iași trip seven months
+out came back empty from Kiwi, Travelpayouts *and* Google while Wizz's own site was selling
+it. The earlier "the aggregator already has the carriers" reasoning holds only where the
+aggregator has *itineraries*; for small routes booked far ahead the shared GDS/NDC/LCC pool
+simply doesn't, and Wizz's own calendar does.
 
-The empirical check that settles it: Google's own response for TLV-LON lists **33 carriers
-including El Al (LY) and Arkia (IZ)**, and our filled cells already return Wizz Air, Israir
-and SKY express as cheapest-per-cell winners. The aggregator has the carriers; what we were
-missing was itineraries, and that was our parser (below), not the source.
+How it's used: `asset/map` feeds discovery (its ~29 TLV destinations join the candidate
+list), and `search/timetable` fills a grid — both legs in one POST — when the aggregator
+returns nothing for a route Wizz flies (`FM_WIZZ`, `FM_WIZZ_FILL_CAP`). The known caveats
+are handled: the version string is scraped and cached; the per-person fare is left
+`is_total=False` so it gets the same party scaling every non-total source gets, and
+converted to the board currency (`backend/fx.py`); repeat calls are paced ~4s apart.
+Cells are tagged `source: "wizz"` and deep-link to wizzair.com.
 
 ## Configuration
 

@@ -157,7 +157,7 @@ miss or misprice. For TLV every candidate is already blocked:
 
 | Carrier | TLV? | API | Verdict |
 |---|---|---|---|
-| Wizz Air | yes | works, but **per-person fares only**, moving version string, `InvalidProtocol` on repeat | reintroduces the ×N family error; Google fill already returns Wizz as cheapest-cell winner |
+| Wizz Air | yes | works: version scraped+cached, per-person fare scaled like any non-total source, calls paced | **wired in** (`providers/wizz.py`) — the aggregators share one pool that thins for small routes far out (TLV→Iași 7mo empty everywhere, Wizz selling it); its map feeds discovery, `timetable` fills the gap |
 | El Al / Arkia / Israir | yes | none usable (WAF / Cloudflare / CMS-only) | dead |
 | Ryanair | no | keyless (`ryanair-py`) | zero Israeli airports |
 | Transavia | via AMS/ORY | had an open API, now partner-login gated | no longer self-serve |
