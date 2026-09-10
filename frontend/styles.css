@@ -1295,7 +1295,6 @@ body.has-board .ddetail {
   flex-direction: column;
   padding: 14px max(14px, calc((100vw - 1100px) / 2)) 24px;
 }
-body.has-board .tableview { padding: 0 0 14px; }
 body.has-board .tableview th:first-child,
 body.has-board .tableview td:first-child { padding-left: 18px; }
 body.has-board .tableview th:last-child,
@@ -1348,22 +1347,54 @@ body:not(.detail-open) .lrow.is-sel {
   border-color: var(--gridline);
 }
 
-/* The grid (or the table) is a full-window layer, shown only for the picked destination. */
+/* The grid (or the table) is a full-window layer, shown only for the picked destination.
+   Pinned to the DYNAMIC viewport height, not `inset: 0` -- on a phone `bottom: 0` sits at
+   the large-viewport edge, i.e. behind the URL bar, so the grid's last rows hide under
+   browser chrome and the first scroll gesture toggles that chrome instead of moving the
+   grid. `100dvh` tracks the visible area, so the inner scroller gets the whole gesture. */
 .ddetail,
 .tableview {
   display: none;
   position: fixed;
-  inset: 0;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100vh;
+  height: 100dvh;
   z-index: 60;
   min-width: 0;
   min-height: 0;
   background: var(--page);
-  overflow-y: auto;
   scrollbar-width: thin;
 }
-body.detail-open:not(.show-table) .ddetail { display: flex; }
-body.detail-open.show-table .tableview { display: block; padding: 14px 16px 28px; }
-body.detail-open.show-table .tableview .table-back { margin-bottom: 10px; }
+/* The layer itself never scrolls; the card's matrix-wrap is the one scroll viewport. */
+body.detail-open:not(.show-table) .ddetail { display: flex; overflow: hidden; }
+/* The table layer scrolls as a block, with its back control pinned (below). */
+body.detail-open.show-table .tableview {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding: 0;
+}
+
+/* A pinned bar for the "‹ Board" control so it stays reachable however far you scroll the
+   table -- the whole point of the layer is to get back to the grid. */
+.tableview .table-bar {
+  flex: none;
+  display: flex;
+  align-items: center;
+  padding: 12px max(14px, calc((100vw - 1100px) / 2));
+  border-bottom: 1px solid var(--gridline);
+  background: var(--page);
+}
+.tableview .table-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  padding: 0 max(0px, calc((100vw - 1100px) / 2)) 40px;
+}
 
 /* Both list-fold controls are meaningless in this flow. */
 #listtoggle { display: none; }
@@ -1444,7 +1475,7 @@ body.detail-open.show-table .tableview .table-back { margin-bottom: 10px; }
    up unconditionally in the "list → focus grid" block above; there is no phone/desktop
    split here any more. Narrow screens only tighten the layer's own padding. */
 @media (max-width: 720px) {
-  body.has-board .ddetail { padding: 10px 12px 32px; }
+  body.has-board .ddetail { padding: 10px 12px 12px; }
 }
 
 /* The grid is its own scroll viewport in both axes, sized independently of the grid, so
@@ -1452,6 +1483,7 @@ body.detail-open.show-table .tableview .table-back { margin-bottom: 10px; }
    Scrolling past an edge asks the backend for a wider window. Axes stay pinned. */
 .matrix-wrap {
   overflow: auto;
+  -webkit-overflow-scrolling: touch;
   /* Show about five return dates and scroll the rest: the cells are large now, so a
      handful fill the pane and the widened window scrolls with the axes pinned. */
   max-height: min(62vh, 460px);
@@ -2183,9 +2215,10 @@ body.detail-open.show-table .ddetail { display: none; }
   body.has-board #constraintnote:not(.warn) { display: none; }
   body.has-board .status { padding: 2px 12px; gap: 2px; }
 
-  /* The table can be wider than a phone; let it scroll sideways rather than crush the
-     date columns. It already scrolls vertically inside its full-screen layer. */
-  body.has-board .tableview { overflow: auto; }
+  /* The table can be wider than a phone; the scroll region takes it in both axes rather
+     than crush the date columns. */
+  .tableview .table-bar,
+  .tableview .table-scroll { padding-left: 14px; padding-right: 14px; }
   .tableview table { min-width: 520px; }
 
   /* Side panel becomes a full-screen sheet; touch has no hover so the tooltip is dead
@@ -2256,16 +2289,9 @@ body.detail-open.show-table .ddetail { display: none; }
   .dow button { min-height: 44px; }
 }
 
-/* The table's own way out. Like .detail-back it is phone-only: on desktop the table sits
-   in the grid pane with the toolbar toggle above it, never covered. */
-.table-back { margin: 0 0 8px; }
-
-@media (max-width: 860px) {
-  .table-back { display: inline-flex; }
-  /* The table layer is fixed and full-bleed, so its back control needs the padding the
-     layer itself does not have. */
-  body.show-table .tableview { padding: 10px 14px 40px; }
-}
+/* The table's way back to the grid. It lives in the pinned .table-bar now, so it stays
+   put however far the table scrolls. */
+.table-back { display: inline-flex; margin: 0; }
 
 /* Board-tools controls are the densest chrome on the page and sat well under the touch
    minimum: the Per person checkbox measured 13x13 and the currency select 20px tall,

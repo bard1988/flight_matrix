@@ -1228,9 +1228,11 @@ function renderTable(ordered) {
     .join('');
 
   host.innerHTML =
+    '<div class="table-bar"></div>' +
+    '<div class="table-scroll">' +
     `<table><caption class="sr-only">Every priced date pair, ${rows.length} rows${rows.length > 800 ? ' (showing 800)' : ''}. Click a column heading to sort, or a row for its flight details.</caption>` +
-    `<thead><tr>${head}</tr></thead><tbody>${body}</tbody></table>`;
-  host.prepend(tableBack());
+    `<thead><tr>${head}</tr></thead><tbody>${body}</tbody></table></div>`;
+  host.querySelector('.table-bar').appendChild(tableBack());
 }
 
 /** Open the detail panel for the row the event landed on, if any. */
