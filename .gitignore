@@ -36,3 +36,4 @@ graphify-out/.graphify_semantic.json
 graphify-out/cache/last_query_stamp
 graphify-out/cache/ast/
 graphify-out/cache/semantic/
+/scratchpad-*
