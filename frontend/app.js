@@ -30,7 +30,15 @@ const state = {
   // `${dest}|${depart}|${ret}` keys for cells with a live price fetch in flight, so the
   // grid can show them mid-load. Survives the wholesale repaint: buildMatrix reads it.
   pendingCells: new Set(),
+  // Multi view: one combined grid, several destinations stacked in every cell. Until the
+  // user adds / removes / hides one (`touched`), `dests` tracks the three cheapest as the
+  // board settles; after that it is frozen to their picks (dead codes still pruned).
+  // `hidden` is temporarily-off; `axes` overrides meta's window after a Multi widen;
+  // `density` sticks once the user picks Stacked/Strip (null = follow the screen).
+  multi: { on: false, dests: [], hidden: new Set(), touched: false, axes: null, density: null },
 };
+
+const MULTI_CAP = 6;
 
 const cellKey = (dest, depart, ret) => `${dest}|${depart}|${ret}`;
 
@@ -106,6 +114,10 @@ function boardToUrl() {
   if ($('autoverify').checked) p.set('verify', '1');   // off by default, opt in explicitly
   if (state.regions.size) p.set('r', [...state.regions].join(','));
   if (state.places.size) p.set('p', [...state.places].join(','));
+  if (state.multi.on) {
+    p.set('view', 'multi');
+    if (state.multi.dests.length) p.set('multi', state.multi.dests.join(','));
+  }
   const qs = p.toString();
   history.replaceState(null, '', qs ? '?' + qs : location.pathname);
 }
@@ -132,6 +144,15 @@ function boardFromUrl(params) {
     }
     seen.add('p');
     hydratePlaceNames();
+  }
+  if (params.get('view') === 'multi') {
+    state.multi.on = true;
+    seen.add('view');
+    if (params.has('multi')) {
+      state.multi.dests = params.get('multi').split(',').map((c) => c.trim().toUpperCase()).filter(Boolean);
+      state.multi.touched = true;   // an explicit list is the user's, not the default top-3
+      seen.add('multi');
+    }
   }
   // Mirror the shared controls onto their Options-panel twins and into state.
   $('currencyopt').value = $('currency').value;
@@ -518,6 +539,22 @@ function render() {
   }
 
   syncCountryFilter(ordered);
+
+  // Multi view takes over the whole board area: one combined grid instead of the ranked
+  // list + focus layer. Everything above here (allowed cells, globalBest, the country
+  // filter, the constraint note) is shared; the list / detail / table build below is not.
+  document.body.classList.toggle('show-multi', state.multi.on);
+  if (state.multi.on) {
+    multiDests(ordered);   // seed / prune synchronously so boardToUrl sees the real list
+    $('boardtools').hidden = state.destinations.size === 0;
+    $('footnote').hidden = ordered.length === 0;
+    document.body.classList.toggle('has-board', ordered.length > 0);
+    $('legend').hidden = true;
+    state.lastOrdered = ordered;
+    scheduleMulti();
+    return;
+  }
+
   syncSelection(ordered);
   const selDest = ordered.find((d) => d.destination === state.selected) || null;
 
@@ -593,6 +630,303 @@ function render() {
   // explaining a ramp with nothing on screen using it.
   $('legend').hidden = !gridOnScreen;
 }
+
+/* ============================================================== Multi view ===
+
+   One combined departure x return grid instead of a card per destination. Every cell
+   stacks the chosen destinations' prices; each destination is shaded against ITS OWN
+   cheapest->dearest (`scaleDomain` per destination, exactly like a Single card), so a
+   row that is dear in absolute money still shows which weeks it dips. The numbers side
+   by side are the cross-destination comparison; the colour is the timing. */
+
+const FM_PLANE =
+  '<svg viewBox="12 8 24 24" aria-hidden="true" focusable="false"><path fill="currentColor" ' +
+  'd="M 35.30 8.70 C 35.90 9.62 34.69 11.74 33.32 13.42 L 29.82 17.22 L 33.17 28.47 ' +
+  'Q 33.32 29.84 31.80 29.53 L 25.26 22.39 L 20.09 26.95 L 20.25 31.36 Q 20.25 32.27 ' +
+  '19.03 31.66 L 15.53 28.47 L 12.34 24.97 Q 11.73 23.75 12.64 23.75 L 17.05 23.91 ' +
+  'L 21.61 18.74 L 14.47 12.20 Q 14.16 10.68 15.53 10.83 L 26.78 14.18 L 30.58 10.68 ' +
+  'C 32.26 9.31 34.38 8.10 35.30 8.70 Z"/></svg>';
+
+let multiWidening = false;
+
+function multiAxes() {
+  return state.multi.axes || { departs: state.meta.depart_dates, returns: state.meta.return_dates };
+}
+
+/** The destinations in the combined grid. Until the user touches the set it tracks the
+ *  three cheapest (so it fills in as the board streams). Once touched it is their list,
+ *  minus any code no longer on the board -- and if that leaves nothing (a shared link
+ *  whose destinations this board does not have), it reverts to tracking the top three. */
+function multiDests(ordered) {
+  const live = new Set(ordered.map((d) => d.destination));
+  if (state.multi.touched) {
+    const kept = state.multi.dests.filter((c) => live.has(c));
+    if (kept.length) state.multi.dests = kept;
+    else state.multi.touched = false;
+  }
+  if (!state.multi.touched) {
+    state.multi.dests = ordered.slice(0, 3).map((d) => d.destination);
+  }
+  for (const c of [...state.multi.hidden]) if (!state.multi.dests.includes(c)) state.multi.hidden.delete(c);
+  return state.multi.dests;
+}
+
+/* The combined grid is ~1000 elements to build; a streaming search fires render() many
+   times a second, so coalesce the rebuilds -- a burst of stream events within one window
+   collapses to a single build, and it flushes as soon as the stream pauses. setTimeout,
+   not rAF: rAF is throttled to zero in a backgrounded / occluded tab and the grid would
+   never appear. */
+let multiTimer = 0;
+function scheduleMulti() {
+  clearTimeout(multiTimer);
+  multiTimer = setTimeout(() => { if (state.multi.on) renderMulti(state.lastOrdered || []); }, 50);
+}
+
+function renderMulti(ordered) {
+  const dests = multiDests(ordered);
+  const byCode = new Map(ordered.map((d) => [d.destination, d]));
+  const shown = dests.filter((c) => !state.multi.hidden.has(c)).map((c) => byCode.get(c)).filter(Boolean);
+
+  renderMultiChips(ordered, dests, shown.length);
+
+  const grid = $('multigrid');
+  if (!shown.length || !state.meta) { grid.replaceChildren(); return; }
+
+  const domains = new Map(shown.map((d) => [d.destination, scaleDomain(d.allowed)]));
+  const maps = new Map(shown.map((d) => [d.destination, new Map(d.cells.map((c) => [c.depart + '|' + c.ret, c]))]));
+  const { departs, returns } = multiAxes();
+  const nightsSpan = state.meta.nights_span || null;
+
+  let html = '<thead><tr><th class="corner" title="rows are return dates, columns are departure dates">ret ↓ dep →</th>';
+  for (let c = 0; c < departs.length; c += 1) {
+    const d = departs[c];
+    html += `<th class="col${isWeekend(d) ? ' weekend' : ''}" scope="col">${weekday(d)}<span class="ax-date">${shortDate(d)}</span></th>`;
+  }
+  html += '</tr></thead><tbody>';
+
+  for (let r = 0; r < returns.length; r += 1) {
+    const ret = returns[r];
+    html += `<tr><th class="row${isWeekend(ret) ? ' weekend' : ''}" scope="row">${weekday(ret)}<span class="ax-date">${shortDate(ret)}</span></th>`;
+    for (let c = 0; c < departs.length; c += 1) {
+      const dep = departs[c];
+      if (ret < dep) { html += '<td class="void"></td>'; continue; }
+      const nights = Math.round((new Date(ret) - new Date(dep)) / 86400000);
+      let cheapCode = null, cheapVal = Infinity;
+      for (const d of shown) {
+        const cell = maps.get(d.destination).get(dep + '|' + ret);
+        const v = cell ? cellValue(cell) : null;
+        if (v != null && v < cheapVal) { cheapVal = v; cheapCode = d.destination; }
+      }
+      let subs = '';
+      for (const d of shown) {
+        const code = d.destination;
+        const cell = maps.get(code).get(dep + '|' + ret);
+        const loading = state.pendingCells.has(cellKey(code, dep, ret)) ? ' loading' : '';
+        const attrs = ` data-dest="${code}" data-dep="${dep}" data-ret="${ret}" data-nights="${nights}" role="button" tabindex="-1"`;
+        if (!cell) {
+          const outside = nightsSpan && !nightsSpan.includes(nights);
+          subs += `<span class="msub ${outside ? 'mnotasked' : 'mnodata'}${loading}"${attrs}><span class="mc">${code}</span><span class="mp">–</span></span>`;
+          continue;
+        }
+        const value = cellValue(cell);
+        const idx = rampIndex(value, domains.get(code));
+        const cls = ['msub', idx === null ? 'unscaled' : 'q' + idx];
+        if (!(cellAllowed(cell) || cell.verified)) cls.push('mexcluded');
+        if (cell.verified) cls.push('mverified');
+        if (loading) cls.push('loading');
+        if (d.shownBest && cell.depart === d.shownBest.depart && cell.ret === d.shownBest.ret) cls.push('mbest');
+        else if (code === cheapCode && shown.length > 1) cls.push('mwin');
+        const wedge = cell.transfers > 0 ? `<span class="stopdot${cell.transfers > 1 ? ' many' : ''}"></span>` : '';
+        const stale = cell.stale ? '<span class="staledot"></span>' : '';
+        subs += `<span class="${cls.join(' ')}"${attrs}><span class="mc">${code}</span><span class="mp">${fmtCell(value)}</span>${wedge}${stale}</span>`;
+      }
+      html += `<td class="mcell"><span class="mstack">${subs}</span></td>`;
+    }
+    html += '</tr>';
+  }
+  grid.innerHTML = html + '</tbody>';
+  wireMultiGrid();
+}
+
+function wireMultiGrid() {
+  const grid = $('multigrid');
+  grid.onclick = (e) => {
+    const sub = e.target.closest('.msub');
+    if (!sub) return;
+    const dest = state.destinations.get(sub.dataset.dest);
+    if (!dest) return;
+    const dep = sub.dataset.dep, ret = sub.dataset.ret;
+    const cell = (dest.cells || []).find((x) => x.depart === dep && x.ret === ret)
+      || { depart: dep, ret, nights: Number(sub.dataset.nights) || 0 };
+    verifyCell(dest, cell);
+  };
+  const subs = [...grid.querySelectorAll('.msub')];
+  let dimmedFor = null;
+  const undim = () => { if (dimmedFor !== null) { subs.forEach((s) => s.classList.remove('dim')); dimmedFor = null; } };
+  grid.onmousemove = (e) => {
+    const sub = e.target.closest('.msub');
+    if (!sub) { undim(); hideTooltip(); return; }
+    const code = sub.dataset.dest;
+    if (code !== dimmedFor) {
+      for (const s of subs) s.classList.toggle('dim', s.dataset.dest !== code);
+      dimmedFor = code;
+    }
+    const dest = state.destinations.get(code) || {};
+    const cell = (dest.cells || []).find((x) => x.depart === sub.dataset.dep && x.ret === sub.dataset.ret);
+    const when = `${weekday(sub.dataset.dep)} ${shortDate(sub.dataset.dep)} → ${weekday(sub.dataset.ret)} ${shortDate(sub.dataset.ret)}, ${sub.dataset.nights}n`;
+    showTooltip(e, `<b>${dest.city || code} (${code})</b><br>${when}` +
+      (cell ? `<br>${fmtCell(cellValue(cell))}${cell.transfers > 0 ? ' · ' + fmtStops(cell.transfers) : ' · nonstop'}` : '<br>tap to price live'));
+  };
+  grid.onmouseleave = () => { undim(); hideTooltip(); };
+}
+
+function renderMultiChips(ordered, dests, shownCount) {
+  const host = $('multichips');
+  const chip = (code) => {
+    const d = state.destinations.get(code) || {};
+    const hid = state.multi.hidden.has(code);
+    return `<span class="mchip${hid ? ' hid' : ''}">` +
+      `<button class="mchip-loc" data-c="${code}" title="Jump to ${d.city || code}'s cheapest fare"${hid ? ' disabled' : ''}>${FM_PLANE}</button>` +
+      `<button class="mchip-vis" data-c="${code}" aria-pressed="${!hid}" title="${hid ? 'Show' : 'Hide'} ${d.city || code} on the grid">` +
+      `${d.city || code} <span class="mchip-code">${code}</span></button>` +
+      `<button class="mchip-x" data-c="${code}" aria-label="Remove ${d.city || code}">×</button></span>`;
+  };
+  const canWidenMulti = (() => {
+    const ax = multiAxes();
+    if (!ax.departs.length || !ax.returns.length) return false;
+    const span = Math.round((new Date(ax.returns[ax.returns.length - 1]) - new Date(ax.departs[0])) / 86400000);
+    return span + 2 * WIDEN_STEP_DAYS <= MAX_PERIOD_DAYS;
+  })();
+  const pool = ordered.filter((d) => !dests.includes(d.destination));
+  host.innerHTML =
+    dests.map(chip).join('') +
+    (dests.length < MULTI_CAP && pool.length
+      ? `<span class="mchip-add-wrap"><button class="mchip-add" id="mchipadd">+ add</button>` +
+        `<span class="mchip-pool" id="mchippool" hidden>` +
+        pool.slice(0, 24).map((d) => `<button data-c="${d.destination}">${d.city || d.destination} <span class="mchip-code">${d.destination}</span></button>`).join('') +
+        `</span></span>`
+      : '') +
+    `<span class="mchip-spacer"></span>` +
+    `<button class="mchip-widen" id="mchipwiden"${canWidenMulti && !multiWidening ? '' : ' disabled'}>${multiWidening ? '…' : '± ' + WIDEN_STEP_DAYS + 'd'}</button>` +
+    `<span class="mdensity" role="group" aria-label="Cell density">` +
+    `<button data-d="stack"${multiDensity() === 'stack' ? ' aria-pressed="true"' : ''}>Stacked</button>` +
+    `<button data-d="strip"${multiDensity() === 'strip' ? ' aria-pressed="true"' : ''}>Strip</button></span>`;
+
+  host.querySelectorAll('.mchip-x').forEach((b) => b.onclick = () => {
+    state.multi.touched = true;
+    state.multi.dests = state.multi.dests.filter((c) => c !== b.dataset.c);
+    state.multi.hidden.delete(b.dataset.c);
+    boardToUrl(); render();
+  });
+  host.querySelectorAll('.mchip-vis').forEach((b) => b.onclick = () => {
+    const c = b.dataset.c;
+    state.multi.touched = true;
+    if (state.multi.hidden.has(c)) state.multi.hidden.delete(c);
+    else if (shownCount > 1) state.multi.hidden.add(c);
+    render();
+  });
+  host.querySelectorAll('.mchip-loc:not([disabled])').forEach((b) => b.onclick = () => jumpToMultiCheapest(b.dataset.c));
+  const add = $('mchipadd');
+  if (add) {
+    add.onclick = () => $('mchippool').hidden = !$('mchippool').hidden;
+    $('mchippool').querySelectorAll('button').forEach((b) => b.onclick = () => {
+      state.multi.touched = true;
+      if (state.multi.dests.length < MULTI_CAP) state.multi.dests.push(b.dataset.c);
+      boardToUrl(); render();
+    });
+  }
+  $('mchipwiden').onclick = multiWiden;
+  host.querySelectorAll('.mdensity button').forEach((b) => b.onclick = () => {
+    state.multi.density = b.dataset.d;
+    applyMultiDensity();
+    render();
+  });
+}
+
+function jumpToMultiCheapest(code) {
+  const dest = state.destinations.get(code);
+  if (!dest || !dest.shownBest) return;
+  const b = dest.shownBest;
+  const el = $('multigrid').querySelector(`.msub[data-dest="${code}"][data-dep="${b.depart}"][data-ret="${b.ret}"]`);
+  if (!el) return;
+  el.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'center' });
+  el.classList.remove('mflash');
+  void el.offsetWidth;
+  el.classList.add('mflash');
+}
+
+/** Widen the whole combined window: one /api/extend for every destination in the grid,
+ *  mirroring widenDestination but with a shared axes override. */
+function multiWiden() {
+  if (multiWidening || !state.meta) return;
+  const ax = multiAxes();
+  const start = addDays(ax.departs[0], -WIDEN_STEP_DAYS);
+  const end = addDays(ax.returns[ax.returns.length - 1], WIDEN_STEP_DAYS);
+  multiWidening = true;
+  render();
+  fetch('/api/extend', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      origin: state.meta.origin, depart_date: start, return_date: end,
+      destinations: [...state.multi.dests],
+      nights_min: state.constraints.min, nights_max: state.constraints.max,
+      adults: state.meta.adults, children: state.meta.children,
+      currency: state.meta.currency, nonstop_only: state.meta.nonstop_only,
+    }),
+  })
+    .then((r) => r.json())
+    .then((data) => {
+      if (!data.extend_id) throw new Error('extend failed');
+      const source = new EventSource(`/api/extend/${data.extend_id}/stream`);
+      source.onmessage = (event) => {
+        const msg = JSON.parse(event.data);
+        if (msg.type === 'axes') {
+          state.multi.axes = { departs: msg.depart_dates, returns: msg.return_dates };
+          render();
+        } else if (msg.type === 'destination') {
+          state.destinations.set(msg.destination, msg);
+          recomputeBest(msg.destination);
+          render();
+        }
+      };
+      const finish = () => { source.close(); multiWidening = false; render(); };
+      source.addEventListener('end', finish);
+      source.onerror = finish;
+    })
+    .catch(() => { multiWidening = false; render(); });
+}
+
+/* Density: Strip on a desktop (packs the window), Stacked on a phone (one price per line
+   suits a narrow column). A manual pick sticks. */
+const multiPhone = window.matchMedia('(max-width: 720px)');
+function multiDensity() {
+  return state.multi.density || (multiPhone.matches ? 'stack' : 'strip');
+}
+function applyMultiDensity() {
+  document.body.classList.toggle('multi-stack', multiDensity() === 'stack');
+  document.body.classList.toggle('multi-strip', multiDensity() === 'strip');
+}
+multiPhone.addEventListener('change', () => { if (!state.multi.density) { applyMultiDensity(); if (state.multi.on) render(); } });
+
+function setView(multi) {
+  state.multi.on = multi;
+  $('viewsingle').setAttribute('aria-pressed', String(!multi));
+  $('viewmulti').setAttribute('aria-pressed', String(multi));
+  // Close the focus layer without history.back() -- that would land on a pre-Multi URL
+  // entry and boardToUrl below would write to the wrong one. A stale overlay entry just
+  // costs one dead Back press.
+  if (multi) {
+    document.body.classList.remove('detail-open');
+    if (document.body.classList.contains('show-table')) setTableView(false);
+    $('panel').classList.remove('open');
+  }
+  applyMultiDensity();
+  render();        // seeds state.multi.dests when switching on
+  boardToUrl();
+}
+$('viewsingle').addEventListener('click', () => setView(false));
+$('viewmulti').addEventListener('click', () => setView(true));
 
 /* The board's focal point: the cheapest find, then the two behind it.
  *
@@ -2064,6 +2398,13 @@ function startSearch() {
   $('tabletoggle').textContent = 'Table';
   $('tabletoggle').setAttribute('aria-pressed', 'false');
   $('tableview').replaceChildren();
+  // A new board changes the window and (usually) the destinations: drop the widen and the
+  // hidden set. `dests` / `touched` are left alone -- multiDests() prunes any code that is
+  // not on the new board, so a user's own picks that still exist carry over and an
+  // otherwise-fresh board falls back to its three cheapest.
+  state.multi.hidden.clear();
+  state.multi.axes = null;
+  $('multigrid').replaceChildren();
   $('errors').textContent = '';
   // Until the first destination lands the board area would be blank; hold a placeholder
   // there so the wait reads as work in progress, not a broken page.
@@ -3036,6 +3377,9 @@ setDefaultDates();        // fill only what the URL left blank
 syncDateMode();
 syncReturnDate();
 if (state.regions.size || state.places.size) renderDestTags();
+$('viewsingle').setAttribute('aria-pressed', String(!state.multi.on));
+$('viewmulti').setAttribute('aria-pressed', String(state.multi.on));
+applyMultiDensity();
 
 /* A URL that carries a search PREFILLS the form and stops there. It deliberately does not
    run the search itself.

@@ -352,6 +352,26 @@ correctly no-ops on the VM; a proxy integration should not resurrect it.
 
 ## Done features
 
+### Multi view — a combined fare grid (2026-09-10)
+
+A **Single / Multi** toggle in the results toolbar. Single is unchanged (ranked list +
+focus grid). Multi replaces that area with **one** departure × return grid where every
+cell stacks the chosen destinations' prices, each shaded against *its own* cheapest →
+dearest (`scaleDomain` per destination, reusing the `--q0..--q6` ramp) — so a row that is
+dear in absolute money still shows which weeks it dips. Prototyped as an artifact first
+(`claude.ai/code/artifact/1e4ab81c-…`).
+
+- Seeds with the **3 cheapest** (tracks the top-3 as the board streams until the user
+  touches the set); add / remove / hide-without-removing via chips; cap **6**.
+- Per-chip plane button jumps to that destination's cheapest cell; cell click opens the
+  same live-price panel as Single.
+- `± 7d` widens the whole combined window (one `/api/extend` for every destination).
+- Density: **Strip** on desktop (destinations as tinted columns in a cell), **Stacked**
+  on a phone (one price per line); manual pick sticks.
+- Bookmarkable: `?…&view=multi&multi=ATH,FCO,BCN`.
+- `state.multi` in `app.js`; `renderMulti` / `renderMultiChips` coalesced via setTimeout
+  so a streaming search doesn't rebuild ~1000 elements per event. `tests/test_multi_view.py`.
+
 ### Verified-price freshness + verify self-healing (2026-09-10)
 
 Three linked fixes after a cell showed ₪22,848 as a "live total" when Google Flights

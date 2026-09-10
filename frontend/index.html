@@ -253,6 +253,12 @@
        filter, currency, per person, and the table view. Currency and per person are mirrored
        in Options so they can be set before the first search (app.js keeps the pair synced). -->
   <div class="board-tools" id="boardtools" hidden>
+    <span class="bt-viewtoggle" role="group" aria-label="Board view">
+      <button type="button" id="viewsingle" aria-pressed="true"
+              title="A ranked list of destinations; open one to see its date grid">Single</button>
+      <button type="button" id="viewmulti" aria-pressed="false"
+              title="One grid with several destinations stacked in every cell">Multi</button>
+    </span>
     <button type="button" id="listtoggle" class="bt-listtoggle" aria-pressed="false"
             title="Hide the destination list and widen the grid">Hide list</button>
     <span class="bt-count" id="btcount"></span>
@@ -284,6 +290,12 @@
     <section class="ddetail" id="ddetail"></section>
     <!-- The Table toggle swaps this in for the grid pane; the list stays put. -->
     <div class="tableview" id="tableview"></div>
+    <!-- Multi view: one combined grid. Shown instead of the list + focus layer while
+         body.show-multi is set (the Single/Multi toggle in the toolbar). -->
+    <section class="multiview" id="multiview" aria-label="Combined fare grid">
+      <div class="multi-chips" id="multichips"></div>
+      <div class="multi-wrap" id="multiwrap"><table class="matrix multi" id="multigrid"></table></div>
+    </section>
   </div>
   <p class="empty" id="empty" hidden></p>
 
