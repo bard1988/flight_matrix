@@ -10,7 +10,7 @@ Things worth doing, not yet scheduled.
 |---|---|---|---|
 | 1 | **Filter by airline** — bundled airline-name DB, refreshed periodically (and/or from what searches return) | M | todo |
 | 9 | **Filter by region** — collapsible continent → subregion → country tree | M–L | **done** (2026-09-08: tree UI in the Advanced panel) |
-| 9.1 | **Airport / city leaves in the region tree** — a fourth level under each country: pick a specific airport or city (by name or IATA), not just the whole country. Needs the airport list grouped by country (`backend/airports.py` has country_code per airport), a typeahead so a 4-level tree stays usable, and the search filter to accept airport codes alongside country codes. Shares the OurAirports data with #15.0 / #15A. | M | todo |
+| 9.1 | **Airport / city leaves in the region tree** — a fourth level under each country: pick a specific airport or city, not just the whole country. | M | **mostly covered** (2026-09-10, 320b316) — the destination combobox typeahead (`search_places` → `/api/places`) already resolves a city/airport by name or IATA, and `destination_codes` is wired through the board (filters candidates, seeds discovery for a picked airport the board missed, forces it into the grid). Residual, both niche: (a) *browsing* to an airport by expanding the tree rather than searching; (b) non-hub airports — the typeahead caps at scheduled large/medium hubs. Revisit only if either need turns out to be real. |
 | 11 | **Kids' ages** — per-child age (infant/child buckets), not just a count; changes the price. Must propagate to providers + `party_key` cache key + child-factor scaling | M–L | todo |
 | 6 | **Cabin class** selector (economy / premium / business) — thread through provider → API → UI | M | todo |
 | 4 | **One search model: period + trip length** — drop the "Dates mean" dropdown | M | **done** (2026-09-07/08: dropdown gone, range default; anchors plumbing removed + widen reworked for the period model by the redesign pass) |
@@ -277,7 +277,7 @@ the spike is a coin-flip (a plausible outcome is "the token-mint GET is CAPTCHA'
 Oracle datacenter IP → dead without a residential proxy"), and a win puts a
 reverse-engineered Google surface on the critical path with the same break-on-Google's-
 schedule fragility as the HTML parser. With ~no traffic and no latency complaints, the
-small certain UX wins (#1, #6, #9.1, #11 …) are the better use of time.
+small certain UX wins (#1, #6, #11 …) are the better use of time.
 
 Revisit when either (a) board latency becomes a real complaint from real users, or
 (b) a wider launch is being prepped and the "real totals, not optimistic estimates"
