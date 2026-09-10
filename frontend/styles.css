@@ -1280,10 +1280,19 @@ body.has-board .board-split {
   min-height: 0;
   gap: 0;
   border-top: 1px solid var(--gridline);
+  /* A flex column so `.dlist` is bounded by the shell and scrolls inside it. Without
+     this `.board-split` is `display: block`, `.dlist` takes its full content height, and
+     the overflow is simply clipped by `body { overflow: hidden }` -- on a phone (one
+     card per row, 20 rows) you see ~4 cards and cannot reach the rest. `.ddetail` /
+     `.tableview` are `position: fixed`, so they sit out of this flow untouched. */
+  display: flex;
+  flex-direction: column;
 }
 body.has-board .dlist {
+  flex: 1;
   min-height: 0;
   overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
   overscroll-behavior: contain;
   border-top: 0;
   background: var(--page);
