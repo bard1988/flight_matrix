@@ -19,8 +19,8 @@
      og:image also needs a real 1200x630 asset; twitter:card is "summary" until then. -->
 
 <link rel="icon" href="/static/favicon.svg" type="image/svg+xml" />
-<link rel="preload" href="/static/fonts/GeistMono-Regular.woff2" as="font" type="font/woff2" crossorigin />
 <link rel="preload" href="/static/fonts/Geist-Regular.woff2" as="font" type="font/woff2" crossorigin />
+<link rel="preload" href="/static/fonts/Geist-Medium.woff2" as="font" type="font/woff2" crossorigin />
 <link rel="stylesheet" href="/static/styles.css" />
 </head>
 <body>
@@ -61,9 +61,13 @@
          Options: precise dates, exact nights, travellers, stops, price cap, weekdays,
          flight times, how many destinations. -->
     <div class="bar-group">
-      <div class="field field-sm">
+      <div class="field field-from">
         <label for="origin">From</label>
-        <input id="origin" value="TLV" maxlength="3" autocapitalize="characters" />
+        <div class="origin-combo">
+          <input id="origin" value="TLV" autocomplete="off" autocapitalize="characters"
+                 aria-label="Search an origin city or airport" role="combobox" aria-expanded="false" aria-controls="originresults" />
+          <ul class="dest-results" id="originresults" role="listbox" aria-label="Origins" hidden></ul>
+        </div>
       </div>
       <div class="field field-dest">
         <label for="regionsearch">To</label>
@@ -71,13 +75,14 @@
           <div class="dest-control" id="destcontrol">
             <span class="dest-tags" id="desttags"></span>
             <input type="text" id="regionsearch" class="dest-input" autocomplete="off"
-                   placeholder="Anywhere" aria-label="Search countries, regions and continents"
-                   role="combobox" aria-expanded="false" aria-controls="regiontree" />
+                   placeholder="Anywhere" aria-label="Search a country, city or airport"
+                   role="combobox" aria-expanded="false" aria-controls="destpop" />
             <span class="dest-caret" aria-hidden="true">▾</span>
           </div>
           <div class="dest-pop" id="destpop" hidden>
+            <ul class="dest-results" id="destresults" role="listbox" aria-label="Matches" hidden></ul>
             <div class="dest-pop-head">
-              <span>Search these places</span>
+              <span>Or browse by region</span>
               <button type="button" id="regionclear" class="region-clear" hidden>clear all</button>
             </div>
             <div class="region-tree" id="regiontree" role="tree" aria-label="Restrict the search to these places">
@@ -124,9 +129,9 @@
       <span class="adv-group-label">Stops &amp; budget</span>
       <div class="adv-fields">
         <label class="check" title="Exclude connections, including self-transfer combinations booked as separate tickets"><input type="checkbox" id="nonstop" /> Nonstop only</label>
-        <div class="field field-sm">
+        <div class="field field-money">
           <label for="maxprice">Max total</label>
-          <input id="maxprice" type="number" min="0" step="100" placeholder="any" />
+          <span class="money-in"><i class="money-cur" id="maxpricecur" aria-hidden="true">₪</i><input id="maxprice" type="number" min="0" step="100" placeholder="any" /></span>
         </div>
       </div>
     </div>
@@ -175,13 +180,24 @@
     </div>
 
     <div class="adv-group">
-      <span class="adv-group-label">Results</span>
+      <span class="adv-group-label">Results &amp; display</span>
       <div class="adv-fields">
         <div class="field field-xs">
           <label for="dests">Places</label>
           <input id="dests" type="number" min="1" max="60" value="20" />
         </div>
-        <label class="check" title="Price fares live on Google Flights in the background: the board's cheapest cells once it loads, and the whole trip-length band of whichever destination you open"><input type="checkbox" id="autoverify" checked /> Live prices from Google Flights</label>
+        <div class="field field-xs">
+          <label for="currencyopt">Currency</label>
+          <select id="currencyopt">
+            <option value="ils">ILS ₪</option>
+            <option value="eur">EUR €</option>
+            <option value="usd">USD $</option>
+            <option value="gbp">GBP £</option>
+          </select>
+        </div>
+        <label class="check" title="Show each fare per traveller instead of the whole party total"><input type="checkbox" id="perpersonopt" /> Per person</label>
+        <label class="check" title="Switch the fare heatmap to the green-to-red scale that stays distinct under red–green colour blindness and in greyscale"><input type="checkbox" id="cvdramp" /> Colour-blind friendly colours</label>
+        <label class="check" title="After a search, cross-check every destination's cheapest cell on Google Flights in the background. Off by default. The destination you actually open is always live-priced regardless; clicking any single cell prices it on demand."><input type="checkbox" id="autoverify" /> Pre-check every destination on Google Flights</label>
       </div>
     </div>
 
@@ -229,7 +245,8 @@
        legend, which is the version that survives a bookmarked URL anyway; EST vs LIVE is
        now left to the tag titles and the footnote. Hidden for good on the first search. -->
   <section class="firstrun" id="firstrun">
-    <h1>Search once. The rest is booking.</h1>
+    <h1>See the<br>bigger picture.</h1>
+    <p class="firstrun-tag">One search. A matrix of the best flight options.</p>
     <p class="firstrun-lede">
       Say where you're leaving from, roughly when, and how long. One search prices every
       destination across every pair of dates in your window, cheapest first. Open any one
@@ -237,8 +254,9 @@
     </p>
   </section>
 
-  <!-- One slim toolbar once a board exists: how many results, a country filter, the
-       expand-all switch, currency, and the table view. -->
+  <!-- One slim toolbar once a board exists: the list toggle, how many results, a country
+       filter, currency, per person, and the table view. Currency and per person are mirrored
+       in Options so they can be set before the first search (app.js keeps the pair synced). -->
   <div class="board-tools" id="boardtools" hidden>
     <button type="button" id="listtoggle" class="bt-listtoggle" aria-pressed="false"
             title="Hide the destination list and widen the grid">Hide list</button>

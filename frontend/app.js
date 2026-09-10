@@ -25,7 +25,14 @@ const state = {
   fx: null,                // { eur: 1, usd: 1.08, ... } in units per 1 EUR
   displayCurrency: null,   // what the dropdown shows; defaults to meta.currency
   regions: new Set(),      // ISO country codes selected in the region tree (search filter)
+  places: new Set(),       // IATA codes picked from the typeahead (a city or airport)
+  placeName: {},            // IATA -> display label, for the chip
+  // `${dest}|${depart}|${ret}` keys for cells with a live price fetch in flight, so the
+  // grid can show them mid-load. Survives the wholesale repaint: buildMatrix reads it.
+  pendingCells: new Set(),
 };
+
+const cellKey = (dest, depart, ret) => `${dest}|${depart}|${ret}`;
 
 // Rough offline fallback, only used if the FX fetch fails. Does not need to be exact.
 const FX_FALLBACK = { eur: 1, usd: 1.16, gbp: 0.86, ils: 3.5 };
@@ -74,7 +81,9 @@ function boardToUrl() {
     if (v !== '') p.set(key, v);
   }
   for (const [key, id] of Object.entries(URL_FLAGS)) if ($(id).checked) p.set(key, '1');
-  if (!$('autoverify').checked) p.set('verify', '0');
+  if ($('autoverify').checked) p.set('verify', '1');   // off by default, opt in explicitly
+  if (state.regions.size) p.set('r', [...state.regions].join(','));
+  if (state.places.size) p.set('p', [...state.places].join(','));
   const qs = p.toString();
   history.replaceState(null, '', qs ? '?' + qs : location.pathname);
 }
@@ -88,47 +97,37 @@ function boardFromUrl(params) {
   for (const [key, id] of Object.entries(URL_FLAGS)) {
     if (params.has(key)) { $(id).checked = params.get(key) === '1'; seen.add(key); }
   }
-  if (params.has('verify')) { $('autoverify').checked = params.get('verify') !== '0'; seen.add('verify'); }
+  if (params.has('verify')) { $('autoverify').checked = params.get('verify') === '1'; seen.add('verify'); }
+  if (params.has('r')) {
+    for (const c of params.get('r').split(',').filter(Boolean)) state.regions.add(c.toUpperCase());
+    seen.add('r');
+  }
+  if (params.has('p')) {
+    for (const c of params.get('p').split(',').filter(Boolean)) {
+      const code = c.toUpperCase();
+      state.places.add(code);
+      state.placeName[code] = code;   // real label hydrated async below
+    }
+    seen.add('p');
+    hydratePlaceNames();
+  }
+  // Mirror the shared controls onto their Options-panel twins and into state.
+  $('currencyopt').value = $('currency').value;
+  state.perPerson = $('perperson').checked;
+  $('perpersonopt').checked = $('perperson').checked;
   return seen;
 }
 
+/** After a shared URL loads, swap the bare IATA codes on the place chips for city names. */
+function hydratePlaceNames() {
+  for (const code of state.places) {
+    fetch(`/api/airport/${code}`).then((r) => r.json()).then((d) => {
+      if (d && d.city && state.places.has(code)) { state.placeName[code] = d.city; renderDestTags(); }
+    }).catch(() => {});
+  }
+}
+
 /* -------------------------------------------------- keyboard-operable matrix cells */
-
-/** A screen-reader label for one fare cell. */
-function cellAria(dest, cell) {
-  const cur = state.meta && state.meta.currency;
-  const dates = `${weekday(cell.depart)} ${shortDate(cell.depart)} to ${weekday(cell.ret)} ${shortDate(cell.ret)}`;
-  let price;
-  if (cell.total != null) price = `${fmtMoney(cell.total, cur)}, verified`;
-  else if (cell.estimate != null) price = `${fmtMoney(cell.estimate, cur)}, estimated`;
-  else price = 'no price yet';
-  const stops = cell.transfers != null ? `, ${fmtStops(cell.transfers)}` : '';
-  const stale = cell.stale ? ', price may be out of date' : '';
-  return `${dest.city}, ${dates}. ${price}${stops}${stale}. Press Enter for the live price.`;
-}
-
-/** Make a matrix cell operable by keyboard: role, roving tab stop, Enter/Space + arrows. */
-function wireCell(td, activate, aria) {
-  td.tabIndex = -1;
-  td.setAttribute('role', 'button');
-  if (aria) td.setAttribute('aria-label', aria);
-  td.addEventListener('click', activate);
-  td.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter' || e.key === ' ' || e.key === 'Spacebar') { e.preventDefault(); activate(); return; }
-    const step = { ArrowRight: [0, 1], ArrowLeft: [0, -1], ArrowUp: [-1, 0], ArrowDown: [1, 0] }[e.key];
-    if (!step) return;
-    e.preventDefault();
-    const table = td.closest('table.matrix');
-    const r = Number(td.dataset.r) + step[0];
-    const c = Number(td.dataset.c) + step[1];
-    const next = table && table.querySelector(`td[data-r="${r}"][data-c="${c}"][role="button"]`);
-    if (!next) return;
-    td.tabIndex = -1;
-    next.tabIndex = 0;
-    next.focus({ preventScroll: true });
-    ensureVisible(next);
-  });
-}
 
 /** Scroll a cell into its own viewport without moving the page. */
 function ensureVisible(el) {
@@ -192,6 +191,18 @@ function fmtCompact(value) {
   if (n >= 10000) return Math.round(n / 1000) + 'k';
   if (n >= 1000) return (n / 1000).toFixed(1).replace(/\.0$/, '') + 'k';
   return String(n);
+}
+
+/* The fare cells are large now (a headline price over a trip-length line), so they carry
+   the currency symbol and the whole grouped number rather than the "1.2k" compaction the
+   dense grid needed. Falls back to the compact form only past five figures, where the
+   digits would wrap. */
+function fmtCell(value) {
+  if (value == null) return '';
+  const n = Math.round(convert(value, state.meta && state.meta.currency));
+  const to = state.displayCurrency || (state.meta && state.meta.currency);
+  const symbol = { ils: '₪', eur: '€', usd: '$', gbp: '£' }[to] || '';
+  return symbol + (n >= 100000 ? fmtCompact(value) : n.toLocaleString());
 }
 
 /* Load FX rates once. Free, keyless, CORS-enabled source; cached in localStorage for
@@ -488,8 +499,18 @@ function render() {
   syncSelection(ordered);
   const selDest = ordered.find((d) => d.destination === state.selected) || null;
 
-  // Once the board is settled, quietly live-price whichever destination is open.
-  if (selDest && !state.source) fillOpenDestination(selDest);
+  // In the list -> focus-grid flow the detail pane is a full-window layer that is only
+  // shown once a card is opened. Building its matrix (a wide date window is thousands of
+  // <td>s with listeners) on every streamed destination while it is display:none is what
+  // made the board feel stuck right after Search. Only build it when it is actually up.
+  const detailOpen = document.body.classList.contains('detail-open');
+
+  // A destination you have opened gets live-priced straight away -- even while the rest of
+  // the board is still streaming in. Opening a grid IS the signal to favour it, and the
+  // board stream fills the OTHER grids; there is no reason to make the one you are looking
+  // at wait for them. (This gate used to require the whole board to finish first, which is
+  // why a long-haul search that seeds slowly never filled its open grid.)
+  if (selDest && detailOpen) fillOpenDestination(selDest);
 
   // A keyboard user navigating the grid loses focus when the detail pane is rebuilt (every
   // streamed destination, every verify fold-back). Remember which cell had it and put it
@@ -499,10 +520,17 @@ function render() {
     ? { dest: af.closest('.card') && af.closest('.card').dataset.dest, r: af.dataset.r, c: af.dataset.c }
     : null;
 
-  // Left: the ranked list, one tight row per destination. Right: the selected one's grid.
-  $('dlist').replaceChildren(...ordered.map((dest) => listRow(dest, dest === selDest)));
+  // The ranked list. Only rebuilt while it is actually on screen -- during a fill the
+  // focus layer covers it, and rebuilding 20 cards per streamed result is wasted work
+  // that competes with the click you just made.
+  if (!detailOpen) {
+    $('dlist').replaceChildren(...ordered.map((dest) => listRow(dest, dest === selDest)));
+  }
   const detail = $('ddetail');
-  if (selDest && selDest.cells.length) {
+  if (!detailOpen) {
+    // List is showing; the layer is hidden. Leave whatever is in it — it is rebuilt from
+    // scratch the moment a card is opened (selectDestination -> render with detailOpen).
+  } else if (selDest && selDest.cells.length) {
     const domain = scaleDomain(selDest.allowed);
     const cur = detail.querySelector('.card.is-open');
     const sameGrid = cur && cur.dataset.dest === selDest.destination
@@ -519,7 +547,7 @@ function render() {
   } else {
     detail.replaceChildren();
   }
-  const gridOnScreen = !!(selDest && selDest.cells.length);
+  const gridOnScreen = !!(detailOpen && selDest && selDest.cells.length);
   document.body.classList.toggle('has-board', ordered.length > 0);
 
   if (keep && keep.dest) {
@@ -530,9 +558,12 @@ function render() {
   }
 
   state.lastOrdered = ordered;
-  // The table view is the selected destination's grid as text, nothing else.
-  renderTable(selDest ? [selDest] : ordered);
-  refreshRegionCounts();
+  // The table view is the selected destination's grid as text -- only build it when it is
+  // the thing on screen (focus layer open AND in table mode).
+  if (detailOpen && document.body.classList.contains('show-table')) {
+    renderTable(selDest ? [selDest] : ordered);
+  }
+  if (!detailOpen) refreshRegionCounts();
   $('boardtools').hidden = state.destinations.size === 0;
   $('footnote').hidden = ordered.length === 0;
   // The colour key describes the grid in the detail pane. That pane no longer always has
@@ -757,7 +788,7 @@ function renderWaiting(dest) {
   const back = document.createElement('button');
   back.className = 'fillbtn detail-back';
   back.type = 'button';
-  back.textContent = '‹ Back';
+  back.textContent = '‹ All destinations';
   back.title = 'Back to the destination list';
   back.setAttribute('aria-label', 'Back to the destination list');
   back.onclick = () => { document.body.classList.remove('detail-open'); render(); };
@@ -853,7 +884,7 @@ function buildCardHead(dest, domain, card) {
   const back = document.createElement('button');
   back.className = 'fillbtn detail-back';
   back.type = 'button';
-  back.textContent = '‹ Back';
+  back.textContent = '‹ All destinations';
   back.title = 'Back to the destination list';
   back.setAttribute('aria-label', 'Back to the destination list');
   back.onclick = () => { document.body.classList.remove('detail-open'); };
@@ -922,147 +953,141 @@ function buildCardHead(dest, domain, card) {
   return head;
 }
 
-/* The departure x return grid. Rebuilt wholesale on every repaint — cheap for one
-   destination — but always dropped INTO an existing .matrix-wrap by the caller, so the
-   scroll viewport around it is never disturbed. */
+/* The departure x return grid. Rebuilt wholesale on every repaint. Built as one innerHTML
+   string with delegated listeners (not per-cell nodes + per-cell handlers): a wide window
+   is a few thousand cells, and createElement + addEventListener per cell is what locked
+   the tab for seconds every time a grid opened. */
 function buildMatrix(dest, domain) {
   const meta = state.meta;
+  const nightsSpan = meta.nights_span || null;
   const byKey = new Map(dest.cells.map((c) => [c.depart + '|' + c.ret, c]));
+  const gBest = state.globalBest;
+  const cBest = dest.shownBest;
+  const pendPrefix = dest.destination + '|';
 
-  // Always the departure x return matrix, in both date modes. In range mode that means a
-  // thin diagonal band of priced cells inside a large grid - the empty cells are simply
-  // trip lengths that were not asked for, and showing the real calendar shape is worth
-  // more than compacting it.
-  const table = document.createElement('table');
-  table.className = 'matrix';
-
-  const thead = document.createElement('thead');
-  const headRow = document.createElement('tr');
-  // Keep this short: it is the widest thing in the first column and a long label pushes
-  // the grid past the card, clipping the last date columns.
-  headRow.innerHTML = '<th class="corner" title="rows are return dates, columns are departure dates">ret ↓ dep →</th>';
-  // This destination's own axes if it has been widened by itself, else the board's.
   const { departs: axDeparts, returns: axReturns } = axesFor(dest);
-  axDeparts.forEach((depart, colIndex) => {
-    const th = document.createElement('th');
-    th.className = 'col' + (isWeekend(depart) ? ' weekend' : '');
-    th.scope = 'col';
-    th.dataset.c = String(colIndex);
-    th.innerHTML = `${weekday(depart)}<br>${shortDate(depart)}`;
-    headRow.appendChild(th);
-  });
-  thead.appendChild(headRow);
-  table.appendChild(thead);
 
-  const tbody = document.createElement('tbody');
-  axReturns.forEach((ret, rowIndex) => {
-    const tr = document.createElement('tr');
-    const th = document.createElement('th');
-    th.className = 'row' + (isWeekend(ret) ? ' weekend' : '');
-    th.scope = 'row';
-    th.dataset.r = String(rowIndex);
-    th.innerHTML = `${weekday(ret)} ${shortDate(ret)}`;
-    tr.appendChild(th);
+  let html = '<thead><tr><th class="corner" title="rows are return dates, columns are departure dates">ret ↓ dep →</th>';
+  for (let c = 0; c < axDeparts.length; c += 1) {
+    const d = axDeparts[c];
+    html += `<th class="col${isWeekend(d) ? ' weekend' : ''}" scope="col" data-c="${c}">${weekday(d)}<br>${shortDate(d)}</th>`;
+  }
+  html += '</tr></thead><tbody>';
 
-    axDeparts.forEach((depart, colIndex) => {
-      const td = document.createElement('td');
-      if (ret < depart) {
-        td.className = 'void';                       // return before departure
-        td.textContent = '–';
-        td.title = 'Return is before departure';
-        tr.appendChild(td);
-        return;
-      }
-      const cell = byKey.get(depart + '|' + ret);
+  for (let r = 0; r < axReturns.length; r += 1) {
+    const ret = axReturns[r];
+    html += `<tr><th class="row${isWeekend(ret) ? ' weekend' : ''}" scope="row" data-r="${r}">${weekday(ret)} ${shortDate(ret)}</th>`;
+    for (let c = 0; c < axDeparts.length; c += 1) {
+      const dep = axDeparts[c];
+      if (ret < dep) { html += '<td class="void">–</td>'; continue; }
+      const key = dep + '|' + ret;
+      const loading = state.pendingCells.has(pendPrefix + key) ? ' loading' : '';
+      const attrs = ` data-c="${c}" data-r="${r}" data-dep="${dep}" data-ret="${ret}" role="button" tabindex="-1"`;
+      const cell = byKey.get(key);
       if (!cell) {
-        // In range mode most blanks are simply trip lengths outside what was asked for,
-        // not gaps in the data, so say which it is.
-        const nights = Math.round((new Date(ret) - new Date(depart)) / 86400000);
-        const outsideAsk = meta.nights_span
-          && !meta.nights_span.includes(nights);
-        td.className = outsideAsk ? 'notasked' : 'nodata';
-        td.title = outsideAsk
-          ? `${nights} nights - outside the ${meta.nights_span[0]}-${meta.nights_span[meta.nights_span.length - 1]} you asked for. Click to price it anyway.`
-          : 'No cached fare for this date pair. Click to fetch it live.';
-        td.dataset.depart = depart;
-        td.dataset.ret = ret;
-        td.dataset.dest = dest.destination;
-        td.dataset.c = String(colIndex);
-        td.dataset.r = String(rowIndex);
-        wireCell(td, () => {
-          pinCross(table, rowIndex, colIndex);
-          verifyCell(dest, { depart, ret, nights });
-        }, `${dest.city}, ${weekday(depart)} ${shortDate(depart)} to ${weekday(ret)} ${shortDate(ret)}. No price yet. Press Enter to fetch it live.`);
-        tr.appendChild(td);
-        return;
+        const nights = Math.round((new Date(ret) - new Date(dep)) / 86400000);
+        const outside = nightsSpan && !nightsSpan.includes(nights);
+        html += `<td class="${outside ? 'notasked' : 'nodata'}${loading}"${attrs} data-nights="${nights}"></td>`;
+        continue;
       }
-
       const value = cellValue(cell);
       const idx = rampIndex(value, domain);
-      // Excluded cells stay visible but recede, so you can still see what you ruled out
-      // and how much it would have cost. A cell we actually priced live is never dimmed,
-      // even if its trip length falls outside what was asked for: the user clicked it and
-      // spent a request on it, so its real number gets shown plainly.
-      td.className =
-        'priced ' + (idx === null ? 'unscaled' : `q${idx}`) +
-        (cellAllowed(cell) || cell.verified ? '' : ' excluded') +
-        (cell.verified ? ' verified' : '') +
-        // A constant trip length runs along a diagonal, so mark the whole-week ones
-        // as a faint guide for reading trip length off the grid.
-        (cell.nights > 0 && cell.nights % 7 === 0 ? ' week-diag' : '');
+      let cls = 'priced ' + (idx === null ? 'unscaled' : `q${idx}`);
+      if (!(cellAllowed(cell) || cell.verified)) cls += ' excluded';
+      if (cell.verified) cls += ' verified';
+      cls += loading;
+      if (cell.nights > 0 && cell.nights % 7 === 0) cls += ' week-diag';
+      if (gBest && gBest.dest === dest.destination && gBest.depart === cell.depart && gBest.ret === cell.ret) cls += ' best-board';
+      else if (cBest && cell.depart === cBest.depart && cell.ret === cBest.ret) cls += ' best-here';
+      const sub = cell.nights > 0 ? `<span class="cellsub">${cell.nights} night${cell.nights === 1 ? '' : 's'}</span>` : '';
+      const wedge = cell.transfers > 0 ? `<span class="stopdot${cell.transfers > 1 ? ' many' : ''}"></span>` : '';
+      const stale = cell.stale ? '<span class="staledot"></span>' : '';
+      html += `<td class="${cls}"${attrs}><span class="cellwrap"><span class="cellprice">${fmtCell(value)}</span>${sub}${wedge}${stale}</span></td>`;
+    }
+    html += '</tr>';
+  }
+  html += '</tbody>';
 
-      const isCardBest = dest.shownBest && cell.depart === dest.shownBest.depart && cell.ret === dest.shownBest.ret;
-      const isBoardBest =
-        state.globalBest &&
-        state.globalBest.dest === dest.destination &&
-        state.globalBest.depart === cell.depart &&
-        state.globalBest.ret === cell.ret;
-      if (isBoardBest) td.classList.add('best-board');
-      else if (isCardBest) td.classList.add('best-here');
-
-      const wrap = document.createElement('span');
-      wrap.className = 'cellwrap';
-      wrap.textContent = fmtCompact(value);
-      // A numeric stop count collides with the price at this cell width and reads as part
-      // of the number ("5.6k1"), so mark stops with a corner wedge and keep the count in
-      // the tooltip.
-      if (cell.transfers != null && cell.transfers > 0) {
-        const wedge = document.createElement('span');
-        wedge.className = 'stopdot' + (cell.transfers > 1 ? ' many' : '');
-        wrap.appendChild(wedge);
-      }
-      if (cell.stale) {
-        const dot = document.createElement('span');
-        dot.className = 'staledot';
-        wrap.appendChild(dot);
-      }
-      td.appendChild(wrap);
-
-      td.dataset.c = String(colIndex);
-      td.dataset.r = String(rowIndex);
-      td.addEventListener('mousemove', (e) => showTooltip(e, tooltipFor(dest, cell)));
-      td.addEventListener('mouseleave', hideTooltip);
-      wireCell(td, () => {
-        pinCross(table, rowIndex, colIndex);
-        verifyCell(dest, cell);
-      }, cellAria(dest, cell));
-      tr.appendChild(td);
-    });
-    tbody.appendChild(tr);
-  });
-  table.appendChild(tbody);
-
-  // Cross-hair: hovering a cell lights its departure column and return row so it is
-  // obvious which date is the outbound and which the return.
-  table.addEventListener('mouseover', (e) => {
-    const td = e.target.closest('td[data-c]');
-    if (td) highlightCross(table, Number(td.dataset.r), Number(td.dataset.c), false);
-  });
-  table.addEventListener('mouseleave', () => restorePinned(table));
-
+  const table = document.createElement('table');
+  table.className = 'matrix';
+  table.innerHTML = html;
   table.setAttribute('aria-label', `${dest.city} fares by date. Arrow keys to move between cells, Enter for the live price.`);
+
+  // The live cell for a td: look it up fresh (the board fills in as you watch), fall back
+  // to a synthetic cell for an empty square so it can still be priced.
+  const cellFor = (td) => {
+    const stored = state.destinations.get(dest.destination) || dest;
+    return stored.cells.find((x) => x.depart === td.dataset.dep && x.ret === td.dataset.ret)
+      || { depart: td.dataset.dep, ret: td.dataset.ret, nights: Number(td.dataset.nights) || 0 };
+  };
+
+  // --- one set of delegated listeners for the whole grid ---
+  table.addEventListener('click', (e) => {
+    const td = e.target.closest('td[data-c]');
+    if (!td || td.classList.contains('void')) return;
+    pinCross(table, Number(td.dataset.r), Number(td.dataset.c));
+    verifyCell(dest, cellFor(td));
+  });
+  table.addEventListener('keydown', (e) => {
+    const td = e.target.closest('td[data-c]');
+    if (!td) return;
+    if (e.key === 'Enter' || e.key === ' ' || e.key === 'Spacebar') {
+      e.preventDefault();
+      if (!td.classList.contains('void')) { pinCross(table, Number(td.dataset.r), Number(td.dataset.c)); verifyCell(dest, cellFor(td)); }
+      return;
+    }
+    const step = { ArrowRight: [0, 1], ArrowLeft: [0, -1], ArrowUp: [-1, 0], ArrowDown: [1, 0] }[e.key];
+    if (!step) return;
+    e.preventDefault();
+    const nr = Number(td.dataset.r) + step[0];
+    const nc = Number(td.dataset.c) + step[1];
+    const next = table.querySelector(`td[data-r="${nr}"][data-c="${nc}"][role="button"]`);
+    if (!next) return;
+    td.tabIndex = -1;
+    next.tabIndex = 0;
+    next.focus({ preventScroll: true });
+    ensureVisible(next);
+  });
+  table.addEventListener('mousemove', (e) => {
+    const td = e.target.closest('td[data-c]');
+    if (!td || td.classList.contains('void')) { hideTooltip(); return; }
+    highlightCross(table, Number(td.dataset.r), Number(td.dataset.c), false);
+    const cell = byKey.get(td.dataset.dep + '|' + td.dataset.ret);
+    if (cell) showTooltip(e, tooltipFor(dest, cell));
+    else if (td.classList.contains('loading')) showTooltip(e, 'Pricing this date pair live…');
+    else hideTooltip();
+  });
+  table.addEventListener('mouseleave', () => { hideTooltip(); restorePinned(table); });
+
   seedGridTabstop(table);
   return table;
+}
+
+/** Update ONE cell in the open grid in place, without rebuilding the table. Used while a
+ *  fill is streaming so a click or a scroll is never queued behind a full repaint. The
+ *  markup must match buildMatrix's priced-cell branch. Returns false if the grid moved on. */
+function patchGridCell(dest, cell) {
+  if (state.selected !== dest.destination) return false;
+  const td = document.querySelector(
+    `#ddetail table.matrix td[data-dep="${cell.depart}"][data-ret="${cell.ret}"]`);
+  if (!td) return false;
+  const stored = state.destinations.get(dest.destination) || dest;
+  const value = cellValue(cell);
+  td.classList.remove('loading');
+  if (value == null) return true;
+  const idx = rampIndex(value, scaleDomain(stored.allowed));
+  let cls = 'priced ' + (idx === null ? 'unscaled' : `q${idx}`);
+  if (!(cellAllowed(cell) || cell.verified)) cls += ' excluded';
+  if (cell.verified) cls += ' verified';
+  if (cell.nights > 0 && cell.nights % 7 === 0) cls += ' week-diag';
+  if (td.classList.contains('best-board')) cls += ' best-board';
+  else if (td.classList.contains('best-here')) cls += ' best-here';
+  td.className = cls;
+  td.setAttribute('role', 'button');
+  const sub = cell.nights > 0 ? `<span class="cellsub">${cell.nights} night${cell.nights === 1 ? '' : 's'}</span>` : '';
+  const wedge = cell.transfers > 0 ? `<span class="stopdot${cell.transfers > 1 ? ' many' : ''}"></span>` : '';
+  td.innerHTML = `<span class="cellwrap"><span class="cellprice">${fmtCell(value)}</span>${sub}${wedge}</span>`;
+  return true;
 }
 
 /** Wrap the grid in its scroll viewport and restore where the user had scrolled to. */
@@ -1115,6 +1140,9 @@ function setTableView(on) {
   const tt = $('tabletoggle');
   tt.textContent = on ? 'Matrix' : 'Table';
   tt.setAttribute('aria-pressed', String(on));
+  // render() is what fills #tableview (or rebuilds the grid on the way back); nothing else
+  // repaints until the next fill event, so the switched-to view would come up blank.
+  render();
 }
 
 /* Leave table view. On a phone the table is a fixed full-screen layer, so it covers the
@@ -1282,6 +1310,10 @@ function fetchTimes(dest, cell) {
 async function verifyCell(dest, cell) {
   hideTooltip();
   const meta = state.meta;
+  // Pulse this cell while both lookups are out.
+  const pk = cellKey(dest.destination, cell.depart, cell.ret);
+  state.pendingCells.add(pk);
+  const donePending = () => { state.pendingCells.delete(pk); if (state.selected === dest.destination) render(); };
   // Kick the times request off immediately and in parallel: it comes from the board source
   // and succeeds even where the Google cross-check has no data at all.
   const timesPromise = fetchTimes(dest, cell);
@@ -1290,6 +1322,31 @@ async function verifyCell(dest, cell) {
     timesHtml = renderTimes(details);
     const slot = document.getElementById('paneltimes');
     if (slot) slot.innerHTML = timesHtml;
+    // The times request comes from the booking source and returns a real party total for
+    // this exact date pair, at any horizon -- so an empty cell you clicked can be filled
+    // from it even when the Google cross-check below has no data. It is the board source's
+    // own number (not a Google-verified "truth"), so it lands as a normal priced cell,
+    // never with the verified border.
+    if (details && details.price != null) {
+      const stored = state.destinations.get(dest.destination);
+      if (stored) {
+        let target = stored.cells.find((c) => c.depart === cell.depart && c.ret === cell.ret);
+        if (!target) {
+          target = { depart: cell.depart, ret: cell.ret, nights: cell.nights || 0,
+                     estimate: null, unit_price: null, currency: state.meta.currency };
+          stored.cells.push(target);
+        }
+        if (target.total == null && !target.verified) {
+          target.estimate = details.price;
+          target.is_total = true;
+          target.source = details.source || 'kiwi';
+          if (details.airline && !target.airline) target.airline = details.airline;
+          stored.best = stored.cells.reduce(
+            (acc, c) => (acc === null || cellValue(c) < cellValue(acc) ? c : acc), null);
+          if (state.selected === dest.destination) render();
+        }
+      }
+    }
   });
   // Whichever request finishes second must not wipe out the other's output, so every
   // panel render re-injects whatever the times request has produced so far.
@@ -1326,6 +1383,7 @@ async function verifyCell(dest, cell) {
       `<h3>${dest.city} (${dest.destination})</h3>` +
         `<p class="err">Couldn't reach the live cross-check. Check your connection and try again.</p>`
     );
+    donePending();
     return;
   }
 
@@ -1350,7 +1408,7 @@ async function verifyCell(dest, cell) {
     }
     const explain = cell.estimate != null
       ? `Couldn't verify this fare live. Not every route is in Google Flights. The price above is the board's ${cell.is_total ? 'total' : 'estimate'}; the booking links below are live.`
-      : `Couldn't verify this fare live, and the board has no price for this date pair. Try a nearby cell.`;
+      : `Google Flights has no fare for this exact date pair. If the booking source found one it is shown below and the cell is now filled with it; otherwise try a nearby cell.`;
     openPanel(
       `<h3>${dest.city} (${dest.destination})</h3>` +
         `<div class="muted">${weekday(cell.depart)} ${shortDate(cell.depart)} &rarr; ${weekday(cell.ret)} ${shortDate(cell.ret)}</div>` +
@@ -1360,6 +1418,7 @@ async function verifyCell(dest, cell) {
       (links.length ? `<p>${links.join('<br>')}</p>` : '')
     );
     restoreTimes();
+    donePending();
     return;
   }
 
@@ -1405,8 +1464,8 @@ async function verifyCell(dest, cell) {
       (acc, c) => (acc === null || cellValue(c) < cellValue(acc) ? c : acc),
       null
     );
-    render();
   }
+  donePending();   // also repaints, folding in the verified total
 }
 
 function addDays(iso, n) {
@@ -1726,14 +1785,22 @@ function stopAutoVerify() {
    whole-board fill would be. Kicked off when a destination becomes the selected one, once
    per destination per search, gated on the same "Auto-refresh" toggle. Moving to another
    destination cancels the one in flight. */
-const OPEN_FILL_CAP = 120;
+// When you open a destination the board favours THAT grid: it live-prices its EMPTY cells
+// first (so the striped no-data gaps fill in and the grid ends up complete), then the
+// cheapest estimate cells for verification. Runs independent of the board-wide
+// "Cross-check live" toggle -- opening a grid is the signal to fill it. The cap is a
+// rate-limit sanity bound, not a design choice; a normal band sits well under it.
+const OPEN_FILL_CAP = 160;
 const openFilled = new Set();     // destinations whose band fill has been started this search
 let openFillSource = null;
 let openFillId = null;
 let openFillFor = null;           // destination the active/last fill belongs to
 
-/** Every (departure, return) pair in this destination's asked trip-length band that is not
- *  already a live price, priced-estimate cells first (cheapest first) then blanks. */
+/** Every valid (departure, return) pair in this destination's rendered grid that is not
+ *  already a live price. The user wants a complete grid, so this covers the WHOLE window,
+ *  not just the asked trip-length band. Order: empty cells first (fill the gaps), then
+ *  cheapest estimates for verification; within that, in-range trip lengths before the
+ *  out-of-range ones so the fares that matter land first. */
 function bandCells(dest) {
   const meta = state.meta;
   const { departs, returns } = axesFor(dest);
@@ -1744,14 +1811,23 @@ function bandCells(dest) {
     for (const ret of returns) {
       if (ret < depart) continue;
       const nights = Math.round((new Date(ret) - new Date(depart)) / 86400000);
-      if (span && !span.has(nights)) continue;
       const c = byKey.get(depart + '|' + ret);
       if (c && c.verified) continue;
-      out.push({ depart, ret, sort: c && cellValue(c) != null ? cellValue(c) : Infinity });
+      const value = c ? cellValue(c) : null;
+      const inRange = !span || span.has(nights);
+      out.push({
+        depart, ret,
+        // sort key: [empty-first] [in-range-first] [cheapest-first]
+        rank: (value == null ? 0 : 2) + (inRange ? 0 : 1),
+        sort: value == null ? 0 : value,
+      });
     }
   }
-  out.sort((a, b) => a.sort - b.sort);
-  return out.slice(0, OPEN_FILL_CAP).map((c) => ({
+  out.sort((a, b) => a.rank - b.rank || a.sort - b.sort);
+  // Empties and in-range cells come first (the rank), so a big window still fills the part
+  // that matters; the cap is a rate-limit bound on the long tail of out-of-range squares.
+  const cap = out.length > 1400 ? 120 : OPEN_FILL_CAP;
+  return out.slice(0, cap).map((c) => ({
     destination: dest.destination, depart_date: c.depart, return_date: c.ret,
   }));
 }
@@ -1761,13 +1837,21 @@ function stopOpenFill() {
   if (openFillSource) openFillSource.close();
   openFillSource = null;
   openFillId = null;
+  // Drop any still-blinking cells from the fill we just abandoned.
+  if (openFillFor) {
+    const pfx = openFillFor + '|';
+    for (const k of state.pendingCells) if (k.startsWith(pfx)) state.pendingCells.delete(k);
+  }
 }
 
 function fillOpenDestination(dest) {
-  if (!dest || !state.meta || !$('autoverify').checked) return;
+  // Runs whenever a grid is open (a deliberate focus action) -- not gated on the
+  // board-wide "Cross-check live" toggle. Opening a destination IS the signal to favour it.
+  if (!dest || !state.meta) return;
   const code = dest.destination;
   if (openFillFor === code) return;      // already handled this selection
   stopOpenFill();
+  stopAutoVerify();     // the open grid gets priority over the board-wide cross-check
   openFillFor = code;
   if (openFilled.has(code)) return;      // already done once this search
   openFilled.add(code);
@@ -1775,8 +1859,16 @@ function fillOpenDestination(dest) {
   const cells = bandCells(dest);
   if (!cells.length) return;
 
+  // Mark every cell we are about to price as loading, so the grid pulses them while the
+  // fetch is out. Cleared per cell as each result lands, and wholesale when the run ends.
+  for (const c of cells) state.pendingCells.add(cellKey(code, c.depart_date, c.return_date));
+  if (state.selected === code) render();
+
   const meta = state.meta;
   const city = dest.city;
+  const clearPending = () => {
+    for (const c of cells) state.pendingCells.delete(cellKey(code, c.depart_date, c.return_date));
+  };
   fetch('/api/autoverify', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -1787,34 +1879,54 @@ function fillOpenDestination(dest) {
   })
     .then((r) => r.json())
     .then((data) => {
-      if (!data.fill_id || openFillFor !== code) return;
+      if (!data.fill_id || openFillFor !== code) { clearPending(); if (state.selected === code) render(); return; }
       openFillId = data.fill_id;
       const source = new EventSource(`/api/fill/${data.fill_id}/stream`);
       openFillSource = source;
-      let since = 0;
+      let lastFull = 0;
       source.onmessage = (event) => {
         const msg = JSON.parse(event.data);
         if (msg.type === 'fill_cell') {
           const d = state.destinations.get(msg.destination);
-          if (msg.ok && d) { applyCell(d, msg); recomputeBest(msg.destination); }
+          let patched = false;
+          if (msg.ok && d) {
+            applyCell(d, msg);
+            recomputeBest(msg.destination);
+            // Patch just this cell in place -- no full repaint, so a click or a locate
+            // during the fill is handled immediately.
+            const c = d.cells.find((x) => x.depart === msg.depart_date && x.ret === msg.return_date);
+            if (c) patched = patchGridCell(d, c);
+          } else {
+            const td = document.querySelector(
+              `#ddetail table.matrix td[data-dep="${msg.depart_date}"][data-ret="${msg.return_date}"]`);
+            if (td) td.classList.remove('loading');
+          }
+          state.pendingCells.delete(cellKey(msg.destination, msg.depart_date, msg.return_date));
           $('growing').hidden = false;
           $('growing').textContent =
             `pricing ${city} on Google Flights… ${msg.progress}/${msg.total_cells}`;
-          if (++since >= 5) { since = 0; if (state.selected === code) render(); }
+          // A full repaint only every couple of seconds, to re-rank the colour scale as
+          // fares land; the per-cell patch above keeps the grid current between them.
+          const now = performance.now();
+          if (state.selected === code && (!patched || now - lastFull > 2500)) {
+            lastFull = now; render();
+          }
         } else if (msg.type === 'fill_done') {
           $('growing').hidden = true;
+          if (state.selected === code) render();
         }
       };
       const finish = () => {
         source.close();
         if (openFillSource === source) stopOpenFill();
+        clearPending();
         $('growing').hidden = true;
         if (state.selected === code) render();
       };
       source.addEventListener('end', finish);
       source.onerror = finish;
     })
-    .catch(() => { openFillSource = null; openFillId = null; });
+    .catch(() => { openFillSource = null; openFillId = null; clearPending(); if (state.selected === code) render(); });
 }
 
 function recomputeBest(code) {
@@ -1909,6 +2021,7 @@ function startSearch() {
     // Search scope: the Destinations tree. Empty = everywhere. The budget is spent inside
     // the selection at discovery, not on the cheapest destinations anywhere.
     country_codes: [...state.regions],
+    destination_codes: [...state.places],
     // In range mode the two dates bound a period and the nights box says what to look for
     // inside it, so the nights constraint drives the search instead of filtering it after.
     nights_min: $('nmin').value === '' ? null : Number($('nmin').value),
@@ -2014,6 +2127,8 @@ function consume(searchId) {
       state.meta = msg;
       state.displayCurrency = msg.currency;   // board priced in this; dropdown starts here
       $('currency').value = msg.currency;
+      $('currencyopt').value = msg.currency;
+      syncCurrencyMarks();
       syncDateMode();
       $('progress').textContent = `Searching from ${msg.origin_city} (${msg.origin})…`;
     } else if (msg.type === 'region_seeding') {
@@ -2102,10 +2217,17 @@ function consume(searchId) {
 
 $('go').addEventListener('click', startSearch);
 $('stop').addEventListener('click', stopSearch);
-$('perperson').addEventListener('change', (e) => {
-  state.perPerson = e.target.checked;
+/* Per person lives in two places -- the board toolbar (after a search) and the Options
+   panel (available before one). Whichever the user touches, mirror it to the other and
+   re-label the board. */
+function applyPerPerson(on) {
+  state.perPerson = on;
+  $('perperson').checked = on;
+  $('perpersonopt').checked = on;
   if (state.meta) render();
-});
+}
+$('perperson').addEventListener('change', (e) => applyPerPerson(e.target.checked));
+$('perpersonopt').addEventListener('change', (e) => applyPerPerson(e.target.checked));
 /* Filtering is purely a view over the board already loaded - it never refetches, so it
    stays instant and costs no API calls. */
 buildDowPicker('dowdep', 'dep');
@@ -2147,6 +2269,7 @@ function searchSignature() {
     return el.type === 'checkbox' ? String(el.checked) : el.value;
   });
   parts.push('r:' + [...state.regions].sort().join(','));
+  parts.push('p:' + [...state.places].sort().join(','));
   return parts.join('|');
 }
 
@@ -2166,6 +2289,7 @@ for (const id of SEARCH_INPUTS.concat(['nmin', 'nmax'])) {
   el.addEventListener('change', markSearchStale);
   el.addEventListener('input', markSearchStale);
 }
+
 
 /* ---------------------------------------------------------------- region tree */
 /* Collapsible continent -> subregion -> country. Checking a node checks everything
@@ -2202,7 +2326,9 @@ function renderRegionTree(tree) {
     root.appendChild(regionBranch(cont.continent, contCodes, subs));
   }
   root.addEventListener('change', onRegionChange);
-  $('regionclear').addEventListener('click', () => { state.regions.clear(); afterRegionChange(); });
+  $('regionclear').addEventListener('click', () => {
+    state.regions.clear(); state.places.clear(); state.placeName = {}; afterRegionChange();
+  });
   wireDestCombo();
   afterRegionChange();
   refreshRegionCounts();
@@ -2278,7 +2404,7 @@ function afterRegionChange() {
     cb.checked = on > 0 && on === codes.length;
     cb.indeterminate = on > 0 && on < codes.length;
   }
-  $('regionclear').hidden = state.regions.size === 0;
+  $('regionclear').hidden = state.regions.size === 0 && state.places.size === 0;
   renderDestTags();
   refreshRegionCounts();
   markSearchStale();
@@ -2296,13 +2422,27 @@ function wireDestCombo() {
     input.focus();
   });
   input.addEventListener('focus', openDestPop);
-  input.addEventListener('input', (e) => { openDestPop(); filterRegionTree(e.target.value.trim().toLowerCase()); });
+  input.addEventListener('input', (e) => {
+    openDestPop();
+    const q = e.target.value.trim();
+    filterRegionTree(q.toLowerCase());
+    queryPlaces(q);
+  });
   input.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') { closeDestPop(); input.blur(); }
-    // Backspace on an empty input removes the last tag.
-    if (e.key === 'Backspace' && input.value === '' && state.regions.size) {
-      const last = [...destTagList()].pop();
-      if (last) { for (const c of last.codes) state.regions.delete(c); afterRegionChange(); }
+    if (e.key === 'Enter') {
+      const first = $('destresults').querySelector('.dest-result');
+      if (first) { e.preventDefault(); first.click(); }
+    }
+    // Backspace on an empty input removes the last tag (place chips first, then regions).
+    if (e.key === 'Backspace' && input.value === '') {
+      if (state.places.size) {
+        const last = [...state.places].pop();
+        state.places.delete(last); delete state.placeName[last]; afterPlacesChange();
+      } else if (state.regions.size) {
+        const last = [...destTagList()].pop();
+        if (last) { for (const c of last.codes) state.regions.delete(c); afterRegionChange(); }
+      }
     }
   });
   document.addEventListener('mousedown', (e) => {
@@ -2321,6 +2461,161 @@ function closeDestPop() {
   $('regionsearch').setAttribute('aria-expanded', 'false');
   const input = $('regionsearch');
   if (input.value) { input.value = ''; filterRegionTree(''); }
+  clearPlaceResults();
+}
+
+/* -------------------------------------------------- Typeahead: country / city / airport */
+
+let placeQueryTimer = null;
+let placeQuerySeq = 0;
+
+function clearPlaceResults() {
+  const box = $('destresults');
+  box.replaceChildren();
+  box.hidden = true;
+}
+
+function queryPlaces(q) {
+  clearTimeout(placeQueryTimer);
+  if (q.length < 2) { clearPlaceResults(); return; }
+  const seq = ++placeQuerySeq;
+  placeQueryTimer = setTimeout(() => {
+    fetch(`/api/places?q=${encodeURIComponent(q)}`)
+      .then((r) => r.json())
+      .then((data) => { if (seq === placeQuerySeq) renderPlaceResults(data.results || []); })
+      .catch(() => {});
+  }, 140);
+}
+
+function renderPlaceResults(results) {
+  const box = $('destresults');
+  const rows = results
+    .filter((r) => !(r.kind === 'country' ? state.regions.has(r.code) : state.places.has(r.code)))
+    .map((r) => {
+      const li = document.createElement('li');
+      li.className = 'dest-result';
+      li.setAttribute('role', 'option');
+      li.dataset.kind = r.kind;
+      li.dataset.code = r.code;
+      li.innerHTML =
+        `<span class="dr-kind">${r.kind === 'country' ? 'Country' : r.kind === 'city' ? 'City' : 'Airport'}</span>` +
+        `<span class="dr-label">${r.label}${r.kind !== 'country' ? ` <span class="dr-code">${r.code}</span>` : ''}</span>` +
+        (r.sub ? `<span class="dr-sub">${r.sub}</span>` : '');
+      li.addEventListener('mousedown', (e) => e.preventDefault());   // keep input focus
+      li.addEventListener('click', () => pickPlace(r));
+      return li;
+    });
+  box.replaceChildren(...rows);
+  box.hidden = rows.length === 0;
+}
+
+function pickPlace(r) {
+  if (r.kind === 'country') {
+    state.regions.add(r.code);
+    afterRegionChange();
+  } else {
+    state.places.add(r.code);
+    state.placeName[r.code] = r.label;
+    afterPlacesChange();
+  }
+  const input = $('regionsearch');
+  input.value = '';
+  filterRegionTree('');
+  clearPlaceResults();
+  input.focus();
+}
+
+function afterPlacesChange() {
+  renderDestTags();
+  markSearchStale();
+}
+
+/* -------------------------------------------------- Origin ("From") typeahead */
+/* Single value, no chips. Type a city or airport, pick one, `#origin` holds the IATA
+   code the search needs; a bare 2-4 letter code still works typed straight in. */
+let originQueryTimer = null;
+let originQuerySeq = 0;
+let originLastCode = ($('origin').value || '').trim().toUpperCase();
+
+function closeOriginResults() {
+  $('originresults').replaceChildren();
+  $('originresults').hidden = true;
+  $('origin').setAttribute('aria-expanded', 'false');
+}
+
+function wireOriginCombo() {
+  const input = $('origin');
+  input.addEventListener('input', () => {
+    const q = input.value.trim();
+    clearTimeout(originQueryTimer);
+    if (q.length < 2) { closeOriginResults(); return; }
+    const seq = ++originQuerySeq;
+    originQueryTimer = setTimeout(() => {
+      fetch(`/api/places?q=${encodeURIComponent(q)}`)
+        .then((r) => r.json())
+        .then((data) => {
+          if (seq !== originQuerySeq) return;
+          // Countries are allowed too -- picking one resolves to its busiest hub. Drop only
+          // a country row we can't resolve to an airport.
+          const results = (data.results || []).filter((r) => r.kind !== 'country' || r.hub);
+          renderOriginResults(results);
+        })
+        .catch(() => {});
+    }, 140);
+  });
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') { closeOriginResults(); }
+    if (e.key === 'Enter') {
+      const first = $('originresults').querySelector('.dest-result');
+      if (first) { e.preventDefault(); pickOrigin(first.dataset.code, first.dataset.label); }
+    }
+  });
+  input.addEventListener('blur', () => {
+    // Snap back to the last confirmed code if the field was left mid-search.
+    setTimeout(() => {
+      if (!/^[A-Za-z]{2,4}$/.test(input.value.trim())) {
+        input.value = originLastCode;
+      } else {
+        input.value = input.value.trim().toUpperCase();
+        originLastCode = input.value;
+      }
+      closeOriginResults();
+      markSearchStale();
+    }, 150);
+  });
+}
+
+function renderOriginResults(results) {
+  const box = $('originresults');
+  box.replaceChildren(...results.map((r) => {
+    const isCountry = r.kind === 'country';
+    const code = isCountry ? r.hub : r.code;               // depart from the country's hub
+    const label = r.label;
+    const li = document.createElement('li');
+    li.className = 'dest-result';
+    li.setAttribute('role', 'option');
+    li.dataset.code = code;
+    li.dataset.label = label;
+    li.innerHTML =
+      `<span class="dr-kind">${isCountry ? 'Country' : 'Airport'}</span>` +
+      `<span class="dr-label">${r.label} <span class="dr-code">${code}</span></span>` +
+      (r.sub ? `<span class="dr-sub">${r.sub}</span>` : '');
+    li.addEventListener('mousedown', (e) => e.preventDefault());
+    li.addEventListener('click', () => pickOrigin(code, label));
+    return li;
+  }));
+  box.hidden = results.length === 0;
+  $('origin').setAttribute('aria-expanded', String(!box.hidden));
+}
+
+function pickOrigin(code, label) {
+  const input = $('origin');
+  input.value = code;
+  originLastCode = code;
+  input.title = label ? `${label} (${code})` : code;
+  closeOriginResults();
+  input.dispatchEvent(new Event('change', { bubbles: true }));   // change, not input: don't re-open
+  markSearchStale();
 }
 
 /** Collapse the selection to the fewest tags: a fully-selected continent or subregion
@@ -2344,25 +2639,30 @@ function destTagList() {
 
 function renderDestTags() {
   const host = $('desttags');
-  const tags = destTagList();
-  host.replaceChildren(...tags.map((t) => {
+  const mk = (label, onRemove, isPlace) => {
     const el = document.createElement('span');
-    el.className = 'dest-tag';
-    el.append(t.label);
+    el.className = 'dest-tag' + (isPlace ? ' is-place' : '');
+    el.append(label);
     const x = document.createElement('button');
     x.type = 'button';
     x.className = 'dest-tag-x';
-    x.setAttribute('aria-label', `Remove ${t.label}`);
+    x.setAttribute('aria-label', `Remove ${label}`);
     x.textContent = '×';
-    x.addEventListener('click', () => {
-      for (const c of t.codes) state.regions.delete(c);
-      afterRegionChange();
-    });
+    x.addEventListener('click', onRemove);
     el.append(x);
     return el;
-  }));
-  $('destcombo').classList.toggle('has-tags', tags.length > 0);
-  $('regionsearch').placeholder = tags.length ? '' : 'Everywhere';
+  };
+  const regionTags = destTagList();
+  const placeChips = [...state.places].map((code) =>
+    mk(state.placeName[code] || code, () => {
+      state.places.delete(code); delete state.placeName[code]; afterPlacesChange();
+    }, true));
+  const regionChips = regionTags.map((t) =>
+    mk(t.label, () => { for (const c of t.codes) state.regions.delete(c); afterRegionChange(); }, false));
+  host.replaceChildren(...placeChips, ...regionChips);
+  const any = placeChips.length + regionChips.length > 0;
+  $('destcombo').classList.toggle('has-tags', any);
+  $('regionsearch').placeholder = any ? '' : 'Anywhere';
 }
 
 /** Post-search: how many loaded destinations sit under each node. */
@@ -2449,16 +2749,54 @@ function filterRegionTree(q) {
 
 /* Currency: with a board loaded, just convert the displayed numbers, no re-search.
    With no board yet, it's simply the currency the next search will fetch in. */
-$('currency').addEventListener('change', (e) => {
-  if (!state.meta) return;
-  state.displayCurrency = e.target.value;
+const CURRENCY_SYMBOL = { ils: '₪', eur: '€', usd: '$', gbp: '£' };
+
+/** Keep the currency marks on money fields (Options -> Max total) in sync with the picker. */
+function syncCurrencyMarks() {
+  const sym = CURRENCY_SYMBOL[$('currency').value] || '';
+  $('maxpricecur').textContent = sym;
+}
+
+/* Currency, like Per person, sits both in the board toolbar and in Options. #currency is
+   the canonical control (URL, search body, board-load default all read it); #currencyopt
+   mirrors it so the value -- and the Max total money mark -- can be set before a search. */
+function applyCurrency(val) {
+  if ($('currency').value !== val) $('currency').value = val;
+  if ($('currencyopt').value !== val) $('currencyopt').value = val;
+  syncCurrencyMarks();
+  if (!state.meta) return;   // no board yet: this is just what the next search fetches in
+  state.displayCurrency = val;
   $('panel').classList.remove('open');   // its numbers are now stale
   render();
-});
+}
+$('currency').addEventListener('change', (e) => applyCurrency(e.target.value));
+$('currencyopt').addEventListener('change', (e) => applyCurrency(e.target.value));
+syncCurrencyMarks();
 
 $('autoverify').addEventListener('change', (e) => {
   if (e.target.checked) startAutoVerify();
   else stopAutoVerify();
+});
+
+/* Fare heatmap: the pale tint scale ships by default; this opts in to the green-to-red
+   ramp that stays distinct under red-green colour vision deficiency and in greyscale.
+   Pure CSS switch (data-fareramp on <html> re-points --qN), persisted, so no re-render is
+   needed -- the legend swatches follow the same tokens. */
+(function initFareRamp() {
+  let pref = null;
+  try { pref = localStorage.getItem('flightmatrix.fareramp'); } catch (e) { /* ignore */ }
+  if (pref === 'cvd') {
+    document.documentElement.setAttribute('data-fareramp', 'cvd');
+    $('cvdramp').checked = true;
+  }
+})();
+$('cvdramp').addEventListener('change', (e) => {
+  const on = e.target.checked;
+  if (on) document.documentElement.setAttribute('data-fareramp', 'cvd');
+  else document.documentElement.removeAttribute('data-fareramp');
+  try {
+    localStorage.setItem('flightmatrix.fareramp', on ? 'cvd' : 'pale');
+  } catch (err) { /* ignore */ }
 });
 /* The desktop toolbar toggle; the button names the view you'd switch TO. */
 $('tabletoggle').addEventListener('click', () => {
@@ -2534,6 +2872,7 @@ $('depart').addEventListener('input', syncReturnDate);
 
 loadFx();
 buildRegionTree();
+wireOriginCombo();
 
 /* Advance the shared dot frame every 300ms and write it into every ellipsis on the page.
    New spans built between ticks already carry the current frame (see `dots()`); this nudges
@@ -2614,6 +2953,7 @@ applyTrip();
 const urlBoard = boardFromUrl(new URLSearchParams(location.search));
 syncDateMode();
 syncReturnDate();
+if (state.regions.size || state.places.size) renderDestTags();
 
 /* A URL that carries a search PREFILLS the form and stops there. It deliberately does not
    run the search itself.
@@ -2658,7 +2998,11 @@ Promise.race([
         'No Travelpayouts token configured. Add TRAVELPAYOUTS_TOKEN=... to the .env file in the project root, then restart.';
     }
     if (!urlBoard.has('from')) $('origin').value = h.defaults.origin;
-    if (!urlBoard.has('currency')) $('currency').value = h.defaults.currency;
+    if (!urlBoard.has('currency')) {
+      $('currency').value = h.defaults.currency;
+      $('currencyopt').value = h.defaults.currency;
+      syncCurrencyMarks();
+    }
     if (!urlBoard.has('adults')) $('adults').value = h.defaults.adults;
     if (!urlBoard.has('children')) $('children').value = h.defaults.children;
     if (!urlBoard.has('places')) $('dests').value = h.defaults.max_destinations;

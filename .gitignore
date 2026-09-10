@@ -23,3 +23,6 @@ graphify-out/.graphify_chunk_*.json
 .localvenv/
 .wtvenv/
 .impeccable/live/
+
+# impeccable per-run hook cache
+.impeccable/hook.cache.json

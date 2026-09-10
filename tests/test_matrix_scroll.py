@@ -87,10 +87,11 @@ def _board_url(base: str) -> str:
 
 def _prepare(page, base: str, mobile: bool):
     page.goto(_board_url(base))
+    # The board is a ranked list; the grid only exists once a destination is opened
+    # (a fixed focus layer on every width now, not just on a phone).
+    page.wait_for_selector(".lrow", timeout=60_000)
+    page.click(".lrow")
     page.wait_for_selector("table.matrix", state="attached", timeout=60_000)
-    if mobile:
-        # The grid lives in a fixed layer that opens on tapping a destination.
-        page.click(".lrow")
     page.wait_for_selector(".matrix-wrap", state="visible", timeout=10_000)
     # Let the first-open auto-locate + any settling finish.
     page.wait_for_timeout(400)

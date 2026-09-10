@@ -7,16 +7,12 @@
    One ramp serves both themes. Validated (not derived) in data/emit_fare_ramp.py. */
 
 /* ---------------------------------------------------------------- type
-   Geist for the chrome, Geist Mono for every numeral. Both self-hosted, so the board
-   makes no third-party font request and works on an air-gapped network.
+   One family: Geist, self-hosted, so the app makes no third-party font request and works
+   on an air-gapped network. The fare cells set the price in Geist with `tabular-nums`, so
+   a column of prices still aligns without a second monospace family.
 
-   Two families is a deliberate departure from the board's earlier one-family rule. At
-   this grid's density the numbers are the content, not a label on it, and a true
-   monospace holds a four-character fare ("1.2k", "840") to an identical advance in
-   every column, which proportional tabular figures only approximate.
-
-   font-display: swap is safe here: matrix cells are a fixed 26px, so a late swap
-   repaints glyphs without reflowing anything. No layout shift. */
+   font-display: swap is safe here: cells are a fixed size, so a late swap repaints glyphs
+   without reflowing anything. */
 @font-face {
   font-family: 'Geist';
   src: url('/static/fonts/Geist-Regular.woff2') format('woff2');
@@ -37,57 +33,48 @@
   src: url('/static/fonts/Geist-Bold.woff2') format('woff2');
   font-weight: 700; font-style: normal; font-display: swap;
 }
-@font-face {
-  font-family: 'Geist Mono';
-  src: url('/static/fonts/GeistMono-Regular.woff2') format('woff2');
-  font-weight: 400; font-style: normal; font-display: swap;
-}
-@font-face {
-  font-family: 'Geist Mono';
-  src: url('/static/fonts/GeistMono-Medium.woff2') format('woff2');
-  font-weight: 500; font-style: normal; font-display: swap;
-}
-@font-face {
-  font-family: 'Geist Mono';
-  src: url('/static/fonts/GeistMono-SemiBold.woff2') format('woff2');
-  font-weight: 600; font-style: normal; font-display: swap;
-}
-
 .viz-root,
 :root {
   color-scheme: light;
 
-  /* One sans, one mono. The fallbacks match Geist's metrics closely enough that a
-     failed font load degrades to the board's previous appearance. */
+  /* One workhorse humanist sans across the whole surface. The old "two families, every
+     numeral in a second monospace" rule is retired with the departures-board world: on
+     the fare calendar the price is a headline in its cell, not a row in a data table, and
+     Geist's own tabular-nums hold the columns. */
   --sans: 'Geist', system-ui, -apple-system, 'Segoe UI', sans-serif;
-  --mono: 'Geist Mono', ui-monospace, 'SF Mono', 'Cascadia Mono', 'Segoe UI Mono', monospace;
 
-  /* Motion: one shared curve for the 4-7 "fluid CSS" band. */
+  /* Motion: one shared ease-out curve. */
   --ease: cubic-bezier(0.16, 1, 0.3, 1);
 
-  /* ---- fare-grid geometry ---------------------------------------------------------
-     A square grid whose cells are separated by a 1px hairline of canvas: the field reads
-     as one continuous heatmap, but every cell keeps an edge. Fully flush (gap 0) was tried
-     first and lost the boundaries — a run of same-priced days read as one long smear;
-     1px is the smallest separation that draws them back without returning to floating chips.
+  /* Rounded, like an app rather than a terminal. */
+  --r-xs: 6px;
+  --r-sm: 9px;
+  --r-md: 12px;
+  --r-lg: 16px;
+  --r-pill: 999px;
 
-     The old board showed many grids side by side, so the cell ran at 9-10px to fit them.
-     The master-detail layout shows ONE grid in a full pane, which buys the room to put the
-     price text on the 11px functional-text floor and above it: 12px in a 32px cell. The
-     only cost is horizontal room — a wide date range scrolls sideways a little sooner —
-     and the pane exists to absorb that. --cell-w is a floor; the table distributes
-     whatever width the pane has, so cells measure wider than declared. */
-  --cell-gap: 1px;
-  --cell-radius: 0px;
-  --cell-w: 32px;
-  --cell-h: 23px;
-  --cell-type: 12px;
-  --cell-line: 18px;
-  /* Every marker carries a 1px currentColor edge. currentColor is the cell's own measured
-     ink, so that edge is guaranteed to clear AA against whatever fill it lands on, and
-     without it the marker is unreadable: the cheapest cell is ALWAYS the vivid green q0,
-     and marker-yellow against that green measures 1.32 contrast. The yellow still carries
-     the meaning; the ink edge is what makes it visible. */
+  /* A real elevation ladder: every shadow has an offset and a soft blur. Tuned warm
+     (37,31,24) so it reads as a shadow on paper, not a grey box. */
+  --shadow-sm: 0 1px 2px rgba(37, 31, 24, 0.06), 0 1px 3px rgba(37, 31, 24, 0.05);
+  --shadow-md: 0 2px 6px rgba(37, 31, 24, 0.06), 0 12px 28px rgba(37, 31, 24, 0.08);
+  --shadow-lg: 0 10px 24px rgba(37, 31, 24, 0.12), 0 28px 64px rgba(37, 31, 24, 0.14);
+
+  /* ---- fare-calendar geometry ---------------------------------------------------------
+     Few cells, large. Each cell is a rounded tinted tile carrying a headline price over a
+     muted trip-length line ("5 nights"), so about five departure columns and five return
+     rows fill the detail pane and the rest of the widened window scrolls with the date
+     axes pinned. --cell-w is a floor; the table hands each column whatever width the pane
+     has, so cells measure wider than declared. */
+  --cell-gap: 5px;
+  --cell-radius: 9px;
+  --cell-w: 86px;       /* a touch wider now that the price carries a currency symbol */
+  --cell-h: 50px;
+  --cell-type: 14px;    /* the price */
+  --cell-sub: 12px;     /* the trip-length line */
+  --cell-line: 1.1;
+  /* Every cheapest-marker carries a 1px currentColor edge inside the yellow ring:
+     currentColor is the cell's own measured ink, so the edge always clears AA against the
+     fill, and without it marker-yellow on the vivid green q0 measures 1.32 contrast. */
   --best-here-shadow: inset 0 0 0 1px currentColor, inset 0 0 0 3px var(--cheapest);
   --best-board-shadow:
     inset 0 0 0 1px currentColor, inset 0 0 0 4px var(--cheapest),
@@ -99,76 +86,80 @@
 /* Colour tokens, in their own block so the geometry switches above stay readable. */
 .viz-root,
 :root {
-  /* Three grounds, deliberately stepped so the page has a structure instead of one flat
-     wash: --surface-1 is raised chrome (the control bar, tooltip, panel), --page is the
-     document ground that controls sit on, --canvas is the recessed board area. The old
-     palette had chrome and page a 3-in-255 step apart, which was invisible,
-     so the toolbar was held up by a single hairline. --canvas is separate from --page on
-     purpose: darkening --page itself would have restyled every button and input too. */
-  /* COLD, not warm. The neutrals used to be a cream ground (#f4f3ef) under a tinted
-     near-black (#0b0b0b). Both are the exact values generated design defaults to, and
-     neither is true to the subject: a departures board is a backlit instrument in a
-     terminal, not paper on a desk. The ladder below is the same three steps at the same
-     spacing, rotated off warm-paper onto a cool grey that reads as glass and metal. The
-     board is the only warm thing on screen now, which is where the warmth belongs. */
-  --surface-1: #fbfcfd;
-  --page: #f1f4f6;
-  --canvas: #e8ecf0;
-  --text-primary: #12171d;
-  --text-secondary: #48525c;
-  --text-muted: #5f6b7b;
-  --gridline: #d5dbe1;
-  --axis: #b0b9c3;
-  --border: rgba(18, 23, 29, 0.12);
-  /* Semantic text colours, per theme. These used to be single values shared by both, which
-     cannot work: the two canvases sit at opposite ends of lightness, so one green cannot
-     clear 4.5 against the light canvas AND the dark one. Measured, the old --good (#0ca30c) came out at
-     3.02 on the light canvas, which is what made every "live" chip on a light board fail.
-     --warning stays single-valued because it is only ever a BACKGROUND carrying --ink-on-warm
-     text, or a decorative dot that ships with words; it is never text itself. */
-  --good: #097c09;      /* 4.54 on canvas, 5.24 on chrome */
-  --critical: #c0261f;  /* 5.00 worst case in light */
-  --warning: #fab219;
-  --ink-on-fill: #12171d;
-  --ink-flipped: #fbfcfd;
-  --cheapest: #f2b705;   /* reserved for the cheapest-cell marker, never used as a fill */
-  --brand: #0e9e77;      /* the wordmark green: the plane mark, and the jump-to-cheapest icon */
-  /* Ink for text sitting on one of the warm fills (--cheapest, --warning). Theme-
-     INDEPENDENT on purpose: those fills are the same yellow in light and dark, so their
-     ink cannot follow --text-primary or it inverts to white on yellow in dark mode. Was
-     two hard-coded #0b0b0b literals before. */
-  --ink-on-warm: #12171d;
+  /* WARM, on purpose. The board used to be a cold grey "backlit instrument". This world
+     is a fare calendar you read at arm's length: a soft off-white paper ground, white
+     cards lifted off it by shadow, one blue accent. Three stepped grounds still give the
+     page structure -- --surface-1 raised (cards, controls, popovers), --page the ground
+     they sit on, --canvas the slightly deeper board area behind the panes. */
+  --surface-1: #ffffff;
+  --page: #f7f4ef;
+  --canvas: #f1ece3;
+  --text-primary: #2a2521;   /* warm near-black */
+  --text-secondary: #675e54;  /* 5.6 on white, 5.0 on --page */
+  --text-muted: #7c7267;      /* 4.6 on white -- the functional-text floor colour */
+  --gridline: #e7e0d5;
+  --axis: #d6cdbf;
+  --border: rgba(42, 37, 33, 0.13);
 
-  /* Price ramp, ONE ramp for both themes. Validated (not derived) by
-     data/emit_fare_ramp.py, which holds the provenance and the gates; --qiN is the
-     measured-contrast ink for step N. Run that script rather than hand-editing.
+  /* The one accent -- the wordmark's "Matrix" green (--brand #0e9e77), darkened just
+     enough to hold white text at AA. Carries the primary button, the active filter pill,
+     the "View deal" CTA and the focus ring; --accent-wash tints the selected list row. */
+  --accent: #0a8060;         /* 4.7 on white */
+  --accent-strong: #076b50;  /* hover / pressed */
+  --accent-ink: #ffffff;
+  --accent-wash: #e4f3ee;
 
-     ART-DIRECTED: q0-q5 are sampled verbatim from a supplied credit-score scale
-     (Excellent -> Very Bad). q6 is an addition, a deeper red at the same hue as the last
-     band, because the reference has six steps and the board needs seven. Extending the
-     dark end rather than interpolating a middle step keeps all six source colours exact
-     AND pulls the two ends apart, which is the reference palette's weakest property.
+  /* Status hues, dark enough to clear AA as text on the warm white surfaces. */
+  --good: #157a3d;      /* 4.9 on white */
+  --critical: #b62d20;  /* 5.6 on white */
+  --warning: #dd9f13;
+  --ink-on-fill: #2a2521;
+  --ink-flipped: #ffffff;
+  --cheapest: #eab308;   /* reserved for the cheapest-cell marker, never a fill */
+  --brand: #0e9e77;      /* the wordmark plane mark, and the jump-to-cheapest icon */
+  /* Ink for text on the warm fills (--cheapest, --warning). Theme-independent: those
+     fills are the same in light and dark, so their ink cannot follow --text-primary. */
+  --ink-on-warm: #2a2521;
 
-     TWO THINGS THIS PALETTE COSTS, both accepted knowingly:
+  /* Price ramp. TWO ramps, both validated (not derived) by data/emit_fare_ramp.py, which
+     holds the provenance and the gates; --qiN is the measured-contrast ink for step N.
+     Run that script rather than hand-editing.
 
-       1. Lightness humps instead of falling (yellow is the lightest band), so tone no
-          longer ranks the scale. Cheapest-vs-dearest separation under deuteranopia is
-          18.9 dE, against 38.8 for the monotonic green-to-red ramp this replaced. The
-          worst pair at ANY distance is q1 vs q3 at 4.4 dE, i.e. a cheap cell and a
-          mid-priced one a colour-blind user may not separate by colour. Affordable only
-          because every cell prints its price and the table view lists them all.
-       2. q2 is yellow, which brushes the Reserved Yellow Rule (marker-yellow is meant to
-          be the cheapest marker and nothing else). It survives because the marker only
-          ever lands on q0 and is a ring, not a fill, and because every marker now carries
-          a 1px ink edge. Worth remembering if the marker is ever restyled. */
+     DEFAULT is the PALE ramp below -- a soft tint scale (mint -> cream -> rose) matched to
+     the marketing comp, one dark ink on every step. It clears the AA label-contrast gate
+     (dark ink, >= 6:1) but NOT the colour-vision-deficiency separation the other ramp
+     holds: pale colours compress the gamut, so steps sit closer under deuteranopia. That
+     is acceptable only because colour is never the sole signal (every cell prints its
+     price, cheapest is ringed, list is cheapest-first, full table view) AND the
+     colour-blind-friendly ramp is one opt-in click away -- the board-tools "Colour-blind
+     friendly" toggle sets [data-fareramp='cvd'], persisted in localStorage. */
+  --q0: #a9d8b4;  --qi0: #0b0b0b;
+  --q1: #cfe6a0;  --qi1: #0b0b0b;
+  --q2: #f5e6a0;  --qi2: #0b0b0b;
+  --q3: #f6d3a2;  --qi3: #0b0b0b;
+  --q4: #f2b39c;  --qi4: #0b0b0b;
+  --q5: #ec9088;  --qi5: #0b0b0b;
+  --q6: #e06b6b;  --qi6: #0b0b0b;
+  --hatch: rgba(42, 37, 33, 0.05);
+}
+
+/* The opt-in colour-blind-friendly ramp: vivid green -> deep red, where OKLCH lightness
+   keeps falling the whole way, so cheapest-vs-dearest stays separable when hue is lost
+   (deuteranopia / protanopia / greyscale): 18.9 dE under deuteranopia, adjacency floor
+   2.6. Validated by data/emit_fare_ramp.py. The two darkest reds (q5, q6) carry white ink
+   because dark red cannot hold black text at AA -- this is the ONE place the board uses a
+   second ink, and it only appears when a viewer has explicitly opted into this mode; the
+   default pale ramp is a single dark ink on every cell. q2 brushes the Reserved Yellow
+   Rule but survives: the marker only lands on q0, is a ring not a fill, 1px ink edge. */
+.viz-root[data-fareramp='cvd'],
+:root[data-fareramp='cvd'] {
   --q0: #0f9246;  --qi0: #0b0b0b;
   --q1: #7ebb42;  --qi1: #0b0b0b;
-  --q2: #fdcb08;  --qi2: #0b0b0b;
-  --q3: #f68e1f;  --qi3: #0b0b0b;
-  --q4: #ef4723;  --qi4: #0b0b0b;
-  --q5: #bc1f26;  --qi5: #fcfcfb;
+  --q2: #f2c53a;  --qi2: #0b0b0b;
+  --q3: #f0952f;  --qi3: #0b0b0b;
+  --q4: #ea5f34;  --qi4: #0b0b0b;
+  --q5: #cc3630;  --qi5: #fcfcfb;
   --q6: #7f0a13;  --qi6: #fcfcfb;
-  --hatch: rgba(18, 23, 29, 0.05);
 }
 
 @media (prefers-color-scheme: dark) {
@@ -199,26 +190,34 @@
 
 :root[data-theme='dark'] {
   color-scheme: dark;
-  --surface-1: #161b21;
-  --page: #0b0e12;
-  --canvas: #0b0e12;
-  --text-primary: #f2f5f8;
-  --text-secondary: #b4bec9;
-  --text-muted: #8b96a3;
-  --gridline: #242b33;
-  --axis: #323b45;
-  --border: rgba(242, 245, 248, 0.12);
+  --surface-1: #221d19;
+  --page: #17130f;
+  --canvas: #120f0c;
+  --text-primary: #f3ede4;
+  --text-secondary: #c3b9ab;
+  --text-muted: #9a8f80;
+  --gridline: #322b23;
+  --axis: #453d32;
+  --border: rgba(243, 237, 228, 0.13);
+  --accent: #2bb98c;
+  --accent-strong: #45c79e;
+  --accent-ink: #10201a;
+  --accent-wash: #16342b;
   /* Lighter on near-black: the light-theme values measure 3.6-4.1 here. */
-  --good: #0ca30c;      /* 5.16 on chrome, 5.77 on canvas */
-  --critical: #ff8078;  /* 7.10 worst case in dark */
-  --ink-on-fill: #f2f5f8;
-  --ink-flipped: #12171d;
+  --good: #34b45a;      /* on the warm dark grounds */
+  --critical: #ff8b7f;
+  --warning: #f0b429;
+  --ink-on-fill: #f3ede4;
+  --ink-flipped: #17130f;
   --cheapest: #ffcf33;
   /* No ramp override: theme-independent, as above. */
   --hatch: rgba(242, 245, 248, 0.06);
 }
 
 * { box-sizing: border-box; }
+
+input[type='checkbox'],
+input[type='radio'] { accent-color: var(--accent); }
 
 /* The app drives several spans/buttons with the `hidden` attribute; make sure an
    author `display` on the same element can't override it. */
@@ -245,12 +244,9 @@ body {
   font: 14px/1.45 var(--sans);
 }
 
-/* Every numeral the user might compare, sort, or watch update runs in the mono. Scoped to
-   numeric surfaces only: the panel's definition list and the flight-leg lines carry words
-   ("Airline", "previously verified", "Nonstop") alongside their figures and stay in the
-   sans with tabular figures, because mono on prose is just costume.
-   The `tabular-nums` declarations elsewhere are kept even though Geist Mono is already
-   fixed-advance, so the fallback stack still aligns if the webfont fails. */
+/* Every numeral the user might compare, sort, or watch update carries tabular figures so
+   columns of prices line up. One family now (Geist), whose own `tabular-nums` holds the
+   advance -- the old second monospace family is retired with the departures-board world. */
 .mono,
 table.matrix td,
 table.matrix th,
@@ -260,7 +256,6 @@ table.matrix th,
 #panel .big,
 .tableview th.num,
 .tableview td.num {
-  font-family: var(--mono);
   font-variant-numeric: tabular-nums;
 }
 
@@ -290,28 +285,41 @@ header.controls {
   top: 0;
   z-index: 30;
   background: var(--surface-1);
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid var(--gridline);
+  box-shadow: var(--shadow-sm);
 }
 
 /* The primary row carries the whole task path (from, dates, travellers, Search)
    and nothing else. Every refinement lives in the Filters panel below. */
-/* Three clusters, not twelve controls: the trip, the actions, and the display settings.
-   The gap BETWEEN groups is wide and the gap within them tight, so proximity does the
-   grouping and the bar needs no divider rules to be legible. */
+/* The search is one segmented control: a single rounded card, the fields sitting inside it
+   as segments split by hairlines, then the Search button and Options as their own pills. */
 .controls-primary {
   display: flex;
   flex-wrap: wrap;
-  align-items: flex-end;
-  gap: 10px 22px;
-  padding: 11px 16px;
+  align-items: center;
+  gap: 10px 12px;
+  padding: 12px 16px;
 }
 
-.bar-group {
+/* The field group -- the segmented card. */
+.controls-primary > .bar-group:not(.bar-actions) {
   display: flex;
   flex-wrap: wrap;
-  align-items: flex-end;
-  gap: 8px 10px;
+  align-items: stretch;
+  gap: 0;
+  background: var(--surface-1);
+  border: 1px solid var(--gridline);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-sm);
 }
+
+.bar-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.bar-actions button { min-height: 46px; }
+.bar-actions #go { font-size: 15px; padding: 0 26px; }
 
 /* Mobile-only collapsed search (see the @media block near the end for where it shows). */
 .edit-search {
@@ -320,10 +328,10 @@ header.controls {
   align-items: baseline;
   justify-content: space-between;
   gap: 10px;
-  padding: 9px 40px 9px 10px;   /* clear the absolute theme toggle on the right */
-  border: 1px solid var(--axis);
-  border-radius: var(--rounded-md, 6px);
-  background: var(--surface-1);
+  padding: 11px 44px 11px 14px;   /* clear the absolute theme toggle on the right */
+  border: 1px solid var(--gridline);
+  border-radius: var(--r-md);
+  background: var(--page);
   color: var(--text-primary);
   font: inherit;
   text-align: left;
@@ -422,7 +430,7 @@ header.controls {
   font-size: 14px;
 }
 .ctry-pop label:hover { background: var(--page); }
-.ctry-n { margin-left: auto; font-family: var(--mono); font-size: 11px; color: var(--text-muted); }
+.ctry-n { margin-left: auto; font-variant-numeric: tabular-nums; font-size: 11px; color: var(--text-muted); }
 
 /* Simple search bar: four fields, generous. */
 .field-where select { min-width: 168px; }
@@ -430,15 +438,36 @@ header.controls {
 .controls-primary { align-items: flex-end; }
 .bar-group { align-items: flex-end; }
 
-@media (max-width: 720px) {
-  .controls-primary > .bar-group { flex: 1 1 100%; gap: 8px 10px; }
-  .bar-group > .field { flex: 1 1 100%; }
-  .bar-group > .field-where,
-  .bar-group > .field-trip,
-  .bar-group > .field-pax { flex: 1 1 calc(50% - 5px); }
-  .bar-actions { display: flex; gap: 8px; }
+/* Segment widths on a wide bar: each takes its content, "To" gets the slack. */
+.controls-primary > .bar-group:not(.bar-actions) { flex: 1 1 auto; }
+.bar-group:not(.bar-actions) > .field-from  { flex: 0 0 auto; }
+.bar-group:not(.bar-actions) > .field-dest  { flex: 1 1 170px; }
+.bar-group:not(.bar-actions) > .field-where { flex: 0 1 auto; }
+.bar-group:not(.bar-actions) > .field-trip  { flex: 0 1 auto; }
+.bar-group:not(.bar-actions) > .field-pax   { flex: 0 0 auto; }
+
+@media (max-width: 860px) {
+  /* The card stacks: segments full width, split by a top rule instead of a left one.
+     flex-wrap goes off with the direction change -- a wrapping column flexbox breaks the
+     segments into side-by-side columns that overflow the screen instead of stacking. */
+  .controls-primary > .bar-group:not(.bar-actions) {
+    flex: 1 1 100%;
+    flex-direction: column;
+    flex-wrap: nowrap;
+  }
+  .bar-group:not(.bar-actions) > .field {
+    flex: 1 1 100% !important;
+    border-left: 0;
+    border-top: 1px solid var(--gridline);
+    padding: 8px 14px 9px 36px;
+  }
+  .bar-group:not(.bar-actions) > .field:first-of-type { border-top: 0; }
+  .bar-actions { display: flex; gap: 8px; width: 100%; }
   .bar-actions > #go { flex: 2 1 0; }
   .bar-actions > .opts-toggle { flex: 1 1 0; justify-content: center; }
+}
+
+@media (max-width: 720px) {
   .board-tools { flex-wrap: wrap; gap: 8px 12px; font-size: 14px; }
   .board-tools .bt-spacer { display: none; }
   .card-head .best { font-size: 18px; }
@@ -469,31 +498,102 @@ header.controls {
   width: auto;
 }
 
-.field { display: flex; flex-direction: column; gap: 3px; }
+/* Each field is a segment of the card: a caption, then its value big underneath, an icon
+   to the left. Split from the next segment by a hairline; hover / focus tints the segment
+   so it's clear which one you're in. */
+.bar-group:not(.bar-actions) > .field {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 1px;
+  padding: 6px 14px 7px 34px;
+  border-left: 1px solid var(--gridline);
+  position: relative;
+  transition: background-color 0.14s var(--ease);
+}
+.bar-group:not(.bar-actions) > .field:first-of-type { border-left: 0; }
+.bar-group:not(.bar-actions) > .field:hover { background: var(--page); }
+.bar-group:not(.bar-actions) > .field:focus-within { background: var(--accent-wash); }
+.bar-group:not(.bar-actions) > .field:first-of-type:hover,
+.bar-group:not(.bar-actions) > .field:first-of-type:focus-within { border-radius: var(--r-lg) 0 0 var(--r-lg); }
 
-/* Sentence case, no tracking. Twelve uppercase wide-tracked labels shouting at once was
-   the single biggest reason the bar read as a database query form; at 11px, upper case is
-   also simply harder to read than lower. Held at 11px, not smaller, per the floor rule. */
+/* The segment icon -- a mask so it follows the palette in light and dark. */
+.bar-group:not(.bar-actions) > .field::before {
+  content: '';
+  position: absolute;
+  left: 12px;
+  top: 50%;
+  width: 15px;
+  height: 15px;
+  transform: translateY(-50%);
+  background: var(--text-muted);
+  -webkit-mask: var(--fi) center / contain no-repeat;
+  mask: var(--fi) center / contain no-repeat;
+}
+.bar-group:not(.bar-actions) > .field:focus-within::before { background: var(--accent); }
+.field-from::before { --fi: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%23000'%3E%3Cpath d='M2.5 19.5 21 12 2.5 4.5 2.5 10 15 12 2.5 14z'/%3E%3C/svg%3E"); }
+
+/* Origin ("From") is a single-value typeahead: type a city or airport, pick one, the
+   field holds the IATA code. */
+.origin-combo { position: relative; display: inline-block; }
+.field-from input { width: 4ch; }
+.field-from:focus-within input { width: 12ch; }
+#originresults {
+  position: absolute;
+  z-index: 42;
+  left: -12px;
+  top: calc(100% + 12px);
+  min-width: 250px;
+  list-style: none;
+  margin: 0;
+  padding: 6px;
+  max-height: 300px;
+  overflow-y: auto;
+  background: var(--surface-1);
+  border: 1px solid var(--gridline);
+  border-radius: var(--r-md);
+  box-shadow: var(--shadow-lg);
+}
+.field-dest::before { --fi: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%23000'%3E%3Cpath d='M12 2C8 2 5 5 5 9c0 5 7 13 7 13s7-8 7-13c0-4-3-7-7-7zm0 9.5A2.5 2.5 0 1 1 12 6.5a2.5 2.5 0 0 1 0 5z'/%3E%3C/svg%3E"); }
+.field-where::before { --fi: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2'%3E%3Crect x='3' y='4.5' width='18' height='17' rx='2'/%3E%3Cpath d='M3 9h18M8 2.5v4M16 2.5v4'/%3E%3C/svg%3E"); }
+.field-trip::before { --fi: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2'%3E%3Ccircle cx='12' cy='12' r='9'/%3E%3Cpath d='M12 7v5l3.5 2'/%3E%3C/svg%3E"); }
+.field-pax::before  { --fi: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%23000'%3E%3Ccircle cx='12' cy='8' r='4'/%3E%3Cpath d='M4 21c0-4.4 3.6-7 8-7s8 2.6 8 7z'/%3E%3C/svg%3E"); }
+
 .field > label {
   font-size: 11px;
-  line-height: 1.3;
+  line-height: 1.2;
+  font-weight: 500;
   color: var(--text-muted);
 }
 
-/* Underlines, not boxes. Twelve bordered rectangles at identical weight is what made this
-   look homemade; a bottom rule keeps the affordance while letting the VALUES read as the
-   content. Hover darkens the rule, focus thickens it to 2px in ink. */
+/* Borderless value inside the segment -- the value IS the content; the segment and its
+   caption frame it. */
 .field input,
 .field select {
   font: inherit;
+  font-size: 15px;
+  font-weight: 600;
   color: var(--text-primary);
   background: none;
   border: 0;
-  border-bottom: 1px solid var(--axis);
   border-radius: 0;
-  padding: 4px 2px;
-  min-width: 72px;
+  padding: 0;
+  height: 22px;
+  min-width: 0;
+  box-shadow: none !important;
 }
+.field input:hover,
+.field select:hover { background: none; border: 0; }
+.field input:focus-visible,
+.field select:focus-visible { outline: none; box-shadow: none; }
+.field input::placeholder { color: var(--text-muted); font-weight: 400; opacity: 1; }
+.field select {
+  -webkit-appearance: none;
+  appearance: none;
+  padding-right: 16px;
+  background: var(--fi-caret) right center / 11px no-repeat;
+}
+:root { --fi-caret: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%237c7267'/%3E%3C/svg%3E"); }
 
 /* A select with a transparent background renders its native dropdown on the browser's
    default LIGHT canvas, while the <option> text inherits our light-on-dark colour. In dark
@@ -503,14 +603,31 @@ header.controls {
    The fix is an explicit opaque ground on both the control and its options, matching
    whatever they sit on: indistinguishable from transparent when closed, correct when open.
    Selects appear in two places, so both grounds are named. */
-.field select,
-.field select option {
-  background-color: var(--surface-1);
-  color: var(--text-primary);
+/* The closed select blends into its segment; the <option> popup needs an opaque ground or
+   dark mode renders light text on the browser's default near-white popup. */
+.bar-group:not(.bar-actions) .field select {
+  background-color: transparent;
 }
+.field select option { background-color: var(--surface-1); color: var(--text-primary); }
 
-.controls-adv .field select,
-.controls-adv .field select option { background-color: var(--page); }
+/* The advanced panel keeps boxed fields -- it is a form, not the segmented headline bar. */
+.controls-adv .field {
+  padding: 0;
+  border: 0;
+}
+.controls-adv .field::before { display: none; }
+.controls-adv .field input,
+.controls-adv .field select {
+  background-color: var(--surface-1);
+  border: 1px solid var(--gridline);
+  border-radius: var(--r-sm);
+  padding: 0 10px;
+  height: 38px;
+  font-size: 14px;
+  font-weight: 400;
+}
+.controls-adv .field select { background: var(--fi-caret) right 8px center / 10px no-repeat, var(--surface-1); padding-right: 24px; }
+.controls-adv .field select option { background-color: var(--surface-1); }
 
 /* The browser's default placeholder grey is #757575 in both themes, i.e. theme-blind, and
    it measured 4.37-4.49 on the light grounds and 3.78-4.22 on the dark ones: under AA
@@ -522,14 +639,14 @@ header.controls {
 }
 
 .field input:hover,
-.field select:hover { border-bottom-color: var(--text-muted); }
+.field select:hover { border-color: var(--axis); background: var(--surface-1); }
 
-/* The inset shadow doubles the rule to 2px without reflowing anything. */
 .field input:focus-visible,
 .field select:focus-visible {
   outline: none;
-  border-bottom-color: var(--text-primary);
-  box-shadow: inset 0 -1px 0 0 var(--text-primary);
+  border-color: var(--accent);
+  background: var(--surface-1);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent);
 }
 
 .field input[type='date'] { min-width: 124px; }
@@ -539,39 +656,48 @@ header.controls {
    ~100px of dead width between them. That mattered once Nonstop and Expand joined the bar:
    at 1600px the row wrapped to two lines, over the 80px header cap. Measured after: one
    line down to 1280px. A single-digit Adults field does not need 68px. */
-.field-xs input { width: 50px; min-width: 0; }
-.field-xs select { width: 68px; min-width: 0; }   /* "ILS" plus the native arrow */
-.field-sm input { width: 62px; min-width: 0; }    /* a 3-letter airport code */
-.field-date { min-width: 124px; }
-.field-nights { min-width: 116px; }
+.field-xs input { width: 62px; min-width: 0; }
+.field-xs select { width: 104px; min-width: 0; }   /* "ILS ₪" plus the native arrow */
+.field-sm input { width: 78px; min-width: 0; }    /* a 3-letter airport code */
+.field-date { min-width: 138px; }
+.field-nights { min-width: 128px; }
 
 /* Travellers in the primary bar: two small steppers, each with its own quiet caption so
    "2  0" is never ambiguous. */
-.pax { display: flex; gap: 10px; }
-.pax-cell { display: flex; align-items: baseline; gap: 4px; }
-.pax-cell input { width: 34px; min-width: 0; text-align: center; }
-.pax-cell i { font-style: normal; font-size: 11px; color: var(--text-muted); }
+.pax { display: flex; align-items: baseline; gap: 12px; }
+.pax-cell { display: flex; align-items: baseline; gap: 3px; }
+/* Keep the browser's native up/down spinner -- same control as the Nights fields. Wide
+   enough for the digit plus the arrows. */
+.field .pax-cell input {
+  width: 34px;
+  min-width: 0;
+  text-align: center;
+  padding: 0 0 0 4px;
+}
+.pax-cell i { font-style: normal; font-size: 11px; font-weight: 400; color: var(--text-muted); }
 
 /* Day-of-week pickers: seven toggles, empty meaning "any day". */
-.dow { display: flex; gap: 2px; }
+.dow { display: flex; gap: 4px; }
 
 .dow button {
-  width: 24px;
-  padding: 5px 0;
+  width: 34px;
+  min-height: 0;
+  padding: 7px 0;
   font-size: 11px;
-  border-radius: 4px;
+  font-weight: 500;
+  border-radius: var(--r-pill);
   color: var(--text-muted);
 }
 
 .dow button.on {
-  background: var(--text-primary);
-  color: var(--surface-1);
-  border-color: var(--text-primary);
+  background: var(--accent);
+  color: var(--accent-ink);
+  border-color: var(--accent);
   font-weight: 700;
 }
 
-.hours { display: flex; gap: 3px; }
-.hours select { min-width: 0; width: 68px; padding: 5px 4px; }
+.hours { display: flex; gap: 4px; }
+.hours select { min-width: 0; width: 84px; padding: 7px 8px; }
 
 /* Time windows only take effect on a new search, so the button says so. */
 button.primary.running { opacity: .75; }
@@ -583,8 +709,30 @@ button.primary.stale {
 }
 
 
-.nights { display: flex; gap: 3px; }
-.nights input { width: 52px; min-width: 0; }
+.nights { display: flex; gap: 4px; }
+.nights input { width: 62px; min-width: 0; }
+
+/* Money field (Options -> Max total): the currency mark is an attached prefix so it is
+   always clear the number is a fare cap, in whatever currency the picker shows. */
+.money-in { display: inline-flex; align-items: stretch; }
+.money-cur {
+  display: inline-flex;
+  align-items: center;
+  height: 38px;
+  padding: 0 6px 0 10px;
+  font-style: normal;
+  font-size: 14px;
+  color: var(--text-muted);
+  background: var(--page);
+  border: 1px solid var(--gridline);
+  border-right: 0;
+  border-radius: var(--r-sm) 0 0 var(--r-sm);
+}
+.controls-adv .field-money input {
+  border-radius: 0 var(--r-sm) var(--r-sm) 0;
+  padding-left: 4px;
+  width: 84px;
+}
 
 /* -------------------------------------------------- filters (progressive disclosure) */
 
@@ -601,9 +749,9 @@ button.primary.stale {
 }
 
 .opts-toggle[aria-expanded='true'] {
-  background: var(--text-primary);
-  color: var(--surface-1);
-  border-color: var(--text-primary);
+  background: var(--accent);
+  color: var(--accent-ink);
+  border-color: var(--accent);
 }
 
 .opts-toggle[aria-expanded='true'] .opts-chevron { transform: rotate(90deg); }
@@ -613,26 +761,30 @@ button.primary.stale {
 .controls-adv { display: none; }
 
 body.opts-open .controls-adv {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 16px 44px;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 12px;
   padding: 14px 16px 16px;
-  border-top: 1px solid var(--border);
-  background: var(--page);   /* a step back from the header surface */
+  border-top: 1px solid var(--gridline);
+  background: var(--page);
 }
 
-.adv-group { flex: 0 1 340px; min-width: 0; }
+/* Each filter group is its own soft card. */
+.adv-group {
+  min-width: 0;
+  padding: 12px 14px 14px;
+  background: var(--surface-1);
+  border: 1px solid var(--gridline);
+  border-radius: var(--r-md);
+  box-shadow: var(--shadow-sm);
+}
 
-/* Sentence case, no tracking. The bar's own labels were de-capsed for exactly this
-   reason; these five group headings inside the Options panel were missed at the time. */
 .adv-group-label {
   display: block;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 600;
-  color: var(--text-muted);
-  padding-bottom: 8px;
+  color: var(--text-primary);
   margin-bottom: 10px;
-  border-bottom: 1px solid var(--gridline);
 }
 
 .adv-fields {
@@ -643,20 +795,22 @@ body.opts-open .controls-adv {
 }
 
 .adv-actions {
-  flex-basis: 100%;
+  grid-column: 1 / -1;
   display: flex;
-  align-items: flex-end;
+  align-items: center;
   padding-top: 2px;
 }
+#clearconstraints { font-size: 13px; }
 
 .controls-adv .check { padding-bottom: 0; }
+.controls-adv .field > label { font-weight: 400; }
 
 /* ---------------------------------------------------------------- region tree */
 
 /* Destinations: a multi-select combobox in the primary bar, right after "From". The control
    shows the current selection as removable tags; clicking or focusing it drops the tree
    popover. */
-.field-dest { flex: 1 1 200px; min-width: 180px; max-width: 300px; }
+.field-dest { flex: 1 1 170px; min-width: 150px; max-width: 260px; }
 .dest-combo { position: relative; }
 
 .dest-pop-head {
@@ -671,33 +825,37 @@ body.opts-open .controls-adv {
   margin-bottom: 4px;
 }
 
+/* Inside the segmented bar the combo has no chrome of its own -- the segment is the field.
+   In the advanced panel (search-open on mobile) it keeps a border, handled below. */
 .dest-control {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 4px;
-  min-height: 34px;
-  padding: 3px 26px 3px 6px;
-  background: var(--page);
-  border: 1px solid var(--axis);
-  border-radius: 6px;
+  min-height: 22px;
+  padding: 0 18px 0 0;
+  background: none;
+  border: 0;
   cursor: text;
 }
-.dest-combo.open .dest-control { outline: 2px solid var(--text-primary); outline-offset: 1px; }
+.dest-caret { right: 2px; }
 
 .dest-tags { display: contents; }
 
 .dest-tag {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: 3px;
   font-size: 12px;
-  background: var(--text-primary);
-  color: var(--surface-1);
-  border-radius: 4px;
-  padding: 2px 4px 2px 7px;
+  font-weight: 500;
+  background: var(--accent-wash);
+  color: var(--accent-strong);
+  border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent);
+  border-radius: var(--r-pill);
+  padding: 2px 5px 2px 9px;
   white-space: nowrap;
 }
+.dest-tag.is-place { background: color-mix(in srgb, var(--brand) 12%, var(--surface-1)); color: var(--brand); border-color: color-mix(in srgb, var(--brand) 30%, transparent); }
 .dest-tag-x {
   border: none;
   background: none;
@@ -706,19 +864,22 @@ body.opts-open .controls-adv {
   line-height: 1;
   cursor: pointer;
   padding: 0 2px;
-  opacity: 0.75;
+  opacity: 0.7;
 }
 .dest-tag-x:hover { opacity: 1; }
 
-.dest-input {
+/* Selector strong enough to beat `.field input { height: 38px }` (0,1,1): the .dest-control
+   wrapper supplies the field's 38px, this input just sits inside it. */
+.dest-control .dest-input {
   flex: 1 1 60px;
   min-width: 60px;
+  height: 26px;
   border: none;
   background: none;
   font: inherit;
   font-family: var(--sans);
   color: var(--text-primary);
-  padding: 3px 2px;
+  padding: 0 2px;
   outline: none;
 }
 
@@ -737,15 +898,55 @@ body.opts-open .controls-adv {
   z-index: 40;
   left: 0;
   right: auto;
-  min-width: 280px;
+  min-width: 300px;
   max-width: 92vw;
-  top: calc(100% + 4px);
+  top: calc(100% + 6px);
   background: var(--surface-1);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.18);
-  padding: 4px;
+  border: 1px solid var(--gridline);
+  border-radius: var(--r-md);
+  box-shadow: var(--shadow-lg);
+  padding: 6px;
 }
+
+/* Typeahead results: shown above the region tree while there is a query. */
+.dest-results {
+  list-style: none;
+  margin: 0 0 4px;
+  padding: 0;
+  max-height: 320px;
+  overflow-y: auto;
+}
+.dest-result {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: baseline;
+  column-gap: 8px;
+  padding: 7px 9px;
+  border-radius: var(--r-sm);
+  cursor: pointer;
+}
+.dest-result:hover,
+.dest-result:focus-visible { background: var(--accent-wash); outline: none; }
+.dr-kind {
+  grid-row: 1 / span 2;
+  align-self: center;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  border: 1px solid var(--gridline);
+  border-radius: var(--r-xs);
+  padding: 1px 5px;
+}
+.dr-label { font-size: 14px; font-weight: 600; color: var(--text-primary); }
+.dr-code {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+.dr-sub { grid-column: 2; font-size: 11px; color: var(--text-secondary); }
 
 .region-clear {
   border: none;
@@ -802,7 +1003,7 @@ body.opts-open .controls-adv {
 
 .rcount {
   margin-left: auto;
-  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
   font-size: 11px;
   color: var(--text-muted);
   font-weight: 400;
@@ -822,30 +1023,44 @@ body.opts-open .controls-adv {
   padding: 0;
 }
 
-/* Cells ruled out by a constraint stay visible but recede, so you can see what you
-   excluded and what it would have cost. */
-table.matrix td.excluded { opacity: 0.22; }
-table.matrix td.excluded:hover { opacity: 0.7; }
+/* Cells outside the asked trip-length range still get filled and shown -- the grid is
+   meant to look complete -- but they recede so the eye stays on the range you asked for. */
+table.matrix td.excluded { opacity: 0.5; }
+table.matrix td.excluded:hover { opacity: 1; }
 
 .check {
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding-bottom: 6px;
+  gap: 7px;
+  padding: 7px 11px;
+  border: 1px solid var(--gridline);
+  border-radius: var(--r-pill);
+  background: var(--page);
   color: var(--text-secondary);
+  font-size: 13px;
+  cursor: pointer;
+  transition: border-color 0.14s var(--ease), background-color 0.14s var(--ease);
 }
+.check:hover { border-color: var(--axis); }
+.check:has(input:checked) {
+  background: var(--accent-wash);
+  border-color: color-mix(in srgb, var(--accent) 35%, transparent);
+  color: var(--accent-strong);
+}
+.check input { width: 15px; height: 15px; }
 
 button {
   font: inherit;
-  border-radius: 6px;
-  border: 1px solid var(--axis);
-  background: var(--page);
+  font-weight: 500;
+  border-radius: var(--r-pill);
+  border: 1px solid var(--gridline);
+  background: var(--surface-1);
   color: var(--text-primary);
-  padding: 6px 12px;
+  padding: 8px 15px;
   cursor: pointer;
 }
 
-button:hover { border-color: var(--text-muted); }
+button:hover { border-color: var(--axis); background: var(--page); }
 button[disabled] { opacity: 0.5; cursor: default; }
 
 /* Tactile press. Feedback only: it acknowledges the click on a board where most buttons
@@ -859,14 +1074,17 @@ button:active:not([disabled]) { transform: translateY(1px); }
 
 button:focus-visible {
   outline: none;
-  border-color: var(--text-primary);
-  box-shadow: 0 0 0 1px var(--text-primary);
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 28%, transparent);
 }
 
 button.primary {
-  background: var(--text-primary);
-  color: var(--surface-1);
-  border-color: var(--text-primary);
+  background: var(--accent);
+  color: var(--accent-ink);
+  border-color: var(--accent);
+  font-weight: 600;
+  padding: 8px 20px;
+  box-shadow: 0 1px 2px rgba(37, 31, 24, 0.12);
 }
 
 /* Filled buttons had no hover state at all, which read as the button going dead once it
@@ -879,15 +1097,15 @@ button.primary {
    top in both themes (7.5:1 light, 10.2:1 dark). */
 button.primary:hover:not([disabled]),
 .opts-toggle[aria-expanded='true']:hover:not([disabled]) {
-  background: var(--text-secondary);
-  border-color: var(--text-secondary);
+  background: var(--accent-strong);
+  border-color: var(--accent-strong);
 }
 
 /* The stale state is the exception: its yellow is carrying the "re-search to apply this"
    meaning, so it keeps the fill and takes a dark ring instead. */
 button.primary.stale:hover:not([disabled]) {
   background: var(--cheapest);
-  border-color: var(--text-primary);
+  border-color: var(--ink-on-warm);
 }
 
 
@@ -1017,7 +1235,7 @@ button.primary.stale:hover:not([disabled]) {
 
 main {
   padding: 14px 16px 60px;
-  background: var(--canvas);
+  background: var(--page);
 }
 
 /* ---------------------------------------------------------- results app shell
@@ -1058,35 +1276,22 @@ body.has-board .board-split {
   flex: 1;
   min-height: 0;
   gap: 0;
-  border-top: 1px solid var(--border);
+  border-top: 1px solid var(--gridline);
 }
 body.has-board .dlist {
   min-height: 0;
   overflow-y: auto;
   overscroll-behavior: contain;
   border-top: 0;
-  border-right: 1px solid var(--border);
+  background: var(--page);
 }
 
-/* The grid pane never scrolls as a whole — the head is fixed and the matrix fills the rest
-   and scrolls inside itself. So there is no pane-height scrollbar at the window's edge, only
-   the matrix's own. Overflow stays visible: the flex chain (card and matrix-wrap both
-   `min-height: 0`) already keeps the content inside the pane, and nothing here is a popover
-   that would need clipping. */
-body.has-board .ddetail,
-body.has-board .tableview {
-  min-width: 0;
-  min-height: 0;
-  position: static;
-  max-height: none;
-}
+/* The focus layer: the picked destination's grid (or its table) over the whole window.
+   It scrolls as a block; the matrix inside keeps its own pinned-axis scroll. */
 body.has-board .ddetail {
-  display: flex;
-  overflow: visible;
-  padding: 12px 18px 14px;
+  flex-direction: column;
+  padding: 14px max(14px, calc((100vw - 1100px) / 2)) 24px;
 }
-/* No top padding on the table's scroll box: a gap there lets rows scroll into view above
-   the sticky header. The header itself sits flush with the pane's top edge instead. */
 body.has-board .tableview { padding: 0 0 14px; }
 body.has-board .tableview th:first-child,
 body.has-board .tableview td:first-child { padding-left: 18px; }
@@ -1097,7 +1302,11 @@ body.has-board .ddetail .card {
   min-height: 0;
   display: flex;
   flex-direction: column;
-  padding: 0;
+  padding: 16px 16px 10px;
+  background: var(--surface-1);
+  border: 1px solid var(--gridline);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-md);
 }
 body.has-board .ddetail .card-head { flex: none; }
 body.has-board .matrix-wrap {
@@ -1105,89 +1314,120 @@ body.has-board .matrix-wrap {
   min-height: 0;
   max-height: none;
 }
-body.has-board .tableview { overflow: auto; }
 
-/* Desktop: fold the list away, grid takes the full width. Toggled from the toolbar. */
-body.list-collapsed .board-split { grid-template-columns: 1fr; }
-body.list-collapsed .dlist { display: none; }
-.bt-listtoggle[aria-pressed='true'] { color: var(--text-primary); border-color: var(--text-muted); }
-
-/* Master–detail: a fixed-width ranked list, then the selected grid taking the rest. The
-   real sizing is in the "results app shell" block above (body.has-board); these are just
-   the base shape. */
+/* List → focus grid, at every width. After a search the ranked list is the whole board;
+   picking a destination brings its grid up as a full-window layer with an
+   "‹ All destinations" control, and dismissing it returns to the list. (This used to be
+   phone-only, with a persistent list-beside-grid split on desktop.) */
 .board-split {
-  display: grid;
-  grid-template-columns: minmax(240px, 300px) minmax(0, 1fr);
-  gap: 0;
-  align-items: stretch;
+  display: block;
+  min-width: 0;
 }
 
+/* The ranked list is a responsive grid of compact destination cards -- about five to a
+   row on a wide screen, collapsing to fewer as the window narrows, one on a phone. */
 .dlist {
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(212px, 1fr));
+  gap: 10px;
+  align-content: start;
   min-height: 0;
   scrollbar-width: thin;
+  padding: 14px max(14px, calc((100% - 1240px) / 2)) 44px;
+}
+body.detail-open .dlist { display: none; }
+
+/* Row 1 is always the cheapest (the list is sorted), so a standing highlight on it is
+   noise. On the list itself the selected card looks like every other card; the blue wash
+   only appears once a destination has actually been opened. */
+body:not(.detail-open) .lrow.is-sel {
+  background: var(--surface-1);
+  border-color: var(--gridline);
 }
 
-.ddetail {
+/* The grid (or the table) is a full-window layer, shown only for the picked destination. */
+.ddetail,
+.tableview {
+  display: none;
+  position: fixed;
+  inset: 0;
+  z-index: 60;
   min-width: 0;
   min-height: 0;
+  background: var(--page);
+  overflow-y: auto;
   scrollbar-width: thin;
 }
+body.detail-open:not(.show-table) .ddetail { display: flex; }
+body.detail-open.show-table .tableview { display: block; padding: 14px 16px 28px; }
+body.detail-open.show-table .tableview .table-back { margin-bottom: 10px; }
 
-/* One destination = one tight row. Name + country on top, cheapest fare and the ceiling
-   right-aligned, the cheapest date pair underneath in muted text. The whole thing is the
-   button. */
+/* Both list-fold controls are meaningless in this flow. */
+#listtoggle { display: none; }
+#tabletoggle { display: none; }
+.card-head .detail-astable { display: inline-flex; }
+.detail-back { display: inline-flex; order: -1; margin: 0; }
+
+/* One destination = one compact card. City + country, then the fare and its ceiling on
+   their own line, then the cheapest date pair underneath. The whole card is the button. */
 .lrow {
-  display: grid;
-  grid-template-columns: 1fr auto;
-  gap: 1px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
   width: 100%;
+  min-height: 96px;
   text-align: left;
-  padding: 8px 8px 9px;
-  border: 0;
-  border-bottom: 1px solid var(--gridline);
-  background: none;
+  padding: 12px 13px 13px;
+  margin: 0;
+  border: 1px solid var(--gridline);
+  border-radius: var(--r-md);
+  background: var(--surface-1);
+  box-shadow: var(--shadow-sm);
   color: inherit;
   font: inherit;
   cursor: pointer;
+  transition: box-shadow 0.14s var(--ease), border-color 0.14s var(--ease),
+              transform 0.12s var(--ease);
 }
-.lrow:hover { background: var(--surface-1); }
-/* "You are here": the row whose grid is in the detail pane. A tonal fill plus a 2px ink
-   rule down the active edge — a marker, not elevation. The board's cheapest destination
-   needs no marker of its own: the list is sorted cheapest-first, so it is always row 1. */
+.lrow:hover {
+  box-shadow: var(--shadow-md);
+  border-color: var(--axis);
+  transform: translateY(-1px);
+}
+/* "You are here": the card whose grid was last open. A soft blue-wash fill and an accent
+   ring -- suppressed on the list itself (see the :not(.detail-open) rule above), so it
+   only reads as a marker after you have opened something. */
 .lrow.is-sel {
-  background: var(--surface-1);
-  box-shadow: inset 2px 0 0 0 var(--text-primary);
+  background: var(--accent-wash);
+  border-color: color-mix(in srgb, var(--accent) 40%, transparent);
 }
 .lrow:focus-visible {
-  outline: 2px solid var(--text-primary);
-  outline-offset: -2px;
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
 }
 
 .lrow-city {
-  grid-column: 1;
   font-size: 14px;
   font-weight: 600;
   letter-spacing: -0.01em;
-  line-height: 1.2;
+  line-height: 1.25;
 }
 .lrow-country { font-weight: 400; font-size: 11px; color: var(--text-muted); margin-left: 5px; }
 .lrow-price {
-  grid-column: 2;
-  text-align: right;
-  font-size: 14px;
-  font-weight: 600;
+  margin-top: 1px;
+  font-size: 17px;
+  font-weight: 700;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
-.lrow-range { font-weight: 400; font-size: 11px; color: var(--text-muted); margin-left: 3px; }
+.lrow-range { font-weight: 400; font-size: 11px; color: var(--text-muted); margin-left: 4px; }
 .lrow-when {
-  grid-column: 1 / -1;
+  margin-top: auto;
+  padding-top: 4px;
   font-size: 11px;
   color: var(--text-secondary);
   font-variant-numeric: tabular-nums;
-  line-height: 1.25;
+  line-height: 1.3;
 }
 
 /* The detail card: the one open grid. No top border — the pane's own column is the frame. */
@@ -1197,55 +1437,11 @@ body.list-collapsed .dlist { display: none; }
   min-width: 0;
 }
 
-/* "‹ Back" back control: phone-only. On desktop the list is always visible beside the grid. */
-.detail-back { display: none; }
-
-/* Table/Matrix toggle in the open-destination head: phone-only. On desktop the board
-   toolbar carries it (#tabletoggle); on a phone that toolbar button is hidden and this one
-   takes over, so the toggle only ever changes how the OPEN destination is drawn. */
-.card-head .detail-astable { display: none; }
-
-@media (max-width: 860px) {
-  .board-split,
-  body.has-board .board-split { grid-template-columns: 1fr; gap: 0; }
-  body.has-board .dlist { border-right: 0; }
-
-  /* Phone: the list is the whole screen. Opening a destination slides its detail in over
-     it as a fixed layer, and "‹ Back" returns to the list. The layer shows the grid, or
-     the table when that mode is on — the Table/Matrix toggle only chooses WHICH, it never
-     opens a destination by itself. On the list, with no destination open, the toggle is a
-     stored preference and changes nothing on screen. */
-  .ddetail,
-  body.has-board .ddetail,
-  body.has-board .tableview {
-    display: none;
-    position: fixed;
-    inset: 0;
-    z-index: 60;
-    height: auto;
-    max-height: none;
-    background: var(--canvas);
-    overflow-y: auto;
-    padding: 10px 14px 40px;
-  }
-  body.has-board.detail-open:not(.show-table) .ddetail { display: flex; }
-  body.has-board.detail-open.show-table .tableview { display: block; }
-  body.detail-open .dlist { display: none; }
-
-  /* The desktop list-collapse toggle has no meaning here — the panes already swap. */
-  #listtoggle { display: none; }
-
-  /* The board toolbar's Table toggle would sit above the ranked list and, pressed there,
-     read as "open something as a table" — the confusing behaviour. On a phone it moves
-     into the open-destination head instead. */
-  #tabletoggle { display: none; }
-  .card-head .detail-astable { display: inline-flex; }
-
-  .detail-back {
-    display: inline-flex;
-    order: -1;
-    margin: 0 0 4px;
-  }
+/* The focus-layer controls (‹ All destinations, the in-head Table/Matrix toggle) are set
+   up unconditionally in the "list → focus grid" block above; there is no phone/desktop
+   split here any more. Narrow screens only tighten the layer's own padding. */
+@media (max-width: 720px) {
+  body.has-board .ddetail { padding: 10px 12px 32px; }
 }
 
 /* The grid is its own scroll viewport in both axes, sized independently of the grid, so
@@ -1253,9 +1449,9 @@ body.list-collapsed .dlist { display: none; }
    Scrolling past an edge asks the backend for a wider window. Axes stay pinned. */
 .matrix-wrap {
   overflow: auto;
-  /* Show about a dozen return dates and scroll the rest, so a card stays compact and the
-     vertical axis is scrollable even at the starting +-7 window. */
-  max-height: min(46vh, 268px);
+  /* Show about five return dates and scroll the rest: the cells are large now, so a
+     handful fill the pane and the widened window scrolls with the axes pinned. */
+  max-height: min(62vh, 460px);
   position: relative;
   scrollbar-width: thin;
   scrollbar-gutter: stable both-edges;
@@ -1264,15 +1460,15 @@ body.list-collapsed .dlist { display: none; }
 
 /* Keep the scrollbars visible rather than overlay-hidden, so it is obvious the grid
    scrolls and how far through it you are. */
-.matrix-wrap::-webkit-scrollbar { width: 9px; height: 9px; }
-.matrix-wrap::-webkit-scrollbar-track { background: var(--canvas); border-radius: 5px; }
+.matrix-wrap::-webkit-scrollbar { width: 10px; height: 10px; }
+.matrix-wrap::-webkit-scrollbar-track { background: var(--surface-1); border-radius: 6px; }
 .matrix-wrap::-webkit-scrollbar-thumb {
   background: var(--axis);
-  border-radius: 5px;
-  border: 2px solid var(--canvas);
+  border-radius: 6px;
+  border: 2px solid var(--surface-1);
 }
 .matrix-wrap::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
-.matrix-wrap::-webkit-scrollbar-corner { background: var(--canvas); }
+.matrix-wrap::-webkit-scrollbar-corner { background: var(--surface-1); }
 
 /* The pinned axes paint over the scrolling grid, so their background has to match what
    now sits behind the matrix. With the card gone that is the page ground, not the old
@@ -1281,14 +1477,14 @@ table.matrix thead th {
   position: sticky;
   top: 0;
   z-index: 2;
-  background: var(--canvas);
+  background: var(--surface-1);
 }
 
 table.matrix th.row {
   position: sticky;
   left: 0;
   z-index: 1;
-  background: var(--canvas);
+  background: var(--surface-1);
 }
 
 table.matrix th.corner {
@@ -1296,7 +1492,7 @@ table.matrix th.corner {
   left: 0;
   top: 0;
   z-index: 3;
-  background: var(--canvas);
+  background: var(--surface-1);
 }
 
 .growing {
@@ -1315,9 +1511,9 @@ table.matrix th.corner {
 .card-head {
   display: flex;
   flex-wrap: wrap;
-  align-items: baseline;
-  gap: 3px 8px;
-  margin-bottom: 9px;
+  align-items: center;
+  gap: 6px 8px;
+  margin-bottom: 10px;
 }
 
 .card-head h2 {
@@ -1344,7 +1540,22 @@ table.matrix th.corner {
   color: var(--text-muted);
 }
 
-.card-head button { order: 3; align-self: center; }
+/* Every control in the head is one size, one shape, on one line: a 34px pill, icon-only
+   ones just narrower. `.best` (the price) keeps them pushed to the right with margin-left. */
+.card-head button {
+  order: 3;
+  height: 34px;
+  min-height: 0;
+  padding: 0 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  font-size: 13px;
+  border-radius: var(--r-pill);
+  white-space: nowrap;
+}
+.card-head .locate { padding: 0 10px; }
 .card-head::after { content: ''; order: 4; flex-basis: 100%; height: 0; }
 
 .card-head .card-country { font-size: 14px; font-weight: 400; color: var(--text-muted); }
@@ -1401,24 +1612,12 @@ table.matrix th.corner {
 
 table.matrix td.flash { animation: locate-flash 0.4s ease-in-out 4; }
 
-.card-head .locate {
-  line-height: 0;
-  padding: 4px 7px;
-  color: var(--brand);
-}
+.card-head .locate { color: var(--brand); }
 .card-head .locate:hover { border-color: var(--brand); }
 .card-head .locate svg {
   display: block;
-  width: 15px;
-  height: 15px;
-}
-
-.card-head .fillbtn {
-  font-size: 11px;
-  padding: 3px 8px;
-  border-radius: 4px;
-  margin-left: 6px;
-  white-space: nowrap;
+  width: 16px;
+  height: 16px;
 }
 
 /* ---------------------------------------------------------------- matrix */
@@ -1434,17 +1633,17 @@ table.matrix {
    never drift apart. The small positive tracking matters at this size: without it Geist
    Mono runs the weekday and the date together into one blur. */
 table.matrix th {
-  font-weight: 500;
-  font-size: var(--cell-type);
+  font-weight: 600;
+  font-size: 12px;
   line-height: 1.25;
-  letter-spacing: 0.01em;
-  color: var(--text-muted);
-  padding: 0 2px 2px;
+  letter-spacing: 0;
+  color: var(--text-secondary);
+  padding: 4px 6px 8px;
   white-space: nowrap;
 }
 
 table.matrix th.col { text-align: center; }
-table.matrix th.row { text-align: right; padding-right: 6px; }
+table.matrix th.row { text-align: right; padding-right: 12px; padding-left: 4px; }
 
 /* Weekend emphasis lives on the axis, not behind the cells. Every priced cell carries a
    full-strength ramp fill, so a tinted column under the grid would be invisible; putting
@@ -1455,9 +1654,10 @@ table.matrix th.weekend { color: var(--text-primary); font-weight: 600; }
    as a label rather than joining the recessive date headers. */
 table.matrix th.corner {
   text-align: right;
-  font-size: var(--cell-type);
-  color: var(--text-secondary);
-  padding-right: 6px;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-muted);
+  padding-right: 12px;
 }
 
 table.matrix td {
@@ -1470,33 +1670,72 @@ table.matrix td {
   border-radius: var(--cell-radius);
   color: var(--ink-on-fill);
   border: 1px solid transparent;
+  transition: transform 0.12s var(--ease);
 }
+
+td.priced:hover { transform: translateY(-1px); }
 
 td.void {
   background: none;
-  color: var(--text-muted);
-  text-align: center;
-  opacity: 0.45;
+  border-color: transparent;
+  box-shadow: none;
+  color: transparent;
 }
 
+/* No fare for this date pair yet. On grid open the board fills these live, so they exist
+   only briefly. At rest they are invisible (the grid should read as its filled band, not
+   a field of empty tiles); the loading pulse is what shows one is being worked on, and a
+   cell that finally has nothing just stays blank. Still clickable to force a fetch. */
 td.nodata {
-  background-color: var(--canvas);
-  background-image: repeating-linear-gradient(
-    45deg, transparent, transparent 4px, var(--hatch) 4px, var(--hatch) 6px);
-  border-color: var(--border);
+  background: none;
+  border-color: transparent;
+  box-shadow: none;
   cursor: pointer;
   color: var(--text-muted);
 }
 
-/* A trip length that was never requested. Left plain rather than hatched, so it reads as
-   "not asked for" instead of "we looked and found nothing". */
+/* A trip length outside the range you asked for. NOT a gap in the data -- so it recedes
+   into the grid entirely (no tile, no fill, no shadow), leaving the visible grid as just
+   your band of trip lengths. Still clickable to price that pair anyway. */
 td.notasked {
   background: none;
   border-color: transparent;
+  box-shadow: none;
   cursor: pointer;
 }
+td.notasked.loading { cursor: progress; }
 
 td.priced { cursor: pointer; }
+
+/* A cell whose live price fetch is in flight. Subtle: a slow opacity breathe, plus a
+   travelling sheen so it reads as working rather than just faded. Held to the motion
+   guard. An empty cell gets a faint tile to carry the pulse; a priced cell being
+   re-checked keeps its fill and the sheen rides over it. */
+td.loading { position: relative; }
+td.nodata.loading,
+td.notasked.loading {
+  background: color-mix(in srgb, var(--gridline) 45%, transparent);
+  border-radius: var(--cell-radius);
+}
+td.loading::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(100deg,
+    transparent 30%, color-mix(in srgb, var(--surface-1) 55%, transparent) 50%, transparent 70%);
+  background-size: 220% 100%;
+  pointer-events: none;
+}
+@media (prefers-reduced-motion: no-preference) {
+  td.loading { animation: cell-breathe 1.5s ease-in-out infinite; }
+  td.loading::after { animation: cell-sheen 1.5s ease-in-out infinite; }
+}
+@keyframes cell-breathe { 0%, 100% { opacity: 1; } 50% { opacity: 0.6; } }
+@keyframes cell-sheen {
+  0% { background-position: 130% 0; }
+  60%, 100% { background-position: -30% 0; }
+}
 
 /* Each ramp step carries its own readable ink (black or white, whichever measured higher
    contrast on that fill), applied per cell. This replaces the old single flip index, which
@@ -1515,8 +1754,9 @@ table.matrix td.unscaled {
   color: var(--text-secondary);
 }
 
-/* 7- and 14-night trips, a faint diagonal guide for reading trip length off the grid. */
-td.week-diag { border-left-color: var(--axis); border-left-style: dotted; }
+/* 7- and 14-night trips: a faint guide for reading trip length off the grid, drawn as a
+   quiet ring so it works with the rounded tile rather than a dotted table edge. */
+td.week-diag { box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--ink-on-fill) 22%, transparent); }
 
 /* Cheapest cells get a yellow ring. Yellow is reserved: it never appears in the ramp, so
    the marker can never be mistaken for a price level. The board-wide cheapest gets a
@@ -1542,10 +1782,12 @@ table.matrix td:focus-visible {
   box-shadow: inset 0 0 0 999px rgba(127, 127, 127, 0.16);
 }
 
-/* Cross-hair. Deliberately faint on the cells (the price colours must stay readable) and
-   emphatic on the two date headers, since "which date is the outbound" is the question. */
-table.matrix td.cross-col,
-table.matrix td.cross-row {
+/* Cross-hair. Deliberately faint on the priced cells (the price colours must stay
+   readable) and emphatic on the two date headers, since "which date is the outbound" is
+   the question. Empty cells (void / no-data / not-asked) are left untouched -- a wash on
+   an otherwise-invisible cell just paints a row of grey tiles across the grid. */
+table.matrix td.priced.cross-col,
+table.matrix td.priced.cross-row {
   box-shadow: inset 0 0 0 999px rgba(127, 127, 127, 0.16);
 }
 
@@ -1562,7 +1804,32 @@ table.matrix td.cross-at {
   box-shadow: none;
 }
 
-.cellwrap { position: relative; display: block; height: 100%; }
+.cellwrap {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1px;
+  height: 100%;
+  padding: 4px 6px;
+}
+.cellprice {
+  font-size: var(--cell-type);
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.1;
+}
+/* The trip-length line, in the cell's own ink at reduced opacity so it recedes without
+   needing a second colour token that would have to clear AA on all seven ramp steps. */
+.cellsub {
+  font-size: var(--cell-sub);
+  font-weight: 500;
+  opacity: 0.9;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
 
 /* Corner wedge = this itinerary has stops. One notch for 1 stop, a bigger one for 2+.
    The exact count is in the tooltip; a digit here collides with the price.
@@ -1615,9 +1882,9 @@ table.matrix td.cross-at {
 #panel {
   position: fixed;
   top: 0; right: 0; bottom: 0;
-  width: 340px;
+  width: 360px;
   background: var(--surface-1);
-  border-left: 1px solid var(--border);
+  border-left: 1px solid var(--gridline);
   /* respect the notch / home indicator when the panel is a full-screen sheet */
   padding: max(16px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right))
            max(16px, env(safe-area-inset-bottom)) 16px;
@@ -1634,18 +1901,24 @@ table.matrix td.cross-at {
    half-covered page. Non-blocking (box-shadow), so clicking another cell still works. */
 #panel.open { transform: none; box-shadow: 0 0 0 100vmax rgba(0, 0, 0, 0.22); }
 
-/* Booking links are the panel's primary action, so make them real tap targets. */
+/* Booking links are the panel's primary action: a real blue "View deal" button. */
 #panelbody a {
   display: inline-block;
-  padding: 9px 14px;
-  border: 1px solid var(--axis);
-  border-radius: 6px;
+  padding: 11px 20px;
+  border: 1px solid var(--accent);
+  border-radius: var(--r-pill);
+  background: var(--accent);
+  color: var(--accent-ink);
   text-decoration: none;
   font-weight: 600;
-  margin-top: 6px;
+  margin-top: 8px;
+  box-shadow: 0 1px 2px rgba(37, 31, 24, 0.12);
 }
-#panelbody a:hover { border-color: var(--text-muted); }
-#panelbody a:focus-visible { outline: none; border-color: var(--text-primary); box-shadow: 0 0 0 1px var(--text-primary); }
+#panelbody a:hover { background: var(--accent-strong); border-color: var(--accent-strong); }
+#panelbody a:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 30%, transparent);
+}
 #panel h3 { margin: 0 0 4px; font-size: 14px; font-weight: 600; }
 #panel dl { display: grid; grid-template-columns: auto 1fr; gap: 4px 10px; margin: 12px 0; }
 #panel dt { color: var(--text-muted); }
@@ -1697,45 +1970,52 @@ table.matrix td.cross-at {
    newcomer cannot infer by looking at the grid, and that both cost money to misread:
    colour is ranked per destination, and EST and LIVE are different kinds of number. */
 .firstrun {
-  max-width: 74ch;
-  padding: 26px 0 10px;
+  max-width: 60ch;
+  margin: 6vh auto 0;
+  padding: 32px 28px;
+  background: var(--surface-1);
+  border: 1px solid var(--gridline);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-md);
+  text-align: center;
 }
 
-/* Controlled, not a shout. Hierarchy here comes from weight and the hairlines below, not
-   from scale; the board is the loud thing on this page. */
 .firstrun h1 {
   margin: 0 0 8px;
-  font-size: 28px;
-  font-weight: 600;
-  letter-spacing: -0.02em;
-  line-height: 1.15;
+  font-size: 40px;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  line-height: 1.02;
+}
+
+.firstrun-tag {
+  margin: 0 0 16px;
+  font-size: 18px;
+  font-weight: 500;
+  line-height: 1.35;
+  color: var(--text-primary);
 }
 
 .firstrun-lede {
-  margin: 0;
-  max-width: 62ch;
+  margin: 0 auto;
+  max-width: 46ch;
   font-size: 14px;
-  line-height: 1.5;
+  line-height: 1.6;
   color: var(--text-secondary);
 }
 
 @media (max-width: 720px) {
-  .firstrun { padding: 18px 0 6px; }
-  .firstrun h1 { font-size: 22px; }
-  .firstrun-lede { font-size: 14px; }
+  .firstrun { margin-top: 3vh; padding: 24px 18px; }
+  .firstrun h1 { font-size: 30px; }
+  .firstrun-tag { font-size: 16px; }
+  .firstrun-lede { font-size: 13px; }
 }
 
 /* ---------------------------------------------------------------- table view */
 
-.tableview { display: none; }
-
-/* Desktop: the table replaces the GRID pane, the ranked list stays. On mobile (the
-   <=860px block) the detail is a full-screen layer and the swap is gated on detail-open,
-   so these must not apply there. */
-@media (min-width: 861px) {
-  body.show-table .ddetail { display: none; }
-  body.show-table .tableview { display: block; }
-}
+/* Display is driven entirely by the "list → focus grid" block: the table is the focus
+   layer's content when show-table is on and a destination is open. */
+body.detail-open.show-table .ddetail { display: none; }
 
 .tableview table {
   border-collapse: collapse;
