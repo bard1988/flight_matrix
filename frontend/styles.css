@@ -718,7 +718,10 @@ button.primary.stale {
 .money-cur {
   display: inline-flex;
   align-items: center;
-  height: 38px;
+  /* Match the input's height however tall it renders -- a fixed height left the mark 6px
+     short of the 44px touch-target input on a phone, so the join did not line up. */
+  align-self: stretch;
+  min-height: 38px;
   padding: 0 6px 0 10px;
   font-style: normal;
   font-size: 14px;
