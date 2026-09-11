@@ -552,6 +552,7 @@ function render() {
     $('legend').hidden = true;
     state.lastOrdered = ordered;
     scheduleMulti();
+    fillMultiBand();        // Google-verify the cheapest cells of each visible destination
     return;
   }
 
@@ -851,6 +852,75 @@ function renderMultiChips(ordered, dests, shownCount) {
     render();
   });
   host.querySelector('.mchip-spacer').after(nightsStepper('multi'));
+}
+
+/* Multi has no "open one destination" moment, so it never triggered the Google
+   cross-check that Single runs on a card open -- every cell stayed an estimate. When the
+   board has settled, quietly re-price the cheapest few in-range cells of each destination
+   on the grid, so the numbers you compare are real. Once per destination per search. */
+const MULTI_FILL_PER_DEST = 10;
+let multiFillSource = null;
+let multiFillTimer = 0;
+
+/** Debounced: a burst of renders (stream events, a chip added) collapses to one fill. */
+function fillMultiBand() {
+  clearTimeout(multiFillTimer);
+  multiFillTimer = setTimeout(runMultiBandFill, 600);
+}
+
+function runMultiBandFill() {
+  if (!state.multi.on || state.source || multiFillSource || !state.meta) return;
+  const codes = state.multi.dests.filter(
+    (c) => !state.multi.hidden.has(c) && !openFilled.has(c) && state.destinations.get(c));
+  if (!codes.length) return;
+
+  const cells = [];
+  for (const code of codes) {
+    openFilled.add(code);
+    const dest = state.destinations.get(code);
+    for (const c of bandCells(dest).slice(0, MULTI_FILL_PER_DEST)) {
+      cells.push(c);
+      state.pendingCells.add(cellKey(code, c.depart_date, c.return_date));
+    }
+  }
+  if (!cells.length) return;
+  scheduleMulti();
+
+  const meta = state.meta;
+  const clearPending = () => cells.forEach(
+    (c) => state.pendingCells.delete(cellKey(c.destination, c.depart_date, c.return_date)));
+  fetch('/api/autoverify', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      origin: meta.origin, adults: meta.adults, children: meta.children,
+      currency: meta.currency, nonstop_only: meta.nonstop_only, cells,
+    }),
+  })
+    .then((r) => r.json())
+    .then((data) => {
+      if (!data.fill_id) { clearPending(); scheduleMulti(); return; }
+      const source = new EventSource(`/api/fill/${data.fill_id}/stream`);
+      multiFillSource = source;
+      source.onmessage = (event) => {
+        const msg = JSON.parse(event.data);
+        if (msg.type === 'fill_cell') {
+          const d = state.destinations.get(msg.destination);
+          if (msg.ok && d) { applyCell(d, msg); recomputeBest(msg.destination); }
+          state.pendingCells.delete(cellKey(msg.destination, msg.depart_date, msg.return_date));
+          scheduleMulti();
+        }
+      };
+      const finish = () => {
+        source.close();
+        if (multiFillSource === source) multiFillSource = null;
+        clearPending();
+        scheduleMulti();
+      };
+      source.addEventListener('end', finish);
+      source.onerror = finish;
+    })
+    .catch(() => { multiFillSource = null; clearPending(); scheduleMulti(); });
 }
 
 function jumpToMultiCheapest(code) {
@@ -2241,10 +2311,11 @@ let openFillId = null;
 let openFillFor = null;           // destination the active/last fill belongs to
 
 /** Every valid (departure, return) pair in this destination's rendered grid that is not
- *  already a live price. The user wants a complete grid, so this covers the WHOLE window,
- *  not just the asked trip-length band. Order: empty cells first (fill the gaps), then
- *  cheapest estimates for verification; within that, in-range trip lengths before the
- *  out-of-range ones so the fares that matter land first. */
+ *  already a live price, cheapest first. Order: the trip-length band the user is looking
+ *  at and ranking on comes first -- its priced estimates (so a headline the user fixates
+ *  on gets a real number early), then its empty gaps; only then the out-of-range tail.
+ *  The cap keeps the whole visible band and bounds the tail, so a wide window does not
+ *  spend the Google budget on cells nobody sees. */
 function bandCells(dest) {
   const meta = state.meta;
   const { departs, returns } = axesFor(dest);
@@ -2261,16 +2332,15 @@ function bandCells(dest) {
       const inRange = !span || span.has(nights);
       out.push({
         depart, ret,
-        // sort key: [empty-first] [in-range-first] [cheapest-first]
-        rank: (value == null ? 0 : 2) + (inRange ? 0 : 1),
+        // [in-range first] [priced-before-empty within that] [cheapest first]
+        rank: (inRange ? 0 : 2) + (value == null ? 1 : 0),
         sort: value == null ? 0 : value,
       });
     }
   }
   out.sort((a, b) => a.rank - b.rank || a.sort - b.sort);
-  // Empties and in-range cells come first (the rank), so a big window still fills the part
-  // that matters; the cap is a rate-limit bound on the long tail of out-of-range squares.
-  const cap = out.length > 1400 ? 120 : OPEN_FILL_CAP;
+  const inRangeCount = out.reduce((n, o) => n + (o.rank <= 1 ? 1 : 0), 0);
+  const cap = Math.min(out.length, Math.max(OPEN_FILL_CAP, inRangeCount + 40), 280);
   return out.slice(0, cap).map((c) => ({
     destination: dest.destination, depart_date: c.depart, return_date: c.ret,
   }));
@@ -2434,6 +2504,7 @@ function startSearch() {
   $('firstrun').hidden = true;
   stopAutoVerify();             // a new search invalidates any in-flight cross-check
   stopOpenFill();
+  if (multiFillSource) { multiFillSource.close(); multiFillSource = null; }
   openFilled.clear();
   openFillFor = null;
   $('growing').hidden = true;   // clear any stale rate-limit / widening notice

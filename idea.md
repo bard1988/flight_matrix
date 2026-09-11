@@ -352,6 +352,23 @@ correctly no-ops on the VM; a proxy integration should not resurrect it.
 
 ## Done features
 
+### Fill the visible band first; Multi cross-checks too (2026-09-11)
+
+Two gaps that let a stale/optimistic estimate sit on screen looking authoritative:
+
+- **`bandCells` filled empty cells before the priced ones you can see.** A ~3-month-out
+  grid is mostly empty, so the fill queue's cap (160) could be spent entirely on cells
+  nobody is looking at, leaving the priced in-range estimates — the ones the board ranks
+  on — never re-checked. Re-ordered: in-range priced cells first (verify what's shown),
+  then in-range empties, then the out-of-range tail. Cap is now "all in-range + a bounded
+  tail" (up to 280) instead of a flat 160.
+- **Multi view never triggered a cross-check at all** — `fillOpenDestination` only runs
+  for Single's open card. Added `fillMultiBand()`: once the board settles, quietly
+  Google-verifies the cheapest ~10 in-range cells of each visible Multi destination
+  (debounced, one `/api/autoverify` call, guarded by the same `openFilled` set).
+
+Files: `frontend/app.js` (`bandCells`, new `fillMultiBand`/`runMultiBandFill`).
+
 ### Nights min/max, live on the grid (2026-09-10)
 
 `− / +` steppers for the trip-length band, in the Single card head and the Multi chips
