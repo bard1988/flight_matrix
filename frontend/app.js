@@ -248,6 +248,22 @@ function fmtCell(value) {
   return symbol + (n >= 100000 ? fmtCompact(value) : n.toLocaleString());
 }
 
+/* Cached single-ticket-times-party estimates (not a real total, not Google-verified) ran
+   +62% mean / +31% median vs the live price on the cheapest cells (README's measured
+   study) -- a number that precise-looking is a promise the board cannot keep. A `~`
+   marks it as approximate right where it's read, and `fmtCellRange` gives the honest
+   band (tooltip, panel) instead of a false-precise point. */
+const EST_RANGE_MULT = 1.6;
+function isRawEstimate(cell) { return !cell.verified && !isFirmPrice(cell); }
+function fmtCellDisplay(cell, value) {
+  if (value == null) return '';
+  return (isRawEstimate(cell) ? '~' : '') + fmtCell(value);
+}
+function fmtCellRange(cell, value) {
+  if (value == null || !isRawEstimate(cell)) return fmtCell(value);
+  return `${fmtCell(value)}–${fmtCell(value * EST_RANGE_MULT)}`;
+}
+
 /* Load FX rates once. Free, keyless, CORS-enabled source; cached in localStorage for
    12h, with a static fallback if it is unreachable. Rates only need to be roughly
    right: they re-label already-fetched prices, they don't drive any decision. */
@@ -393,7 +409,10 @@ function tooltipFor(dest, cell) {
     // extrapolation, so neither is labelled as one.
     rows.push(`<b>${fmtMoney(cell.estimate, cur)}</b> total for ${who} <span class="muted">via ${sourceName(cell.source)}${fareNote(cell)}</span>`);
   } else {
-    rows.push(`<b>${fmtMoney(cell.estimate, cur)}</b> estimated total <span class="muted">(${fmtMoney(cell.unit_price, cur)} per ticket × party)</span>`);
+    // A single-ticket-times-party extrapolation, not a real total: say so as a range
+    // (measured +62% mean / +31% median vs. live on the cheapest cells) rather than a
+    // point that looks more certain than the data is.
+    rows.push(`<b>~${fmtMoney(cell.estimate, cur)}</b> estimated total <span class="muted">(likely ${fmtCellRange(cell, cell.estimate)}; ${fmtMoney(cell.unit_price, cur)} per ticket × party)</span>`);
   }
   if (cell.airline) rows.push(`<span class="muted">Airline ${cell.airline}</span>`);
   if (cell.transfers != null) {
@@ -739,7 +758,7 @@ function renderMulti(ordered) {
         else if (code === cheapCode && shown.length > 1) cls.push('mwin');
         const wedge = cell.transfers > 0 ? `<span class="stopdot${cell.transfers > 1 ? ' many' : ''}"></span>` : '';
         const stale = cell.stale ? '<span class="staledot"></span>' : '';
-        subs += `<span class="${cls.join(' ')}"${attrs}><span class="mc">${code}</span><span class="mp">${fmtCell(value)}</span>${wedge}${stale}</span>`;
+        subs += `<span class="${cls.join(' ')}"${attrs}><span class="mc">${code}</span><span class="mp">${fmtCellDisplay(cell, value)}</span>${wedge}${stale}</span>`;
       }
       html += `<td class="mcell"><span class="mstack">${subs}</span></td>`;
     }
@@ -782,8 +801,11 @@ function wireMultiGrid() {
     const dest = state.destinations.get(code) || {};
     const cell = (dest.cells || []).find((x) => x.depart === sub.dataset.dep && x.ret === sub.dataset.ret);
     const when = `${weekday(sub.dataset.dep)} ${shortDate(sub.dataset.dep)} → ${weekday(sub.dataset.ret)} ${shortDate(sub.dataset.ret)}, ${sub.dataset.nights}n`;
-    showTooltip(e, `<b>${dest.city || code} (${code})</b><br>${when}` +
-      (cell ? `<br>${fmtCell(cellValue(cell))}${cell.transfers > 0 ? ' · ' + fmtStops(cell.transfers) : ' · nonstop'}` : '<br>tap to price live'));
+    const priceLine = cell
+      ? `<br>${fmtCellDisplay(cell, cellValue(cell))}${cell.transfers > 0 ? ' · ' + fmtStops(cell.transfers) : ' · nonstop'}` +
+        (isRawEstimate(cell) ? `<br><span class="muted">likely ${fmtCellRange(cell, cellValue(cell))} · estimated, not a real total</span>` : '')
+      : '<br>tap to price live';
+    showTooltip(e, `<b>${dest.city || code} (${code})</b><br>${when}${priceLine}`);
   };
   grid.onmouseleave = () => { undim(); hideTooltip(); };
 }
@@ -1441,7 +1463,7 @@ function buildMatrix(dest, domain) {
       const sub = cell.nights > 0 ? `<span class="cellsub">${cell.nights} night${cell.nights === 1 ? '' : 's'}</span>` : '';
       const wedge = cell.transfers > 0 ? `<span class="stopdot${cell.transfers > 1 ? ' many' : ''}"></span>` : '';
       const stale = cell.stale ? '<span class="staledot"></span>' : '';
-      html += `<td class="${cls}"${attrs}><span class="cellwrap"><span class="cellprice">${fmtCell(value)}</span>${sub}${wedge}${stale}</span></td>`;
+      html += `<td class="${cls}"${attrs}><span class="cellwrap"><span class="cellprice">${fmtCellDisplay(cell, value)}</span>${sub}${wedge}${stale}</span></td>`;
     }
     html += '</tr>';
   }
@@ -1525,7 +1547,7 @@ function patchGridCell(dest, cell) {
   td.setAttribute('role', 'button');
   const sub = cell.nights > 0 ? `<span class="cellsub">${cell.nights} night${cell.nights === 1 ? '' : 's'}</span>` : '';
   const wedge = cell.transfers > 0 ? `<span class="stopdot${cell.transfers > 1 ? ' many' : ''}"></span>` : '';
-  td.innerHTML = `<span class="cellwrap"><span class="cellprice">${fmtCell(value)}</span>${sub}${wedge}</span>`;
+  td.innerHTML = `<span class="cellwrap"><span class="cellprice">${fmtCellDisplay(cell, value)}</span>${sub}${wedge}</span>`;
   return true;
 }
 
