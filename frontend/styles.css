@@ -1540,8 +1540,26 @@ body.multi-stack .msub { justify-content: flex-start; }
   50% { box-shadow: var(--flash-to); }
 }
 .msub.mflash { animation: mflash 0.5s ease-in-out 3; }
+
+/* A cell being priced live, same treatment as the Single grid's td.loading: a slow
+   opacity breathe plus a travelling sheen, so it reads as working rather than faded. An
+   empty sub gets a faint tile first so the pulse has something to sit on -- .msub.mnodata
+   is otherwise transparent, and opacity alone on "nothing" is invisible. */
+.msub.mnodata.loading,
+.msub.mnotasked.loading { background: color-mix(in srgb, var(--gridline) 45%, transparent); }
+.msub.loading::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(100deg,
+    transparent 30%, color-mix(in srgb, var(--surface-1) 55%, transparent) 50%, transparent 70%);
+  background-size: 220% 100%;
+  pointer-events: none;
+}
 @media (prefers-reduced-motion: no-preference) {
   .msub.loading { animation: cell-breathe 1.5s ease-in-out infinite; }
+  .msub.loading::after { animation: cell-sheen 1.5s ease-in-out infinite; }
 }
 
 @media (max-width: 720px) {

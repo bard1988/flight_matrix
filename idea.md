@@ -352,6 +352,20 @@ correctly no-ops on the VM; a proxy integration should not resurrect it.
 
 ## Done features
 
+### Raw estimates read as a range; Multi's pending cells pulse too (2026-09-11)
+
+- **`~` and a range, not a false-precise point.** A cell that is neither a firm total
+  (Kiwi/airline) nor Google-verified is a single-ticket-times-party extrapolation,
+  measured +62% mean / +31% median vs. live on the cheapest cells (README's study). It
+  now shows `~₪583` instead of `₪583`, and both tooltips (Single, Multi) spell out
+  "likely ₪583–₪933 · estimated, not a real total". `isRawEstimate` / `fmtCellDisplay` /
+  `fmtCellRange` in `frontend/app.js`; wired into the Single grid, the Multi grid,
+  `patchGridCell`, and both hover tooltips. Verified/firm cells are untouched.
+- **Multi's pending cells now get the same loading treatment as Single's** — the slow
+  opacity breathe plus the travelling sheen (`.msub.loading`, `frontend/styles.css`). It
+  was half-wired (the breathe was there, the sheen and the empty-cell tile were not),
+  so a cell being priced live in Multi read as static.
+
 ### Fill the visible band first; Multi cross-checks too (2026-09-11)
 
 Two gaps that let a stale/optimistic estimate sit on screen looking authoritative:
