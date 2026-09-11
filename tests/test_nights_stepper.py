@@ -10,6 +10,7 @@ chromium`); skipped otherwise.
 """
 from __future__ import annotations
 
+import json
 import socket
 import subprocess
 import sys
@@ -122,5 +123,105 @@ def test_widening_nights_fetches_the_new_band(demo_url, browser):
         page.wait_for_function(n11 + " > 0", timeout=30_000)      # the extend stream fills them
         assert page.evaluate("() => state.meta.nights_span.includes(11)")
         assert page.evaluate("() => document.getElementById('nmax').value === '11'")
+    finally:
+        ctx.close()
+
+
+def test_widening_nights_shows_a_loading_cue_while_the_fetch_is_out(demo_url, browser):
+    """The demo board fills in milliseconds and never errors, which is exactly why this
+    regressed unnoticed: nightsExtend() never marked the newly in-range cells pending, so
+    a genuinely slow /api/extend (the real, rate-limited board in production) just showed
+    flat empty tiles -- indistinguishable from a request that silently did nothing.
+    Delaying the POST here stands in for that slowness against a real backend.
+    """
+    ctx = browser.new_context(viewport={"width": 1280, "height": 800})
+    page = ctx.new_page()
+    try:
+        _open_card(page, demo_url)
+        # Let the open-card cross-check fill settle first, so the loading cells we look for
+        # below are unambiguously caused by the nights widen, not the unrelated auto-fill.
+        page.wait_for_function(
+            "() => document.querySelectorAll('#ddetail td.loading').length === 0", timeout=30_000)
+
+        # Delay purely in page JS (a Python-side blocking route handler would stall the
+        # same driver thread this test's own wait_for_function polls over, which just
+        # measures how long the delay handler blocked rather than what the page does).
+        page.evaluate("""() => {
+            const real = window.fetch.bind(window);
+            window.fetch = (url, opts) => (
+                typeof url === 'string' && url.includes('/api/extend') && !url.includes('/stream')
+                    ? new Promise((resolve) => setTimeout(() => resolve(real(url, opts)), 3000))
+                    : real(url, opts)
+            );
+        }""")
+        t0 = time.monotonic()
+
+        # One jump, not three separate clicks: the steppers debounce (350ms), and three
+        # clicks spaced wider than that would fire more than one nightsExtend() call --
+        # exactly what the guard is for, but it would also fire more than one delayed
+        # /api/extend and muddy the single fetch this test means to observe.
+        page.evaluate("() => stepNights('max', 3)")    # 8 -> 11, past the priced band
+
+        # Cells are marked pending synchronously, before the (now-delayed) fetch is even
+        # issued -- so the cue must show well before the artificial delay elapses.
+        page.wait_for_function(
+            "() => document.querySelectorAll('#ddetail td.loading').length > 0", timeout=2_500)
+        assert time.monotonic() - t0 < 3          # detected mid-delay, not after it resolved
+        assert page.evaluate("() => document.querySelectorAll('#ddetail td.loading').length > 0")
+
+        # Once the delayed response lands, the cue clears and the band is actually priced.
+        page.wait_for_function(
+            "() => document.querySelectorAll('#ddetail td.loading').length === 0", timeout=5_000)
+        n11 = ("() => [...document.querySelectorAll('#ddetail td.priced')].filter(td => td.dataset.dep && "
+               "Math.round((new Date(td.dataset.ret) - new Date(td.dataset.dep)) / 864e5) === 11).length")
+        assert page.evaluate(n11) > 0
+    finally:
+        ctx.close()
+
+
+def test_a_provider_miss_clears_the_loading_cue_instead_of_sticking(demo_url, browser):
+    """destination_error -- what board.fill_one raising (rate limit, timeout) turns into on
+    the wire -- had no handler in nightsExtend's onmessage at all, so a genuine provider
+    failure left that destination's cells pulsing forever with no way out. Fully fake the
+    extend endpoints (the real demo backend does not fail) to inject one and confirm the
+    cells settle back to plain-empty instead.
+    """
+    ctx = browser.new_context(viewport={"width": 1280, "height": 800})
+    page = ctx.new_page()
+    try:
+        _open_card(page, demo_url)
+        page.wait_for_function(
+            "() => document.querySelectorAll('#ddetail td.loading').length === 0", timeout=30_000)
+        dest = page.evaluate("() => state.selected")
+
+        def fake_extend_start(route):
+            route.fulfill(status=200, content_type="application/json",
+                           body=json.dumps({"extend_id": "fake-err-1"}))
+
+        def fake_extend_stream(route):
+            body = (
+                "data: " + json.dumps({
+                    "type": "destination_error", "destination": dest,
+                    "message": "simulated rate limit",
+                }) + "\n\n"
+                "event: end\ndata: {}\n\n"
+            )
+            route.fulfill(status=200, content_type="text/event-stream", body=body)
+
+        page.route("**/api/extend", fake_extend_start)
+        page.route("**/api/extend/fake-err-1/stream", fake_extend_stream)
+
+        page.evaluate("() => stepNights('max', 3)")    # 8 -> 11, one jump (see the other test)
+
+        # Marked pending before the (faked) fetch fires...
+        page.wait_for_function("() => state.pendingCells.size > 0", timeout=2_000)
+        # ...and the faked destination_error must clear it back out, not leave it stuck.
+        page.wait_for_function("() => state.pendingCells.size === 0", timeout=2_000)
+        assert page.evaluate(
+            "() => document.querySelectorAll('#ddetail td.loading').length === 0")
+        assert page.evaluate("() => !nightsExtending")
+        # The view still reflects the widen the user asked for, even with no new data.
+        assert page.evaluate("() => document.getElementById('nmax').value === '11'")
+        assert page.evaluate("() => state.meta.nights_span.includes(11)")
     finally:
         ctx.close()
