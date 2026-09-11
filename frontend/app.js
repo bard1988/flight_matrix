@@ -3357,12 +3357,42 @@ function updateNightsBand() {
 
 /** Re-price the visible grid over the same date window with the wider nights range.
  *  Multi: every destination on the grid, one shared axes. Single: the open card. */
+/** Every currently-empty cell that the wider nights_span just brought in range, for one
+ *  destination -- what nightsExtend is about to go fetch. Marking these pending is what
+ *  makes the grid pulse while the request is out instead of just sitting there flat, which
+ *  otherwise looks identical to "did nothing" for as long as the fetch takes. */
+function newBandCells(code) {
+  const dest = state.destinations.get(code);
+  if (!dest) return [];
+  const { departs, returns } = state.multi.on ? multiAxes() : axesFor(dest);
+  const span = new Set(state.meta.nights_span || []);
+  const byKey = new Map(dest.cells.map((c) => [c.depart + '|' + c.ret, c]));
+  const out = [];
+  for (const depart of departs) {
+    for (const ret of returns) {
+      if (ret < depart) continue;
+      const nights = Math.round((new Date(ret) - new Date(depart)) / 86400000);
+      if (!span.has(nights) || byKey.has(depart + '|' + ret)) continue;
+      out.push(cellKey(code, depart, ret));
+    }
+  }
+  return out;
+}
+
 function nightsExtend() {
   if (nightsExtending || !state.meta) return;
   const codes = state.multi.on
     ? [...state.multi.dests]
     : (document.body.classList.contains('detail-open') && state.selected ? [state.selected] : []);
   if (!codes.length) { openFilled.clear(); return; }   // list view: cards refill on open
+
+  const pending = codes.flatMap(newBandCells);
+  for (const k of pending) state.pendingCells.add(k);
+  const clearCode = (code) => {
+    const pfx = code + '|';
+    for (const k of state.pendingCells) if (k.startsWith(pfx)) state.pendingCells.delete(k);
+  };
+  const clearAll = () => { for (const k of pending) state.pendingCells.delete(k); };
 
   nightsExtending = true;
   render();
@@ -3392,14 +3422,21 @@ function nightsExtend() {
         } else if (msg.type === 'destination') {
           state.destinations.set(msg.destination, msg);
           recomputeBest(msg.destination);
+          clearCode(msg.destination);
+          render();
+        } else if (msg.type === 'destination_error') {
+          // The provider failed this one destination (rate limit, timeout, ...) -- drop its
+          // loading state so the cells settle back to plain-empty rather than pulsing
+          // forever; nothing else to do per-destination, the run continues for the rest.
+          clearCode(msg.destination);
           render();
         }
       };
-      const finish = () => { source.close(); nightsExtending = false; render(); };
+      const finish = () => { source.close(); nightsExtending = false; clearAll(); render(); };
       source.addEventListener('end', finish);
       source.onerror = finish;
     })
-    .catch(() => { nightsExtending = false; render(); });
+    .catch(() => { nightsExtending = false; clearAll(); render(); });
 }
 
 $('clearconstraints').addEventListener('click', () => {

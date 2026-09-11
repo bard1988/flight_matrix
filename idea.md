@@ -352,6 +352,26 @@ correctly no-ops on the VM; a proxy integration should not resurrect it.
 
 ## Done features
 
+### Widening nights now shows its own fetch, and survives a provider miss (2026-09-11)
+
+Reported as "changing nights doesn't fill the matrix". Reproduced only once the fetch
+takes real time or a destination fails -- both invisible in demo mode, where synthetic
+data returns in milliseconds and never errors:
+
+- **No loading cue during the widen fetch.** `nightsExtend()` never marked the newly
+  in-band cells pending, so while `/api/extend` was out (seconds against the real,
+  rate-limited Kiwi board) the new nights just sat as flat empty tiles -- identical, to
+  the eye, to a request that silently did nothing. New `newBandCells(code)` marks every
+  still-empty in-range cell pending before the fetch fires, so they pulse (the existing
+  `td.loading` / `.msub.loading` treatment) for as long as the fetch is genuinely running,
+  in both Single and Multi.
+- **A per-destination provider failure was dropped on the floor.** `/api/extend`'s stream
+  emits `destination_error` when `board.fill_one` throws for one destination (rate limit,
+  timeout); `nightsExtend`'s `onmessage` had no branch for it at all, so that
+  destination's cells never got any signal, loading or otherwise. Now cleared back to
+  plain-empty (`clearCode`) on both success and error, so a failure reads as "nothing new
+  landed" instead of a cell frozen mid-pulse forever.
+
 ### Raw estimates read as a range; Multi's pending cells pulse too (2026-09-11)
 
 - **`~` and a range, not a false-precise point.** A cell that is neither a firm total
