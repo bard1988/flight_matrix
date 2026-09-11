@@ -352,6 +352,21 @@ correctly no-ops on the VM; a proxy integration should not resurrect it.
 
 ## Done features
 
+### `/api/extend` (nights widen, ±7d widen) uses the cheap source first (2026-09-11)
+
+Reported two ways: widening nights in Multi felt "much much slower than a new search
+with updated nights", and separately, only the first column of a Multi grid would end up
+filled/queued after a widen. Same root cause -- `fill_one` (the one function behind every
+`/api/extend` call: Single's and Multi's ±7d widen, and the nights steppers) called the
+live provider directly, unlike `build()`'s first pass, which paints fast from the cheap
+Travelpayouts source and upgrades from Kiwi afterwards. `fill_one` had no such shortcut,
+so every widen -- one full-board re-fetch per destination, sequentially -- went straight
+against Kiwi: slower outright, and more exposed to Kiwi's rate limiting, where a
+mid-grid 403 comes back with only the columns that finished so far, i.e. a grid that
+looks "partly filled" for no reason visible on screen. Routed `fill_one` through
+`_base_provider`, same as `build()`. Cell-level real totals still come from the existing
+per-cell Google verification, unaffected.
+
 ### Widening nights now shows its own fetch, and survives a provider miss (2026-09-11)
 
 Reported as "changing nights doesn't fill the matrix". Reproduced only once the fetch

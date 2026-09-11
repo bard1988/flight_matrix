@@ -205,10 +205,22 @@ def fill_one(
 ) -> dict[str, Any]:
     """Fill (or re-fill, at a wider window) a single destination and return its payload.
 
-    Used by the scroll-to-extend path: the axes grow, and each visible destination is
-    re-fetched over the larger window.
+    Used by the scroll-to-extend path (`/api/extend`): the nights band or the date window
+    grows for whatever is on screen -- one Single card, or every destination in a Multi
+    grid -- and each is re-fetched over the larger window, one call per destination.
+
+    Routed through `_base_provider`, same as `build()`'s first pass, and for the same
+    reason: called straight against Kiwi this was both much slower than a fresh search (a
+    fresh search only *looks* fast because its first paint is the cheap source, with Kiwi
+    upgrading destinations afterwards in the background -- this path had no such upgrade
+    pass, just the slow source, every time) and, called for several destinations back to
+    back, more exposed to Kiwi's rate limiting: a throttled mid-grid response comes back
+    with only the columns that finished before the 403, which on a several-destination
+    Multi grid read as "only part of the board filled". Getting a real total for a cell
+    still goes through the separate per-cell Google verification, not this call.
     """
-    provider = provider or make_board_provider()
+    live = provider or make_board_provider()
+    provider = _base_provider(live)
     depart_dates, return_dates = date_axes(request)
     matrix = provider.fill_matrix(request, destination, depart_dates, return_dates)
     if not request.has_search_filters:
