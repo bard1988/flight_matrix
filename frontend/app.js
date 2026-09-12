@@ -764,14 +764,20 @@ function renderMulti(ordered) {
     }
     html += '</tr>';
   }
-  // Rebuilding innerHTML drops the scroll offset, and the table width often changes with
-  // it (add/remove a destination, widen), so the browser lands somewhere arbitrary. Pin
-  // the wrapper's scroll across the swap.
+  // Rebuilding innerHTML drops the scroll offset, and the table's size often changes with
+  // it -- add/remove/hide a destination shrinks or grows every stacked cell (Stacked
+  // density), widen changes the column count. Pin the wrapper's scroll across the swap as
+  // a FRACTION of the scrollable range, not the raw pixel offset: hiding a destination
+  // shortens the grid, and re-applying an old pixel offset the browser then has to clamp
+  // (say, half-way down a now-shorter table) snaps the view to the bottom instead of
+  // leaving it roughly where it was -- which is the "jump" this is fixing.
   const wrap = $('multiwrap');
-  const sx = wrap.scrollLeft, sy = wrap.scrollTop;
+  const maxX = Math.max(1, wrap.scrollWidth - wrap.clientWidth);
+  const maxY = Math.max(1, wrap.scrollHeight - wrap.clientHeight);
+  const fx = wrap.scrollLeft / maxX, fy = wrap.scrollTop / maxY;
   grid.innerHTML = html + '</tbody>';
-  wrap.scrollLeft = sx;
-  wrap.scrollTop = sy;
+  wrap.scrollLeft = fx * Math.max(1, wrap.scrollWidth - wrap.clientWidth);
+  wrap.scrollTop = fy * Math.max(1, wrap.scrollHeight - wrap.clientHeight);
   wireMultiGrid();
 }
 
@@ -1790,10 +1796,11 @@ function renderTimes(details) {
       `${s.duration ? ', ' : ', '}${fmtStops(s.stops || 0)}</span></div>` +
       legs + '</div>';
   };
-  // Name the source and its price: the cross-check's cheapest is often a DIFFERENT
-  // itinerary from the board's, so two unlabelled "departs" times read as a contradiction.
-  const head = `<div class="segments-head">Flight times, ${details.price != null
-    ? fmtMoney(details.price, state.meta.currency) + ' via Kiwi' : 'Kiwi'}</div>`;
+  // Just the departure/arrival times, not a second price: which provider looked these up
+  // is an implementation detail, and repeating a price here duplicated (and sometimes
+  // disagreed with) the headline number above, reading as two different fares for one
+  // cell rather than one fare shown two ways.
+  const head = '<div class="segments-head">Flight times</div>';
   return head + way('Outbound', details.outbound) + way('Return', details.inbound);
 }
 
@@ -1956,8 +1963,8 @@ async function verifyCell(dest, cell) {
       : isAirlineFare(cell)
       ? `${AIRLINE_SOURCES[cell.source]} fares don't always show on Google Flights. The price above is ${AIRLINE_SOURCES[cell.source]}'s own fare for these exact dates (lowest fare, one carry-on, per traveller × your party); book it on the link below.`
       : cell.estimate != null
-        ? `Couldn't verify this fare live. Not every route is in Google Flights. The price above is the board's ${isFirmPrice(cell) ? 'total' : 'estimate'}; the booking links below are live.`
-        : `Google Flights has no fare for this exact date pair. If the booking source found one it is shown below and the cell is now filled with it; otherwise try a nearby cell.`;
+        ? `Our automated check couldn't read a price from Google Flights just now, even on a retry -- that can happen on a route that IS listed there (a page Google changed, a one-off hiccup), not only on one that isn't. The price above is the board's ${isFirmPrice(cell) ? 'total' : 'estimate'}; open the link below to check Google Flights directly.`
+        : `Our automated check found no fare on Google Flights for this exact date pair. If the booking source found one it is shown below and the cell is now filled with it; otherwise open the link below to check directly, or try a nearby cell.`;
     openPanel(
       `<h3>${dest.city} (${dest.destination})</h3>` +
         `<div class="muted">${weekday(cell.depart)} ${shortDate(cell.depart)} &rarr; ${weekday(cell.ret)} ${shortDate(cell.ret)}</div>` +
@@ -3358,6 +3365,7 @@ function syncTripPreset() {
   const sel = $('tripselect');
   const match = [...sel.options].some((o) => o.value === val);
   sel.value = match ? val : 'custom';
+  syncNightsInline();
 }
 
 function nightsRange() {
@@ -3669,7 +3677,17 @@ function setDow(key, days) {
   [...host.children].forEach((btn, i) => btn.classList.toggle('on', set.has(i)));
 }
 
+/** The exact-nights fields are only useful once the range isn't one of the fixed presets:
+ *  "Flexible" is deliberately wide and meant to be narrowed, and "Custom" means the user
+ *  (or the on-grid steppers) already moved off a preset. Every other preset sets nights
+ *  itself, so spelling it out again is just clutter. */
+function syncNightsInline() {
+  const v = $('tripselect').value;
+  $('nightsinline').hidden = !(v === '3,21' || v === 'custom');
+}
+
 function applyTrip() {
+  syncNightsInline();
   if ($('tripselect').value === 'custom') return;   // "Custom" is a label, not a preset
   const [lo, hi] = $('tripselect').value.split(',');
   $('nmin').value = lo;

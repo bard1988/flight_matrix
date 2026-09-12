@@ -665,6 +665,11 @@ header.controls {
 .field-sm input { width: 78px; min-width: 0; }    /* a 3-letter airport code */
 .field-date { min-width: 138px; }
 .field-nights { min-width: 128px; }
+/* The inline nights field only shows for the "Flexible" / "Custom" trip length -- every
+   other preset already sets nights itself. `.field`'s own `display: flex` outranks the
+   `[hidden]` attribute's default (both are a plain class vs. an attribute selector, and
+   this one is declared later), so it needs its own, equally-specific override. */
+.bar-group:not(.bar-actions) > .field[hidden] { display: none; }
 
 /* Travellers in the primary bar: two small steppers, each with its own quiet caption so
    "2  0" is never ambiguous. */
@@ -2375,11 +2380,30 @@ body.detail-open.show-table .ddetail { display: none; }
      when the full field card is on screen taking room. */
   body.opts-open .controls-primary > .bar-group:not(.bar-actions) { display: none; }
 
-  /* Search fields stack full-width. */
-  .bar-group > .field { flex: 1 1 100%; }
-  .bar-group > .field-date,
-  .bar-group > .field-trip,
-  .bar-group > .field-pax { flex: 1 1 calc(50% - 5px); }
+  /* Search fields stack full-width, except these three pairs, which share a row: From/To,
+     the two date fields, and Trip length/Travellers -- half the vertical space for the
+     same fields. Nights (only shown for Flexible/Custom) keeps the default full row.
+     Two things the (older, wider) 860px breakpoint above forces that quietly made this
+     block dead code until now, both needed to actually get two fields on one line:
+     - `.controls-primary > .bar-group:not(.bar-actions)` is a *column* flex container
+       there, and a column container stacks one-per-line regardless of any child's
+       flex-basis -- pairing needs `row` + `wrap` instead.
+     - each `.field`'s `flex: 1 1 100%` there is `!important`, which no amount of selector
+       specificity below can outrank; only another `!important` can, so the pairs need one
+       too. `:not(.bar-actions)` on every selector matches the desktop rule's own
+       specificity for the same reason (see the max-width/max-width note above it). */
+  .controls-primary > .bar-group:not(.bar-actions) { flex-direction: row; flex-wrap: wrap; }
+  .bar-group:not(.bar-actions) > .field { flex: 1 1 100% !important; }
+  .bar-group:not(.bar-actions) > .field-from,
+  .bar-group:not(.bar-actions) > .field-dest,
+  .bar-group:not(.bar-actions) > .field-date,
+  .bar-group:not(.bar-actions) > .field-trip,
+  .bar-group:not(.bar-actions) > .field-pax { flex: 1 1 calc(50% - 5px) !important; min-width: 0; }
+  .field-trip select,
+  .pax { min-width: 0; }
+  /* The desktop cap keeps the destination combo from crowding a wide bar; on a narrow one
+     it is what was clipping this field to less than its paired half. */
+  .bar-group:not(.bar-actions) > .field-dest { max-width: none; }
 
   .field input,
   .field select {

@@ -118,6 +118,16 @@
           <span class="pax-cell"><input id="children" type="number" min="0" max="8" value="0" aria-label="Children (2&#8211;11)" /><i>kids</i></span>
         </span>
       </div>
+      <!-- Only "Flexible" and the once-you've-edited-it "Custom" state need the exact
+           range spelled out -- every other preset already sets it. Hidden by default;
+           app.js shows it for those two values. -->
+      <div class="field field-nights" id="nightsinline" hidden>
+        <label for="nmin">Nights (min / max)</label>
+        <span class="nights">
+          <input id="nmin" type="number" min="0" max="60" placeholder="min" />
+          <input id="nmax" type="number" min="0" max="60" placeholder="max" />
+        </span>
+      </div>
     </div>
 
     <div class="bar-group bar-actions">
@@ -137,19 +147,6 @@
         <div class="field field-money">
           <label for="maxprice">Max total</label>
           <span class="money-in"><i class="money-cur" id="maxpricecur" aria-hidden="true">₪</i><input id="maxprice" type="number" min="0" step="100" placeholder="any" /></span>
-        </div>
-      </div>
-    </div>
-
-    <div class="adv-group">
-      <span class="adv-group-label">Exact nights</span>
-      <div class="adv-fields">
-        <div class="field field-nights">
-          <label for="nmin">Nights (min / max)</label>
-          <span class="nights">
-            <input id="nmin" type="number" min="0" max="60" placeholder="min" />
-            <input id="nmax" type="number" min="0" max="60" placeholder="max" />
-          </span>
         </div>
       </div>
     </div>
