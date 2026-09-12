@@ -132,3 +132,48 @@ def test_hide_and_remove_a_destination_from_the_grid(demo_url, browser):
         assert page.evaluate("() => document.querySelector('.mstack').children.length === 2")
     finally:
         ctx.close()
+
+
+def test_hiding_preserves_relative_scroll_not_a_clamped_pixel_offset(demo_url, browser):
+    """Reported as the grid "jumping" to a different spot when a destination is hidden.
+
+    Stacked density lays a cell's destinations out horizontally within their column, so
+    hiding one narrows every column and shrinks the table's scrollWIDTH (measured: hiding
+    one of three shrank it by nearly a third), not its height. Re-applying the old
+    scrollLeft pixel-for-pixel against the rebuilt (now narrower) table gets clamped by
+    the browser -- often straight to the right edge, which is the reported "jump".
+    Scroll position is preserved as a FRACTION of the scrollable range instead.
+    """
+    ctx = browser.new_context(viewport={"width": 1280, "height": 700})
+    page = ctx.new_page()
+    try:
+        _board(page, demo_url)
+        page.click("#viewmulti")
+        page.wait_for_selector("#multigrid .msub", timeout=10_000)
+        # Stacked density is what makes a column's width depend on how many destinations
+        # are shown -- Strip (the desktop default) gives every column a fixed width. A
+        # narrow viewport clamps every column to its CSS min-width regardless, which
+        # hides the effect entirely -- this needs room for a column to actually shrink.
+        page.evaluate("() => { state.multi.density = 'stack'; render(); }")
+
+        metrics = ("() => { const w = document.getElementById('multiwrap'); "
+                   "return {sl: w.scrollLeft, max: w.scrollWidth - w.clientWidth}; }")
+        before = page.evaluate(metrics)
+        assert before["max"] > 40, f"grid barely scrolls ({before['max']}px); widen the fixture"
+        page.evaluate(f"() => {{ document.getElementById('multiwrap').scrollLeft = {before['max'] // 2}; }}")
+        mid = page.evaluate(metrics)
+        fraction_before = mid["sl"] / before["max"]
+        assert 0.3 < fraction_before < 0.7          # actually landed mid-scroll, not clamped already
+
+        page.click("#multichips .mchip-vis >> nth=1")     # hide a destination -> columns narrow
+        page.wait_for_function("() => document.querySelector('.mstack').children.length === 2", timeout=5_000)
+
+        after = page.evaluate(metrics)
+        assert after["max"] < before["max"], "hiding a destination should narrow the scrollable table"
+        fraction_after = after["sl"] / after["max"] if after["max"] else 1
+        assert abs(fraction_after - fraction_before) < 0.1, (
+            f"scroll fraction moved from {fraction_before:.2f} to {fraction_after:.2f} -- "
+            "looks like exactly the reported jump"
+        )
+    finally:
+        ctx.close()
