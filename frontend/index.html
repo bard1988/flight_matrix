@@ -122,10 +122,10 @@
            range spelled out -- every other preset already sets it. Hidden by default;
            app.js shows it for those two values. -->
       <div class="field field-nights" id="nightsinline" hidden>
-        <label for="nmin">Nights (min / max)</label>
+        <label for="nmin">Nights</label>
         <span class="nights">
-          <input id="nmin" type="number" min="0" max="60" placeholder="min" />
-          <input id="nmax" type="number" min="0" max="60" placeholder="max" />
+          <span class="nights-cell"><input id="nmin" type="number" min="0" max="60" placeholder="min" /><i>min</i></span>
+          <span class="nights-cell"><input id="nmax" type="number" min="0" max="60" placeholder="max" /><i>max</i></span>
         </span>
       </div>
     </div>
