@@ -3290,10 +3290,22 @@ function readNights() {
   const parse = (id) => ($(id).value === '' ? null : Number($(id).value));
   state.constraints.min = parse('nmin');
   state.constraints.max = parse('nmax');
+  // #nmin/#nmax (the on-grid steppers' fields, shown inline for Flexible/Custom) are the
+  // one canonical pair every other read/write in this file already targets. Options'
+  // "Exact nights" is always-visible regardless of preset, so it needs its own inputs,
+  // not a second #nmin/#nmax (an id can only belong to one element) -- mirror the values
+  // into it here, the one place every nights change already funnels through.
+  $('nminopt').value = $('nmin').value;
+  $('nmaxopt').value = $('nmax').value;
   if (state.meta) render();
 }
 $('nmin').addEventListener('input', commitNights);
 $('nmax').addEventListener('input', commitNights);
+
+// The mirror direction back: typing in Options writes through to the canonical fields
+// and runs the exact same live-apply / auto-fetch path as the inline ones.
+$('nminopt').addEventListener('input', () => { $('nmin').value = $('nminopt').value; commitNights(); });
+$('nmaxopt').addEventListener('input', () => { $('nmax').value = $('nmaxopt').value; commitNights(); });
 
 /* ---------------------------------------------------------- nights, live on the grid
 
