@@ -247,9 +247,12 @@ CANDIDATE_MULTIPLIER = float(os.environ.get("FM_CANDIDATE_MULTIPLIER", "3.0"))
 
 # Discovery seeding (idea.md #15A): when a region filter is set and the board provider's
 # own "where can I go" under-delivers inside it, probe up to this many curated hub
-# airports from that region (OurAirports, best hubs first) with one Google Flights call
-# each, and fold in the ones that actually fly from the origin. 0 disables seeding.
-SEED_SHORTLIST = int(os.environ.get("FM_SEED_SHORTLIST", "40"))
+# airports from that region (OurAirports, best hubs first, round-robin by country so a
+# country with many qualifying airports cannot crowd out one with few) with one Google
+# Flights call each, and fold in the ones that actually fly from the origin. 0 disables
+# seeding. 60 covers every country on Africa's own continent tree entry (the widest
+# region on offer, ~59 countries) with one seat each before any gets a second.
+SEED_SHORTLIST = int(os.environ.get("FM_SEED_SHORTLIST", "60"))
 
 # Direct-carrier sources, layered onto discovery and used to fill a grid the aggregators
 # leave empty on a route the carrier flies -- their keyless APIs cover LCC routes the

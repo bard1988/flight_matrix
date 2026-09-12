@@ -32,6 +32,36 @@ def test_shortlist_empty_selection_is_empty():
     assert airports.shortlist(["ZZ"], limit=50) == []
 
 
+def test_shortlist_round_robins_by_country_so_one_does_not_starve_another():
+    """Reported as "Africa, Oct to Jan, only 5-6 destinations -- doesn't add up", still
+    true after both prior fixes (probe retry, probe trip length). Root cause: a flat sort
+    by (scheduled, OurAirports size, code) put Johannesburg outside a 40-airport African
+    shortlist entirely -- OurAirports' size classification is a runway/facility category,
+    not a traffic one, so a country with many airports that happen to also qualify (Egypt:
+    7 in the same tier) alphabetically crowded out every one of the dozens of other African
+    countries with only one or two. Every selected country must get its own best hub
+    before any single country gets a second.
+
+    Two real gaps this does NOT close, deliberately not attempted here for lack of a good
+    signal: WITHIN one country, the tie-break is still (scheduled, size, code) with no
+    traffic data, so a country whose non-primary airport happens to sort first -- Kenya's
+    Eldoret before Nairobi, alphabetically, both "large" and scheduled -- still has its
+    real hub skipped; and when a region has more eligible COUNTRIES than the cap (Africa's
+    ~59 against a much smaller cap), the round-robin's own country order is still
+    alphabetical, so late-alphabet countries are what get cut, not a fair sample of them.
+    SEED_SHORTLIST was raised to 60 specifically so that second gap does not bite for
+    Africa, the widest region on offer -- see its own comment in config.py.
+    """
+    africa = ["KE", "TZ", "ZA", "ET", "MA", "EG", "NG", "GH", "SN", "MU", "SC", "RW",
+              "UG", "DZ", "TN", "CI", "CM", "AO", "MZ", "NA", "ZM", "ZW", "BW", "MW"]
+    sl = airports.shortlist(africa, limit=len(africa))   # room for every country, no cutoff
+    countries = {airports.describe(c)["country"] for c in sl}
+    # Every one of the 24 candidate countries gets its own seat -- the flat sort this
+    # replaces let Egypt alone (7 same-tier airports) fill that many seats by itself.
+    assert countries == set(africa), sl
+    assert len(sl) == len(africa), sl   # one hub per country, not several for the same one
+
+
 def test_shortlist_respects_the_limit():
     assert len(airports.shortlist(["KE", "TZ", "ZA", "ET", "MA", "EG"], limit=12)) == 12
 

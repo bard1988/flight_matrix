@@ -203,19 +203,46 @@ def shortlist(country_codes: "Any", limit: int = 40, hubs_only: bool = True) -> 
 
     Discovery seeding (`board._seed_candidates`) probes this list for a live fare when the
     board provider's own discovery returns too few destinations inside a region filter.
-    Ordered by scheduled service, then airport size; one code per airport, capped at
-    `limit` so the probe stays cheap. `hubs_only` drops the small airstrips — nobody flies
-    a board-worthy international trip from those, and probing them just wastes calls.
+    `hubs_only` drops the small airstrips — nobody flies a board-worthy international trip
+    from those, and probing them just wastes calls.
+
+    Selection is round-robin BY COUNTRY, each country's own best hub (scheduled service,
+    then OurAirports size) first, before any country gets a second: a flat sort by
+    (scheduled, size, code) alone put Nairobi and Johannesburg outside a 40-airport African
+    shortlist entirely, because OurAirports' size classification -- a runway/facility
+    category, not a traffic one -- lands most real national hubs in the same "large" tier
+    together with plenty of minor regional airports that also happen to qualify, and a
+    country with many such airports (Egypt: 7 in this tier) crowded out every one of the
+    dozens of OTHER African countries with only one or two, alphabetically. Round-robin
+    guarantees every selected country's own top hub is probed before any single country's
+    second-best is, so a big region with an uneven airport count per country cannot starve
+    smaller countries of a shot at all.
     """
     want = {(c or "").upper() for c in country_codes}
     if not want:
         return []
-    rows = []
+    by_country: dict[str, list[tuple[int, int, str]]] = {}
     for code, e in load().items():
-        if e.get("country") not in want:
+        country = e.get("country")
+        if country not in want:
             continue
         tier = _TIER_RANK.get(e.get("type"), 2)
         if hubs_only and tier >= 3:
             continue
-        rows.append((0 if e.get("scheduled") else 1, tier, code))
-    return [code for *_, code in sorted(rows)[:limit]]
+        by_country.setdefault(country, []).append((0 if e.get("scheduled") else 1, tier, code))
+    for rows in by_country.values():
+        rows.sort()
+
+    out: list[tuple[int, int, str]] = []
+    round_idx = 0
+    countries = sorted(by_country)
+    while len(out) < limit and any(round_idx < len(rows) for rows in by_country.values()):
+        for country in countries:
+            rows = by_country[country]
+            if round_idx < len(rows):
+                out.append(rows[round_idx])
+                if len(out) >= limit:
+                    break
+        round_idx += 1
+    out.sort()
+    return [code for *_, code in out[:limit]]
