@@ -140,15 +140,23 @@ def _seed_candidates(
 
     def _probe(code: str) -> tuple[str, float] | None:
         # A single route failing the probe (not in Google's data, a throttle, a blip) must
-        # never take the board down with it - just skip that one.
-        try:
-            result = verifier.verify(origin, code, depart.isoformat(), ret.isoformat(),
-                                     request.adults, request.children, request.currency,
-                                     request.nonstop_only)
-        except Exception:                       # noqa: BLE001
-            return None
-        total = result.get("total")
-        return (code.upper(), round(float(total), 2)) if total else None
+        # never take the board down with it - just skip that one. But `verify()` raises the
+        # same ProviderError for "genuinely no fare" and "the scrape itself failed" (a
+        # network blip, a malformed page, one bad Google response) -- measured on a thin
+        # region (TLV -> Africa), 36 of 38 hubs came back empty on the first try, which is a
+        # steeper coverage gap than the rest of the region's own real air links suggest. One
+        # retry costs nothing extra for a route that never had a fare (would still fail) and
+        # recovers the ones that were a transient blip, not a real gap.
+        for attempt in range(2):
+            try:
+                result = verifier.verify(origin, code, depart.isoformat(), ret.isoformat(),
+                                         request.adults, request.children, request.currency,
+                                         request.nonstop_only)
+                total = result.get("total")
+                return (code.upper(), round(float(total), 2)) if total else None
+            except Exception:                   # noqa: BLE001
+                if attempt == 1:
+                    return None
 
     with ThreadPoolExecutor(max_workers=config.FILL_WORKERS) as pool:
         results = list(pool.map(_probe, shortlist))
