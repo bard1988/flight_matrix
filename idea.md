@@ -352,6 +352,26 @@ correctly no-ops on the VM; a proxy integration should not resurrect it.
 
 ## Done features
 
+### Mobile field pairing, flexible nights inline, Kiwi wording, Multi scroll (2026-09-12)
+
+- Region-seeding's live-hub probe retries once before writing a destination off (36 of 38
+  African hubs failing the first try was a scrape-reliability problem, not a coverage one).
+- Mobile search bar: From/To, the two date fields, and Trip length/Travellers each share a
+  row. The pairing CSS existed but was dead -- the 860px breakpoint's column-direction
+  container and `!important` full-width field rule both outrank a same-specificity,
+  non-important rule below regardless of source order.
+- "Flexible" / "Custom" trip length reveals the exact nights min/max fields inline, right
+  under Trip length, instead of only living in Options.
+- Multi's scroll-position-preserve across a grid rebuild is now a fraction of the
+  scrollable range, not a raw pixel offset -- hiding a destination shrinks every stacked
+  cell, and the old pixel offset got clamped (often to the bottom) against the shorter
+  table.
+- "Flight times, ₪### via Kiwi" -> "Flight times": stopped repeating a second, sometimes
+  different, price next to the panel's own headline.
+- "Not every route is in Google Flights" reworded on both no-price paths: the scrape
+  itself failing to parse a page Google does have is at least as common a cause, and the
+  old wording implied the route's absence.
+
 ### A search's destination arrivals coalesce into one repaint, like cells already did (2026-09-12)
 
 Reported as Chrome's "page is not responding" mid-search on a Chromebook, with cells
