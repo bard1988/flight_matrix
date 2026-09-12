@@ -297,7 +297,14 @@ def verify(body: VerifyBody) -> dict[str, Any]:
         "error": None,
     }
     cache.put_verified(record)
-    return {**record, "price_level": result.get("price_level"), "cached": False}
+    # The return leg's own times (a second, one-way query -- see google_flights.py) are
+    # not persisted in the verified cache (no columns for them yet), so they ride along
+    # only on this live response, not a later cache/fallback read of the same cell.
+    return {
+        **record, "price_level": result.get("price_level"), "cached": False,
+        "returns": result.get("returns"), "returns_arrive": result.get("returns_arrive"),
+        "return_segments": result.get("return_segments"),
+    }
 
 
 class ExtendBody(BaseModel):
