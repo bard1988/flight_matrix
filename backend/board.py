@@ -130,9 +130,19 @@ def _seed_candidates(
     # that honours the requested trip length -- an arbitrary "+7 return rows" pick landed a
     # 14-night search on a 20-night pair, so a route only sold at the asked length probed
     # empty and got dropped.
+    #
+    # The trip length itself is the nights *closest to a week* within the span, not the
+    # span's raw median: a "Flexible" search (idea.md's own 3-21 preset) medians out to
+    # ~12 nights, and 12 is a materially less commonly sold length than 7 for a real
+    # scheduled route. Measured directly against production: TLV -> Nairobi priced fine at
+    # 7 nights (4,267) and came back "no itineraries" at 12, on the same departure date --
+    # a real, bookable hub excluded from the whole region for no reason but which length
+    # the median happened to land on. 7 is still clamped into [lo, hi] so a route only sold
+    # at the asked length (the case the median was originally added for) still gets it.
     span = request.nights_span()
+    nights = min(span, key=lambda n: abs(n - 7))
     depart = depart_dates[len(depart_dates) // 2]
-    target = depart + timedelta(days=span[len(span) // 2])
+    target = depart + timedelta(days=nights)
     ret = min(return_dates, key=lambda d: abs((d - target).days))
     if ret <= depart:
         ret = return_dates[-1]

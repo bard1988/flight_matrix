@@ -200,3 +200,44 @@ def test_a_probe_that_never_prices_is_still_dropped_after_the_retry(africa_req, 
     filled = {e["city"] for e in events if e["type"] == "destination" and not e.get("preview")}
     assert "Addis Ababa" not in filled
     assert verifier.calls.count("ADD") == 2   # tried twice, then gave up -- not zero, not forever
+
+
+# ----------------------------------------------------- probe trip length, not the median
+
+class _NightsSensitiveVerifier:
+    """A hub that only sells 7-night round trips -- like a real one measured against
+    production (TLV -> Nairobi priced at 7 nights, "no itineraries" at 12, same
+    departure date)."""
+
+    def __init__(self, code, good_nights=7):
+        self.code = code.upper()
+        self.good_nights = good_nights
+        self.calls: list[int] = []
+
+    def verify(self, origin, destination, depart, ret, adults, children, currency, nonstop=False):
+        from datetime import date as _date
+        from providers.base import ProviderError
+        if destination.upper() != self.code:
+            raise ProviderError("no itineraries")
+        nights = (_date.fromisoformat(ret) - _date.fromisoformat(depart)).days
+        self.calls.append(nights)
+        if nights != self.good_nights:
+            raise ProviderError("no itineraries")
+        return {"total": 600.0, "currency": currency}
+
+
+def test_the_probe_uses_a_week_not_the_spans_raw_median(req, monkeypatch):
+    """A "Flexible" search (idea.md's 3-21 preset) medians out to ~12 nights -- a
+    materially less commonly sold length than 7 for a real scheduled route. Probing with
+    that median dropped a real, bookable hub from the whole region for no reason but which
+    length the median happened to land on.
+    """
+    flexible_req = dataclasses.replace(
+        req, country_codes=["KE"], max_destinations=5, nights_min=3, nights_max=21)
+    verifier = _NightsSensitiveVerifier("NBO", good_nights=7)
+    monkeypatch.setattr(board, "_verifier_provider", lambda: verifier)
+
+    events = _events(flexible_req, _Discover([]))
+    filled = {e["city"] for e in events if e["type"] == "destination" and not e.get("preview")}
+    assert "Nairobi" in filled, f"probed nights: {verifier.calls}"
+    assert 7 in verifier.calls
