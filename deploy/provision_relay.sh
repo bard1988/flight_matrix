@@ -7,7 +7,15 @@
 #
 # Re-runnable: a second run pulls the latest code, reinstalls deps and restarts.
 #
-#   export FM_MAIN_IP=129.159.140.194     # the ONLY address allowed to reach this relay
+# FM_MAIN_IP must be the main app's PRIVATE IP (its 10.x address in the shared VCN
+# subnet), not its public IP. Two VMs in the same OCI VCN talking over their public IPs
+# hairpins through the Internet Gateway, which OCI doesn't reliably route -- traffic
+# between them has to go over the subnet's own private addresses. Same goes for the VCN
+# security list rule you add in the console: source CIDR must be the main VM's private
+# IP too, or the packets never arrive (confirmed by tcpdump: 0 packets received with a
+# public-IP source, working immediately after switching to the private one).
+#
+#   export FM_MAIN_IP=10.0.0.27     # main app's PRIVATE ip -- the only address allowed to reach this relay
 #   sudo -E bash deploy/provision_relay.sh
 #
 # `sudo -E` matters: it keeps the exported variable.

@@ -273,6 +273,17 @@ SEED_TIME_BUDGET = float(os.environ.get("FM_SEED_TIME_BUDGET", "20"))
 # a search that Kiwi is willing to keep answering, just slowly, does not run unbounded.
 UPGRADE_TIME_BUDGET = float(os.environ.get("FM_UPGRADE_TIME_BUDGET", "30"))
 
+# Extra Google Flights relays (relay/app.py, deploy/provision_relay.sh): each is a small
+# VM running only the relay service, doing lookups from its own IP. Comma-separated base
+# URLs, e.g. "http://10.0.0.126:8080" -- the private IP, not the public one: two OCI VMs
+# in the same VCN talking over their public IPs hairpins through the Internet Gateway,
+# which doesn't reliably route, while the private (10.x) address works directly. Empty
+# (the default) means Google Flights lookups run only from this box, as before. Each
+# configured relay adds one more IP's worth of safe throughput without raising
+# concurrency against any single IP -- see idea.md's "Google Flights relay" entry.
+GOOGLE_RELAYS = [u.strip().rstrip("/") for u in
+                 os.environ.get("FM_GOOGLE_RELAYS", "").split(",") if u.strip()]
+
 # Direct-carrier sources, layered onto discovery and used to fill a grid the aggregators
 # leave empty on a route the carrier flies -- their keyless APIs cover LCC routes the
 # shared GDS/NDC pool misses or misprices. Wizz is the calendar behind small routes booked

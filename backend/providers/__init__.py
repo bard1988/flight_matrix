@@ -17,4 +17,12 @@ def verifier():
         return DemoProvider()
     from providers.google_flights import GoogleFlightsProvider
 
-    return GoogleFlightsProvider()
+    local = GoogleFlightsProvider()
+    import config
+
+    if not config.GOOGLE_RELAYS:
+        return local
+    from providers.relay_verify import DistributedVerifier, RelayVerifyClient
+
+    backends = [local] + [RelayVerifyClient(url) for url in config.GOOGLE_RELAYS]
+    return DistributedVerifier(backends)
