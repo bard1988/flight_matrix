@@ -17,7 +17,7 @@ class FakeProvider:
     """Configurable stand-in for either provider."""
 
     def __init__(self, name, *, cities=("ATH", "CTA", "VCE"), price=1000.0,
-                 is_total=True, nights=None, fail=None, empty=()):
+                 is_total=True, nights=None, fail=None, empty=(), delay=0.0):
         self.name = name
         self.strategy = f"{name}-double"
         self.rate_limited = False
@@ -29,6 +29,7 @@ class FakeProvider:
         self._nights = nights
         self._fail = fail
         self._empty = set(empty)
+        self._delay = delay
         self.discovered = 0
         self.filled = []
 
@@ -38,6 +39,9 @@ class FakeProvider:
 
     def fill_matrix(self, request, destination, dd, rd):
         self.filled.append(destination)
+        if self._delay:
+            import time
+            time.sleep(self._delay)
         if self._fail:
             raise self._fail
         if destination in self._empty:
@@ -180,6 +184,32 @@ class TestEstimateFirst:
 
         assert not cheap.filled, "the cheap source must not run at all for a filtered search"
         assert cards and all(c["best"]["source"] == "kiwi" for c in cards)
+
+    def test_a_slow_upgrade_pass_stops_at_its_time_budget(self, req, monkeypatch):
+        """A wide date window multiplies fill_matrix()'s own cost, not just the destination
+        count -- measured 4 destinations over a ~110-day window taking 290s in this loop
+        alone. The existing rate-limit bailout only fires on an actual 403; a call Kiwi is
+        willing to keep answering, just slowly, must still stop at a time budget rather
+        than run unbounded.
+        """
+        import config
+        monkeypatch.setattr(config, "ESTIMATE_FIRST", True)
+        monkeypatch.setattr(config, "TRAVELPAYOUTS_TOKEN", "x")
+        monkeypatch.setattr(config, "UPGRADE_TIME_BUDGET", 0.3)
+        cheap = FakeProvider("travelpayouts", is_total=False, nights=[5])
+        monkeypatch.setattr(board, "TravelpayoutsProvider", lambda *a, **k: cheap)
+        live = FakeProvider("kiwi", delay=0.4)   # slower than the whole budget, every time
+
+        import time
+        t0 = time.time()
+        events = collect(req, live)
+        elapsed = time.time() - t0
+        done = next(e for e in events if e["type"] == "done")
+
+        assert elapsed < 2.0, f"took {elapsed:.2f}s -- the time budget did not cap it"
+        assert len(live.filled) < len(cheap.filled), \
+            "the slow upgrade must not reach every destination the cheap pass did"
+        assert "estimates" in done["note"] or "Click any cell" in done["note"]
 
 
 class TestBoardHousekeeping:

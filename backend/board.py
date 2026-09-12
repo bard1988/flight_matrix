@@ -5,6 +5,7 @@ making the user stare at a spinner until all 20 are done.
 """
 from __future__ import annotations
 
+import time
 import traceback
 from concurrent.futures import ThreadPoolExecutor
 from concurrent.futures import wait as wait_futures
@@ -929,41 +930,77 @@ def build(
     # rate limit BEFORE there was anything on screen, which is how a 403 turned into a
     # board made of estimates rather than a board made of estimates plus some real prices.
     upgraded = 0
+    upgrade_deadline = time.monotonic() + config.UPGRADE_TIME_BUDGET
     if upgrade_with is not None and filled and not stopped:
         yield emit({
             "type": "provider_status",
             "message": f"{filled} destinations priced from cached estimates. "
                        "Upgrading to live Kiwi prices, cheapest first.",
         })
-        for destination in [d for d, _ in candidates][:request.max_destinations]:
-            if should_stop and should_stop():
-                stopped = True
-                break
-            try:
-                fresh = upgrade_with.fill_matrix(request, destination, depart_dates, return_dates)
-            except ProviderError:
-                yield emit({
-                    "type": "provider_status",
-                    "message": "Kiwi is unavailable, so the board keeps its cached "
-                               "estimates. Click any cell for a live price.",
-                })
-                break
-            if getattr(upgrade_with, "rate_limited", False):
-                yield emit({
-                    "type": "provider_status",
-                    "message": f"Kiwi started rate-limiting after {upgraded} upgrade(s). "
-                               "The rest of the board keeps its estimates.",
-                })
-                break
-            if not fresh.cells:
-                continue
-            _prune_to_nights(request, fresh)
-            if not request.has_search_filters:
-                cache.put_cells(request.origin, destination, request.currency,
-                                fresh.cells.values(), party=request.party_key)
-            upgraded += 1
-            # The cells already streamed to the client through the provider's on_cells
-            # hook as each column landed; nothing more to emit per destination here.
+        # A wide date window multiplies fill_matrix()'s own cost (roughly one Kiwi request
+        # per return date in the window), not just the destination count -- measured 4
+        # destinations over a ~110-day window taking 290s in this loop alone, after the
+        # board had already shown something. The existing rate-limit bailout below only
+        # fires on an actual 403; a call Kiwi is willing to keep answering, just slowly,
+        # would run unbounded without a deadline of its own. Runs each call in a thread so
+        # a slow one can be given up on directly, mid-fetch, rather than only checked
+        # between destinations -- its cells already reached the client through on_cells as
+        # each column landed regardless of whether this ever waits for its return value.
+        upgrade_pool = ThreadPoolExecutor(max_workers=1)
+        try:
+            for destination in [d for d, _ in candidates][:request.max_destinations]:
+                if should_stop and should_stop():
+                    stopped = True
+                    break
+                remaining = upgrade_deadline - time.monotonic()
+                if remaining <= 0:
+                    yield emit({
+                        "type": "provider_status",
+                        "message": "Live Kiwi prices are taking a while on this date "
+                                   f"range; {upgraded} destination(s) upgraded so far, "
+                                   "the rest keep their estimates. Click any cell for a "
+                                   "live price.",
+                    })
+                    break
+                future = upgrade_pool.submit(
+                    upgrade_with.fill_matrix, request, destination, depart_dates, return_dates)
+                done, pending = wait_futures([future], timeout=remaining)
+                if pending:
+                    yield emit({
+                        "type": "provider_status",
+                        "message": "Live Kiwi prices are taking a while on this date "
+                                   f"range; {upgraded} destination(s) upgraded so far, "
+                                   "the rest keep their estimates. Click any cell for a "
+                                   "live price.",
+                    })
+                    break
+                try:
+                    fresh = future.result()
+                except ProviderError:
+                    yield emit({
+                        "type": "provider_status",
+                        "message": "Kiwi is unavailable, so the board keeps its cached "
+                                   "estimates. Click any cell for a live price.",
+                    })
+                    break
+                if getattr(upgrade_with, "rate_limited", False):
+                    yield emit({
+                        "type": "provider_status",
+                        "message": f"Kiwi started rate-limiting after {upgraded} upgrade(s). "
+                                   "The rest of the board keeps its estimates.",
+                    })
+                    break
+                if not fresh.cells:
+                    continue
+                _prune_to_nights(request, fresh)
+                if not request.has_search_filters:
+                    cache.put_cells(request.origin, destination, request.currency,
+                                    fresh.cells.values(), party=request.party_key)
+                upgraded += 1
+                # The cells already streamed to the client through the provider's on_cells
+                # hook as each column landed; nothing more to emit per destination here.
+        finally:
+            upgrade_pool.shutdown(wait=False)
 
     if stopped:
         done_note = f"Stopped - showing the {filled} destination(s) filled so far."

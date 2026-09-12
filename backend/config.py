@@ -263,6 +263,16 @@ SEED_SHORTLIST = int(os.environ.get("FM_SEED_SHORTLIST", "60"))
 # holding up the response further.
 SEED_TIME_BUDGET = float(os.environ.get("FM_SEED_TIME_BUDGET", "20"))
 
+# Hard ceiling on the Kiwi upgrade pass's own wall-clock time (build()'s end -- replacing
+# each destination's estimate with a real Kiwi total, one full calendar fetch per
+# destination). Measured on a wide window (today to Jan 1, ~110 days): 4 destinations took
+# ~290s here ALONE, after the board had already shown something -- each fill_matrix() call
+# fetches roughly one Kiwi request per return date in the window, so a wide window multiplies
+# the cost per destination, not just the destination count. The existing "Kiwi started
+# rate-limiting" bailout only fires on an actual 403; this fires on elapsed time instead, so
+# a search that Kiwi is willing to keep answering, just slowly, does not run unbounded.
+UPGRADE_TIME_BUDGET = float(os.environ.get("FM_UPGRADE_TIME_BUDGET", "30"))
+
 # Direct-carrier sources, layered onto discovery and used to fill a grid the aggregators
 # leave empty on a route the carrier flies -- their keyless APIs cover LCC routes the
 # shared GDS/NDC pool misses or misprices. Wizz is the calendar behind small routes booked
