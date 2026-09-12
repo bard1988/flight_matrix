@@ -1889,23 +1889,47 @@ async function verifyCell(dest, cell) {
       `<p>Checking Google Flights for ${meta.adults} adults${meta.children ? ' + ' + meta.children + ' children' : ''}…</p><div id="paneltimes"></div>`
   );
 
+  const verifyBody = {
+    origin: meta.origin,
+    destination: dest.destination,
+    depart_date: cell.depart,
+    return_date: cell.ret,
+    adults: meta.adults,
+    children: meta.children,
+    currency: meta.currency,
+    nonstop_only: meta.nonstop_only,
+  };
+
   let data;
   try {
-    data = await postJSON('/api/verify', {
-      origin: meta.origin,
-      destination: dest.destination,
-      depart_date: cell.depart,
-      return_date: cell.ret,
-      adults: meta.adults,
-      children: meta.children,
-      currency: meta.currency,
-      nonstop_only: meta.nonstop_only,
-    });
+    data = await postJSON('/api/verify', verifyBody);
   } catch (err) {
-    // Retries are spent. Don't dead-end: fall through the "no live price" branch below,
-    // which keeps the board's own number and the booking link on screen.
+    // postJSON's own retries are spent (a transport failure -- no response at all). Don't
+    // dead-end: fall through the "no live price" branch below, which keeps the board's own
+    // number and the booking link on screen.
     console.debug('cross-check request failed after retries:', err);
     data = { error: 'unreachable', total: null, link: null };
+  }
+
+  // The endpoint still answers 200 when Google itself didn't -- `error` (no price at all)
+  // or `cached` (fell back to the last stored one) -- so postJSON's transport-level retries
+  // never see this as a failure worth retrying. It usually is: a single Google timeout or
+  // rate-limit blip, gone a second later. Retry it ourselves, once, and say so, rather than
+  // showing the fallback with an instruction to tap the cell again -- that is just this
+  // same retry, done by hand.
+  if (data.error || data.cached) {
+    openPanel(
+      `<h3>${dest.city} (${dest.destination})</h3>` +
+        `<div class="muted">${weekday(cell.depart)} ${shortDate(cell.depart)} &rarr; ${weekday(cell.ret)} ${shortDate(cell.ret)}</div>` +
+        `<p>The live check didn't answer just now -- re-checking Google Flights…</p><div id="paneltimes"></div>`
+    );
+    restoreTimes();
+    try {
+      const retry = await postJSON('/api/verify', verifyBody);
+      if (!retry.error) data = retry;    // a fresh live total, or at least a fresher cached one
+    } catch (err) {
+      console.debug('cross-check retry failed:', err);
+    }
   }
 
   const cur = meta.currency;
@@ -1928,7 +1952,7 @@ async function verifyCell(dest, cell) {
       links.push(`<a href="${data.link}" target="_blank" rel="noopener">Open on Google Flights</a>`);
     }
     const explain = data.error === 'unreachable'
-      ? `The live check didn't respond just now${cell.estimate != null ? ` — the price above is the board${isFirmPrice(cell) ? ' total' : ' estimate'}` : ''}. The booking links below are live; tap the cell again in a moment to re-check.`
+      ? `The live check didn't respond, even on a retry${cell.estimate != null ? ` — the price above is the board${isFirmPrice(cell) ? ' total' : ' estimate'}` : ''}. The booking links below are live.`
       : isAirlineFare(cell)
       ? `${AIRLINE_SOURCES[cell.source]} fares don't always show on Google Flights. The price above is ${AIRLINE_SOURCES[cell.source]}'s own fare for these exact dates (lowest fare, one carry-on, per traveller × your party); book it on the link below.`
       : cell.estimate != null
@@ -1960,7 +1984,7 @@ async function verifyCell(dest, cell) {
       `<div class="muted">${weekday(cell.depart)} ${shortDate(cell.depart)} &rarr; ${weekday(cell.ret)} ${shortDate(cell.ret)}, ${cell.nights || ''} nights</div>` +
       `<div class="big">${fmtMoney(data.total, cur)}</div>` +
       `<div class="muted">${headNote}</div>` +
-      (data.cached ? `<p class="muted">The live re-check didn't respond; showing the last one. Tap the cell again to retry.</p>` : '') +
+      (data.cached ? `<p class="muted">Google Flights didn't answer, even on a retry -- showing the last live price found.</p>` : '') +
       '<dl>' +
       (delta != null ? `<dt>Estimate was</dt><dd>${estimate} (${delta >= 0 ? '+' : ''}${delta.toFixed(0)}%)</dd>` : '') +
       (data.departs ? `<dt>Outbound departs</dt><dd>${data.departs}</dd>` : '') +

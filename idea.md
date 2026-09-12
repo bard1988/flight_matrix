@@ -352,6 +352,15 @@ correctly no-ops on the VM; a proxy integration should not resurrect it.
 
 ## Done features
 
+### A cell's live re-check retries itself, instead of telling you to tap again (2026-09-12)
+
+`/api/verify` answers 200 either way, so a soft failure -- no live price, or a fallback to
+the last stored one -- never trips `postJSON`'s own transport-level retry (that only fires
+on an actual network/timeout error). It showed the fallback with "tap the cell again to
+retry" instead. Now `verifyCell` retries once on its own, with a visible "re-checking
+Google Flights…" note in the panel, and only settles for the fallback (wording changed to
+say a retry already happened) if that retry is soft too.
+
 ### `/api/extend` (nights widen, ±7d widen) uses the cheap source first (2026-09-11)
 
 Reported two ways: widening nights in Multi felt "much much slower than a new search
