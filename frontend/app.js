@@ -2016,9 +2016,15 @@ async function verifyCell(dest, cell) {
       (delta != null ? `<dt>Estimate was</dt><dd>${estimate} (${delta >= 0 ? '+' : ''}${delta.toFixed(0)}%)</dd>` : '') +
       (data.departs ? `<dt>Outbound departs</dt><dd>${data.departs}</dd>` : '') +
       (data.arrives ? `<dt>Outbound arrives</dt><dd>${data.arrives}</dd>` : '') +
+      (data.stops_out != null ? `<dt>Outbound stops</dt><dd>${fmtStops(data.stops_out)}</dd>` : '') +
+      // The round-trip price comes from one query that only ever shows the outbound
+      // leg's own times; these come from a second, one-way query for the return date,
+      // best-effort (absent if that lookup failed -- the total above still stands).
+      (data.returns ? `<dt>Return departs</dt><dd>${data.returns}</dd>` : '') +
+      (data.returns_arrive ? `<dt>Return arrives</dt><dd>${data.returns_arrive}</dd>` : '') +
+      (data.stops_back != null ? `<dt>Return stops</dt><dd>${fmtStops(data.stops_back)}</dd>` : '') +
       (data.airline ? `<dt>Airline</dt><dd>${data.airline}</dd>` : '') +
       (data.duration ? `<dt>Duration</dt><dd>${data.duration}</dd>` : '') +
-      (data.stops_out != null ? `<dt>Stops</dt><dd>${fmtStops(data.stops_out)}</dd>` : '') +
       '</dl>' +
       // Filled in by the parallel times request from the board source, which covers both
       // legs and works at horizons the Google cross-check cannot reach.

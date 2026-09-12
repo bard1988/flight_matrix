@@ -312,12 +312,11 @@ class GoogleFlightsProvider:
 
         if rows:
             best = min(rows, key=lambda r: r["price"])
-            return {
+            record = {
                 "total": best["price"],
                 "currency": currency,
                 "airline": best["airlines"],
                 "stops_out": best["stops"],
-                "stops_back": None,
                 "duration": _fmt_minutes(best["duration_minutes"]),
                 "departs": best.get("departs"),
                 "arrives": best.get("arrives"),
@@ -325,34 +324,83 @@ class GoogleFlightsProvider:
                 "link": link,
                 "candidates": len(rows),
             }
+        else:
+            try:
+                results = get_flights(query)
+            except Exception as exc:
+                raise ProviderError(_explain(html_error or exc)) from exc
+
+            priced = []
+            for item in list(results or []):
+                price = _parse_price(getattr(item, "price", None))
+                if price is not None:
+                    priced.append((item, price))
+            if not priced:
+                raise ProviderError("Google Flights returned no priced itineraries for this date pair.")
+
+            best_item, total = min(priced, key=lambda pair: pair[1])
+            record = {
+                "total": total,
+                "currency": currency,
+                "airline": _airlines(best_item),
+                "stops_out": _leg_count(best_item),
+                "duration": _duration(best_item),
+                "departs": (_itinerary_times(best_item) or {}).get("departs"),
+                "arrives": (_itinerary_times(best_item) or {}).get("arrives"),
+                "segments": (_itinerary_times(best_item) or {}).get("segments"),
+                "link": link,
+                "candidates": len(priced),
+            }
+
+        # The round-trip query above only ever exposes the OUTBOUND leg's own times --
+        # Google's round-trip result payload (same one the `fast-flights` library's own
+        # parser reads) is shaped around picking an outbound flight first, and never
+        # surfaces the paired return flight's segments in this one response. A plain
+        # one-way search for the return leg, on its own, has no such ambiguity: it is just
+        # "cheapest way back on this date", the same question `stops_out` above answers
+        # for the outbound. Best-effort -- a failure here must not cost the outbound result
+        # that already succeeded.
+        back = self._return_leg(origin, destination, return_date, adults, children,
+                                 currency, nonstop_only)
+        record["stops_back"] = back.get("stops") if back else None
+        record["returns"] = back.get("departs") if back else None
+        record["returns_arrive"] = back.get("arrives") if back else None
+        record["return_segments"] = back.get("segments") if back else None
+        return record
+
+    def _return_leg(
+        self, origin: str, destination: str, return_date: str,
+        adults: int, children: int, currency: str, nonstop_only: bool,
+    ) -> dict[str, Any] | None:
+        """Cheapest one-way destination -> origin on the return date: times, stops and
+        segments for the leg the round-trip query above cannot show."""
+        try:
+            from fast_flights import fetch_flights_html, get_flights
+
+            query = _build_one_way_query(destination, origin, return_date,
+                                          adults, children, currency, nonstop_only)
+            html = fetch_flights_html(query)
+            rows = _parse_all_itineraries(html)
+        except Exception:
+            rows = []
+
+        if rows:
+            best = min(rows, key=lambda r: r["price"])
+            return {"stops": best["stops"], "departs": best.get("departs"),
+                    "arrives": best.get("arrives"), "segments": best.get("segments")}
 
         try:
             results = get_flights(query)
-        except Exception as exc:
-            raise ProviderError(_explain(html_error or exc)) from exc
-
-        priced = []
-        for item in list(results or []):
-            price = _parse_price(getattr(item, "price", None))
-            if price is not None:
-                priced.append((item, price))
+        except Exception:
+            return None
+        priced = [(item, p) for item in list(results or [])
+                  if (p := _parse_price(getattr(item, "price", None))) is not None]
         if not priced:
-            raise ProviderError("Google Flights returned no priced itineraries for this date pair.")
-
-        best_item, total = min(priced, key=lambda pair: pair[1])
-        return {
-            "total": total,
-            "currency": currency,
-            "airline": _airlines(best_item),
-            "stops_out": _leg_count(best_item),
-            "stops_back": None,
-            "duration": _duration(best_item),
-            "departs": (_itinerary_times(best_item) or {}).get("departs"),
-            "arrives": (_itinerary_times(best_item) or {}).get("arrives"),
-            "segments": (_itinerary_times(best_item) or {}).get("segments"),
-            "link": link,
-            "candidates": len(priced),
-        }
+            return None
+        best_item, _ = min(priced, key=lambda pair: pair[1])
+        times = _itinerary_times(best_item) or {}
+        return {"stops": _leg_count(best_item), "departs": times.get("departs"),
+                "arrives": times.get("arrives"), "segments": times.get("segments")}
 
 
 def _build_query(
@@ -372,6 +420,27 @@ def _build_query(
     return create_query(
         flights=legs,
         trip="round-trip",
+        seat="economy",
+        passengers=Passengers(
+            adults=max(adults, 1), children=children, infants_in_seat=0, infants_on_lap=0
+        ),
+        currency=currency.upper(),
+        max_stops=max_stops,
+    )
+
+
+def _build_one_way_query(
+    origin: str, destination: str, date: str,
+    adults: int, children: int, currency: str, nonstop_only: bool,
+):
+    """A single leg, priced (and timed) on its own -- see `_return_leg`."""
+    from fast_flights import FlightQuery, Passengers, create_query
+
+    max_stops = 0 if nonstop_only else None
+    return create_query(
+        flights=[FlightQuery(date=date, from_airport=origin.upper(),
+                             to_airport=destination.upper(), max_stops=max_stops)],
+        trip="one-way",
         seat="economy",
         passengers=Passengers(
             adults=max(adults, 1), children=children, infants_in_seat=0, infants_on_lap=0
