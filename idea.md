@@ -352,6 +352,21 @@ correctly no-ops on the VM; a proxy integration should not resurrect it.
 
 ## Done features
 
+### A search's destination arrivals coalesce into one repaint, like cells already did (2026-09-12)
+
+Reported as Chrome's "page is not responding" mid-search on a Chromebook, with cells
+visibly "blinking" while it happened. The per-column `cells` stream already coalesces
+bursts into one `requestAnimationFrame`-scheduled repaint (`schedulePaint`, with a comment
+explaining exactly why: "four workers finishing at once would otherwise be four renders of
+the same table"). The once-per-destination `destination` / `destination_empty` events
+never got the same treatment -- each called `render()` directly, and `render()` rebuilds
+both the ranked list and, since a destination is auto-selected as soon as the board exists,
+the currently-cheapest one's full grid. Several destinations landing in one network read
+(hence "blinking" -- several full rebuilds firing in a row) is then that many synchronous
+list+grid rebuilds back to back with no yield to the browser in between, which is exactly
+the shape of work that trips a slower machine's hang detector. Routed both through
+`schedulePaint()` too.
+
 ### A cell's live re-check retries itself, instead of telling you to tap again (2026-09-12)
 
 `/api/verify` answers 200 either way, so a soft failure -- no live price, or a fallback to

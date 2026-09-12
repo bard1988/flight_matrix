@@ -2719,7 +2719,12 @@ function consume(searchId) {
       }
       $('empty').hidden = true;
       $('empty').classList.remove('is-searching');
-      render();
+      // Coalesced, same as a burst of cells events below: several destinations landing in
+      // one network read otherwise means one full list+grid rebuild per destination in a
+      // single synchronous stretch -- on a big board (many destinations, a wide date
+      // window) that is enough blocking work in a row to trip a slower machine's "page
+      // unresponsive" warning, seen on a Chromebook mid-search.
+      schedulePaint();
     } else if (msg.type === 'cells') {
       mergeCells(msg.destination, msg.cells);
     } else if (msg.type === 'destination_empty') {
@@ -2735,7 +2740,7 @@ function consume(searchId) {
           `Airlines load schedules for smaller routes 3–6 months ahead; try a nearer date or a larger nearby airport.`;
       }
       seen += 1;
-      render();
+      schedulePaint();
     } else if (msg.type === 'destination_error') {
       $('errors').textContent = `${msg.destination}: ${msg.message}`;
       seen += 1;
