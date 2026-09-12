@@ -5,6 +5,8 @@ Kiwi upgrade behind it, and the per-column cell streaming. All providers are dou
 """
 from __future__ import annotations
 
+import dataclasses
+
 import pytest
 
 import board
@@ -159,6 +161,25 @@ class TestEstimateFirst:
                  if e["type"] == "destination" and not e.get("preview")]
         assert live.discovered == 1
         assert all(c["best"]["source"] == "kiwi" for c in cards)
+
+    def test_a_search_filter_skips_the_cheap_source_too(self, req, monkeypatch):
+        """TravelpayoutsProvider reads no nonstop/hour filter at all, so a filtered search's
+        first (fast) pass came back unfiltered under ESTIMATE_FIRST -- only the later Kiwi
+        upgrade pass actually honoured what the user asked for. A request with a filter set
+        must go straight to the live provider, same as it already skips cache reuse."""
+        import config
+        monkeypatch.setattr(config, "ESTIMATE_FIRST", True)
+        monkeypatch.setattr(config, "TRAVELPAYOUTS_TOKEN", "x")
+        cheap = FakeProvider("travelpayouts", is_total=False, nights=[5])
+        monkeypatch.setattr(board, "TravelpayoutsProvider", lambda *a, **k: cheap)
+        live = FakeProvider("kiwi")
+
+        filtered_req = dataclasses.replace(req, nonstop_only=True)
+        cards = [e for e in collect(filtered_req, live)
+                 if e["type"] == "destination" and not e.get("preview")]
+
+        assert not cheap.filled, "the cheap source must not run at all for a filtered search"
+        assert cards and all(c["best"]["source"] == "kiwi" for c in cards)
 
 
 class TestBoardHousekeeping:

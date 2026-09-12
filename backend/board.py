@@ -57,15 +57,25 @@ def _airlines() -> list[Any]:
     return [a for a in (_airline(n) for n in names) if a is not None]
 
 
-def _base_provider(live: Any):
+def _base_provider(live: Any, request: "SearchRequest | None" = None):
     """The source that paints the board first.
 
     Returns `live` unchanged unless ESTIMATE_FIRST is on and there is a cheap source to
     lead with, in which case the caller's expensive provider is held back for the upgrade
     pass. Falls through to `live` when there is no token, because an estimate-first board
     with no estimates source is just a slower Kiwi board.
+
+    Also falls through to `live` when the request carries a nonstop/hour filter
+    (`has_search_filters`): TravelpayoutsProvider doesn't read `depart_hours` /
+    `return_hours` / nonstop at all, so a filtered search's first (fast) pass came back
+    unfiltered and only the slower Kiwi upgrade pass actually honoured what the user asked
+    for. `board.py`'s own cache-reuse check already treats a filtered search as needing a
+    fresh, real fetch for exactly this reason -- this is the same call for the fill
+    provider, not just the cache.
     """
     if not config.ESTIMATE_FIRST or not config.TRAVELPAYOUTS_TOKEN:
+        return live
+    if request is not None and request.has_search_filters:
         return live
     if getattr(live, "name", None) != "kiwi":
         return live          # already the cheap source, or a demo/test double
@@ -248,7 +258,7 @@ def fill_one(
     still goes through the separate per-cell Google verification, not this call.
     """
     live = provider or make_board_provider()
-    provider = _base_provider(live)
+    provider = _base_provider(live, request)
     depart_dates, return_dates = date_axes(request)
     matrix = provider.fill_matrix(request, destination, depart_dates, return_dates)
     if not request.has_search_filters:
@@ -492,7 +502,7 @@ def build(
     # ESTIMATE_FIRST those are different: a cheap source fills every card fast and `live`
     # comes back afterwards to upgrade the grids (see the upgrade pass at the end).
     live = provider or make_board_provider()
-    provider = _base_provider(live)
+    provider = _base_provider(live, request)
     upgrade_with = live if provider is not live else None
     depart_dates, return_dates = date_axes(request)
 
