@@ -1,0 +1,24 @@
+[Unit]
+Description=FlightMatrix Google Flights relay (single uvicorn process)
+Documentation=https://github.com/bard1988/flight_matrix
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=flightmatrix
+Group=flightmatrix
+WorkingDirectory=/opt/flight_matrix
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/opt/flight_matrix/venv/bin/python relay/run_relay.py --host 0.0.0.0 --port 8080
+Restart=on-failure
+RestartSec=5
+
+# Light hardening -- this process writes nothing at all.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+
+[Install]
+WantedBy=multi-user.target
