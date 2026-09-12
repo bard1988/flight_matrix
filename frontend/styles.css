@@ -492,7 +492,16 @@ header.controls {
   align-self: center;
   margin-right: 4px;
   flex: none;
+  /* A link now (back to the homepage), not just a mark -- reset the defaults a bare <a>
+     would otherwise add. The ink is currentColor throughout the SVG (see the comment at
+     the markup), so color must stay inherited, not the link blue. */
+  color: inherit;
+  text-decoration: none;
+  border-radius: var(--r-md);
 }
+.brand:hover svg,
+.brand:focus-visible svg { opacity: 0.8; }
+.brand:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
 .brand svg {
   display: block;
