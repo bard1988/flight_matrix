@@ -2717,10 +2717,13 @@ function consume(searchId) {
     } else if (msg.type === 'destination') {
       // Previews arrive first and are replaced in place by the filled card, so only the
       // filled one counts towards progress - otherwise a 20-destination board reports 40.
+      // A headline_update is neither -- the board's already-filled headline check landing
+      // late with a correction -- so it replaces the destination's data without touching
+      // the progress count at all.
       state.destinations.set(msg.destination, msg);
       if (msg.preview) {
         $('progress').textContent = `${state.destinations.size} destinations, filling grids…`;
-      } else {
+      } else if (!msg.headline_update) {
         seen += 1;
         $('progress').textContent = `${seen} of ${expected} grids…`;
       }

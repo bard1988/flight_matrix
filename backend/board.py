@@ -14,7 +14,7 @@ import airports
 import cache
 import config
 from models import Cell, DestinationMatrix, SearchRequest, parse_date
-from providers.base import NoItinerariesError, ProviderError
+from providers.base import ProviderError
 from providers import verifier as _verifier_provider
 from providers.kiwi import KiwiProvider
 from providers.travelpayouts import TravelpayoutsProvider
@@ -246,13 +246,14 @@ def fill_one(
     return payload
 
 
-def _check_headline(request: SearchRequest, matrix: DestinationMatrix, provider: Any) -> dict[str, Any]:
+def _check_headline(request: SearchRequest, matrix: DestinationMatrix) -> dict[str, Any]:
     """Re-price a card's cheapest cell with a real search until the headline is bookable.
 
-    Kiwi's price calendar is a precomputed index and individual routes go stale. Measured on
-    TLV-CTA: the calendar quoted 773-853 where a full search for the same dates returned
-    1,893-2,003, i.e. +135% to +166%. The link was correct, so clicking through showed
-    flights at more than double the quoted price and read as "the flight does not exist".
+    A calendar-sourced price is a precomputed index and individual routes go stale.
+    Measured on TLV-CTA (Kiwi's calendar specifically): quoted 773-853 where a full search
+    for the same dates returned 1,893-2,003, i.e. +135% to +166%. The link was correct, so
+    clicking through showed flights at more than double the quoted price and read as "the
+    flight does not exist".
 
     Checking only once is not enough. Correcting the cheapest cell upward promotes the
     next-cheapest cell to headline, and on a stale route that one is stale by the same
@@ -260,11 +261,22 @@ def _check_headline(request: SearchRequest, matrix: DestinationMatrix, provider:
     an unchecked neighbour. So loop until the cheapest cell is one we priced ourselves, up
     to CHECK_HEADLINE_MAX searches.
 
-    A pair the full search cannot fill at all is deleted: the calendar is claiming a price
-    for a trip that cannot be booked, which is the worst cell on the board.
+    Always goes through the Google verifier (the same one behind /api/verify and the
+    open-destination cross-check), never `provider.itinerary_details` (Kiwi-only): this ran
+    as `provider.itinerary_details` for years, but ESTIMATE_FIRST's initial pass fills from
+    Travelpayouts, which has no such method, so `hasattr` silently no-opped this on every
+    search and the very case the docstring above describes shipped unguarded. Using the
+    verifier instead of the fill provider also means the correction never depends on which
+    one happened to fill the grid, and doesn't add to Kiwi's rate-limit exposure.
+
+    Unlike the old Kiwi path, a miss here is not deleted: Google not covering a route it
+    genuinely IS on sale for is common (a whole separate part of the UI exists to say so),
+    so treating "Google found nothing" as "this trip cannot be booked" would drop cells that
+    are actually fine.
     """
-    if not config.CHECK_HEADLINE or not hasattr(provider, "itinerary_details"):
+    if not config.CHECK_HEADLINE:
         return {}
+    verifier = _verifier_provider()
 
     quoted_first: float | None = None
     checks = 0
@@ -281,21 +293,20 @@ def _check_headline(request: SearchRequest, matrix: DestinationMatrix, provider:
         if quoted_first is None:
             quoted_first = quoted
         try:
-            real = provider.itinerary_details(
-                request, matrix.destination, best.depart_date, best.return_date)
-        except NoItinerariesError:
-            matrix.cells.pop((best.depart_date, best.return_date), None)
-            dropped += 1
-            continue
+            real = verifier.verify(
+                request.origin, matrix.destination, best.depart_date, best.return_date,
+                request.adults, request.children, request.currency, request.nonstop_only)
         except ProviderError:
-            break                     # rate limit or transport: leave the grid as it is
+            break                     # rate limit, transport, or genuinely no fare found
+        if real.get("total") is None:
+            break
         checks += 1
-        best.price = float(real["price"])
+        best.price = float(real["total"])
         best.is_total = True
         best.checked = True
-        if real.get("outbound"):
-            best.transfers = real["outbound"].get("stops")
-            best.airline = real["outbound"].get("carriers") or best.airline
+        if real.get("stops_out") is not None:
+            best.transfers = real["stops_out"]
+        best.airline = real.get("airline") or best.airline
 
     if quoted_first is None:
         # Nothing needed re-pricing, which on a repeat search is the normal case: the
@@ -692,6 +703,7 @@ def build(
     airline_fills = 0   # grids filled direct from a carrier because the aggregator had none
     failovers = 0        # destinations that fell back to the cached source mid-board
     real_totals = 0      # destinations filled with genuine party totals (not estimates)
+    filled_matrices: list[tuple[str, DestinationMatrix]] = []   # for the headline pass below
     for index, (destination, _seed_price) in enumerate(candidates):
         if filled >= request.max_destinations:
             break
@@ -736,14 +748,10 @@ def build(
             filled += 1
             if getattr(provider, "name", "") == "kiwi":
                 real_totals += 1
-            checked = _check_headline(request, cached, provider)
-            if checked.get("headline_checks") or checked.get("headline_dropped"):
-                cache.put_cells(request.origin, destination, request.currency,
-                                cached.cells.values(), party=request.party_key)
+            filled_matrices.append((destination, cached))
             payload = cached.to_json(request, depart_dates, return_dates,
                                      config.CHILD_FACTOR, config.STALE_AFTER_HOURS,
                                      config.VERIFY_STALE_HOURS)
-            payload.update(checked)
             payload.update({"type": "destination", "index": index,
                             "total_candidates": len(candidates), "from_cache": True})
             yield emit(payload)
@@ -846,12 +854,39 @@ def build(
         filled += 1
         if getattr(provider, "name", "") == "kiwi":
             real_totals += 1
-        checked = _check_headline(request, matrix, provider)
+        filled_matrices.append((destination, matrix))
         payload = matrix.to_json(request, depart_dates, return_dates, config.CHILD_FACTOR,
                                  config.STALE_AFTER_HOURS, config.VERIFY_STALE_HOURS)
-        payload.update(checked)
         payload.update({"type": "destination", "index": index, "total_candidates": len(candidates)})
         yield emit(payload)
+
+    # ------------------------------------------------------------- headline check pass
+    #
+    # The board's leading price is the one a user actually acts on, so it gets its own
+    # check -- separate from, and before, the slower Kiwi upgrade pass below. Runs after
+    # every destination is already on screen, so it never delays a destination's first
+    # appearance the way checking inline (the old behaviour) would: for max_destinations
+    # cards that is one extra sequential Google lookup apiece, which measured as the
+    # whole board taking noticeably longer to finish -- exactly the latency ESTIMATE_FIRST
+    # exists to avoid. A correction streams back as an updated 'destination' event,
+    # marked headline_update so the client applies it without bumping the progress count.
+    if filled_matrices and not stopped:
+        for destination, matrix in filled_matrices:
+            if should_stop and should_stop():
+                stopped = True
+                break
+            checked = _check_headline(request, matrix)
+            if not checked.get("headline_checks"):
+                continue
+            if not request.has_search_filters:
+                cache.put_cells(request.origin, destination, request.currency,
+                                matrix.cells.values(), party=request.party_key)
+            payload = matrix.to_json(request, depart_dates, return_dates, config.CHILD_FACTOR,
+                                     config.STALE_AFTER_HOURS, config.VERIFY_STALE_HOURS)
+            payload.update(checked)
+            payload.update({"type": "destination", "headline_update": True,
+                            "total_candidates": len(candidates)})
+            yield emit(payload)
 
     # ---------------------------------------------------------------- upgrade pass
     #

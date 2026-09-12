@@ -20,3 +20,11 @@ flight_matrix / **FlightMatrix** — a multi-destination fare board that renders
 departure × return date grid. Full design, data sources (Kiwi.com board, Travelpayouts /
 Aviasales fill, per-cell Google Flights verification), rate-limit mitigations, and
 deployment constraints are documented in `README.md`.
+
+## Every bug fix ships with a test
+
+When a reported bug is fixed, add a test that reproduces it and fails without the fix
+(check this by applying the test against the pre-fix code, e.g. `git stash`/checkout the
+prior revision, before trusting it). This applies to backend (`pytest`) and frontend
+(Playwright, skipped gracefully without the dev extras) fixes alike. A fix without a
+regression test is not done.
