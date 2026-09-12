@@ -177,3 +177,29 @@ def test_hiding_preserves_relative_scroll_not_a_clamped_pixel_offset(demo_url, b
         )
     finally:
         ctx.close()
+
+
+def test_a_wide_band_keeps_cross_checking_past_the_first_batch(demo_url, browser):
+    """Reported as "it blinks for 1-2 seconds, several filled, all stop, then the next
+    ones start" -- MULTI_FILL_PER_DEST caps one /api/autoverify round to 10 cells per
+    destination, and openFilled marked a destination "done" after its first round
+    regardless of how much of the band that round actually covered. A widened band (many
+    more than 10 unverified cells per destination) must keep triggering further rounds
+    until it is actually covered, not stop after one.
+    """
+    ctx = browser.new_context(viewport={"width": 1280, "height": 800})
+    page = ctx.new_page()
+    try:
+        _board(page, demo_url)
+        page.click("#viewmulti")
+        page.wait_for_selector("#multigrid .msub", timeout=10_000)
+        page.wait_for_timeout(1_500)   # let the initial (narrow-band) cross-check settle
+
+        calls = []
+        page.on("request", lambda r: calls.append(r.url) if "/api/autoverify" in r.url else None)
+        page.evaluate("() => stepNights('max', 13)")     # 8 -> 21: far more than one round's worth
+        page.wait_for_timeout(6_000)
+
+        assert len(calls) > 1, "a wide band must run more than one autoverify round"
+    finally:
+        ctx.close()

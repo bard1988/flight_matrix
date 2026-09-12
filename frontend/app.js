@@ -896,6 +896,8 @@ function fillMultiBand() {
   multiFillTimer = setTimeout(runMultiBandFill, 600);
 }
 
+const multiFillRounds = new Map();   // destination -> autoverify rounds run since (re)armed
+
 function runMultiBandFill() {
   if (!state.multi.on || state.source || multiFillSource || !state.meta) return;
   const codes = state.multi.dests.filter(
@@ -905,6 +907,7 @@ function runMultiBandFill() {
   const cells = [];
   for (const code of codes) {
     openFilled.add(code);
+    multiFillRounds.set(code, (multiFillRounds.get(code) || 0) + 1);
     const dest = state.destinations.get(code);
     for (const c of bandCells(dest).slice(0, MULTI_FILL_PER_DEST)) {
       cells.push(c);
@@ -943,7 +946,24 @@ function runMultiBandFill() {
         source.close();
         if (multiFillSource === source) multiFillSource = null;
         clearPending();
+        // MULTI_FILL_PER_DEST caps one round to 10 cells per destination, so a wider band
+        // needs more than one round to actually finish -- without this, openFilled marked
+        // a destination "done" after its first round regardless, and the blink stopped
+        // with most of the band still raw estimates. Re-arm whichever destinations still
+        // have unverified cells left and let another round pick them up, capped so a
+        // destination that keeps failing (no Google data for those dates) does not retry
+        // forever.
+        const MAX_ROUNDS = 4;
+        let more = false;
+        for (const code of codes) {
+          const dest = state.destinations.get(code);
+          if (dest && bandCells(dest).length && (multiFillRounds.get(code) || 0) < MAX_ROUNDS) {
+            openFilled.delete(code);
+            more = true;
+          }
+        }
         scheduleMulti();
+        if (more) fillMultiBand();
       };
       source.addEventListener('end', finish);
       source.onerror = finish;
