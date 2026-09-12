@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import traceback
 from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import wait as wait_futures
 from datetime import date, timedelta
 from typing import Any, Callable, Iterator
 
@@ -168,13 +169,22 @@ def _seed_candidates(
                 if attempt == 1:
                     return None
 
-    with ThreadPoolExecutor(max_workers=config.FILL_WORKERS) as pool:
-        results = list(pool.map(_probe, shortlist))
-    # Keep the shortlist's hub-priority order (Bangkok before Buri Ram), NOT price order:
-    # a country search should lead with that country's major airports, and the ranked list
-    # on the client re-sorts by fare anyway.
+    # A plain pool.map() blocks for every last one of these, retry included -- on a big,
+    # thin region (Africa's 60-hub shortlist, mostly misses at a far-future date) that
+    # measured 68 SECONDS before the board could show anything at all. Wait only up to the
+    # time budget; whichever probes have not answered by then are abandoned (their thread
+    # runs to completion regardless, its result just is not waited for), so the search
+    # always moves on with whatever answered in time instead of the single slowest one.
+    pool = ThreadPoolExecutor(max_workers=config.FILL_WORKERS)
+    futures = [pool.submit(_probe, code) for code in shortlist]
+    done, _pending = wait_futures(futures, timeout=config.SEED_TIME_BUDGET)
+    pool.shutdown(wait=False)
+    results = [f.result() for f in done]
+    # `done` is an unordered set (whichever finished first), not shortlist order -- fine,
+    # because the caller re-sorts by hub rank then price regardless of what order this
+    # returns them in.
     found = [r for r in results if r]
-    return found, len(shortlist)
+    return found, len(done)   # how many actually answered, not the shortlist size the budget may have cut short
 
 
 def _hub_rank(code: str) -> int:

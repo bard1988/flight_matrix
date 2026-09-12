@@ -254,6 +254,15 @@ CANDIDATE_MULTIPLIER = float(os.environ.get("FM_CANDIDATE_MULTIPLIER", "3.0"))
 # region on offer, ~59 countries) with one seat each before any gets a second.
 SEED_SHORTLIST = int(os.environ.get("FM_SEED_SHORTLIST", "60"))
 
+# Hard ceiling on the seeding probe's own wall-clock time, regardless of how many hubs are
+# in the shortlist or how many need their one retry: measured a real Africa search (60
+# hubs, a far-future date where thin regional routes are least likely to have schedules
+# loaded yet) taking 68s in this step ALONE, before the board could show anything at all.
+# Whatever has answered by the deadline is used; anything still in flight is abandoned
+# (not cancelled -- the thread finishes, its result is just not waited for) rather than
+# holding up the response further.
+SEED_TIME_BUDGET = float(os.environ.get("FM_SEED_TIME_BUDGET", "20"))
+
 # Direct-carrier sources, layered onto discovery and used to fill a grid the aggregators
 # leave empty on a route the carrier flies -- their keyless APIs cover LCC routes the
 # shared GDS/NDC pool misses or misprices. Wizz is the calendar behind small routes booked

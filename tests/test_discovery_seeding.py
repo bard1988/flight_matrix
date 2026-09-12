@@ -271,3 +271,44 @@ def test_the_probe_uses_a_week_not_the_spans_raw_median(req, monkeypatch):
     filled = {e["city"] for e in events if e["type"] == "destination" and not e.get("preview")}
     assert "Nairobi" in filled, f"probed nights: {verifier.calls}"
     assert 7 in verifier.calls
+
+
+# ------------------------------------------------------------- probe time budget
+
+class _SlowVerifier:
+    """Every probe takes real wall-clock time -- stands in for a big shortlist of Google
+    Flights lookups that, all together, would otherwise block far longer than any
+    reasonable page-load wait."""
+
+    def __init__(self, delay=0.3):
+        self.delay = delay
+        self.calls = 0
+
+    def verify(self, origin, destination, depart, ret, adults, children, currency, nonstop=False):
+        import time
+        time.sleep(self.delay)
+        self.calls += 1
+        return {"total": 500.0, "currency": currency}
+
+
+def test_the_probe_does_not_block_past_its_time_budget(africa_req, monkeypatch):
+    """Reported as "why does it take so long to start showing results" -- measured on a
+    real Africa search: 68 seconds in this step alone before the board could show
+    anything. A plain pool.map() blocks for every single probe, retry included; capping
+    the wait means the search moves on with whatever answered in time.
+    """
+    import config
+    hubs = [f"Z{i}" for i in range(30)]     # more than the pool can finish inside the budget
+    monkeypatch.setattr(config, "SEED_TIME_BUDGET", 0.5)
+    monkeypatch.setattr(config, "FILL_WORKERS", 4)
+    verifier = _SlowVerifier(delay=0.3)
+    monkeypatch.setattr(board, "_verifier_provider", lambda: verifier)
+    monkeypatch.setattr(airports, "shortlist", lambda *a, **k: hubs)
+
+    import time
+    t0 = time.time()
+    found, probed = board._seed_candidates(africa_req, set(), *africa_req.range_axes())
+    elapsed = time.time() - t0
+
+    assert elapsed < 2.0, f"took {elapsed:.2f}s -- the time budget did not cap it"
+    assert 0 < probed < len(hubs), f"probed={probed} (expected somewhere in between, not all {len(hubs)})"
