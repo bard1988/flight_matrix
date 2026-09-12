@@ -3463,6 +3463,16 @@ function nightsExtend() {
           state.destinations.set(msg.destination, msg);
           recomputeBest(msg.destination);
           clearCode(msg.destination);
+          // The extend fetch is the fast estimate source, which often does not actually
+          // cover every night just widened to (it has whatever fares it happens to have
+          // cached, not necessarily this exact band) -- cells can come back looking
+          // "done" but still short of the full nights range. Re-arm this destination's
+          // cross-check so the render() below picks up the gap and Google-verifies it,
+          // same as a freshly-opened destination would. Single has its own extra gate
+          // (openFillFor, "this selection is already handled") that a plain openFilled
+          // clear does not get past on its own.
+          openFilled.delete(msg.destination);
+          if (openFillFor === msg.destination) openFillFor = null;
           render();
         } else if (msg.type === 'destination_error') {
           // The provider failed this one destination (rate limit, timeout, ...) -- drop its

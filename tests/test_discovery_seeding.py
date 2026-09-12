@@ -151,3 +151,52 @@ def test_seeding_disabled_by_config(africa_req, monkeypatch):
     monkeypatch.setattr(config, "SEED_SHORTLIST", 0)
     events = _events(africa_req, _Discover(["RAK"]))
     assert not [e for e in events if e["type"] == "region_seeded"]
+
+
+# --------------------------------------------------------------- probe retries once
+
+class _FlakyVerifier:
+    """verify() raises the same ProviderError for "genuinely no fare" and "the scrape
+    itself failed" -- there is no way to tell them apart from the exception alone
+    (measured: a real TLV -> Africa search saw 36 of 38 hubs fail their first probe).
+    Fails each destination in `flaky` exactly once, then succeeds; `dead` never prices."""
+
+    def __init__(self, book, flaky=(), dead=()):
+        self.book = dict(book)
+        self.flaky = {c.upper() for c in flaky}
+        self.dead = {c.upper() for c in dead}
+        self.calls: list[str] = []
+
+    def verify(self, origin, destination, depart, ret, adults, children, currency, nonstop=False):
+        from providers.base import ProviderError
+        code = destination.upper()
+        self.calls.append(code)
+        if code in self.dead:
+            raise ProviderError("no itineraries")
+        if code in self.flaky:
+            self.flaky.discard(code)   # only the first attempt fails
+            raise ProviderError("blip")
+        total = self.book.get(code)
+        if total is None:
+            raise ProviderError("no itineraries")
+        return {"total": total, "currency": currency}
+
+
+def test_a_probe_that_blips_once_is_retried_and_still_lands(africa_req, monkeypatch):
+    verifier = _FlakyVerifier({"ADD": 520.0, "NBO": 600.0}, flaky=["ADD"])
+    monkeypatch.setattr(board, "_verifier_provider", lambda: verifier)
+
+    events = _events(africa_req, _Discover(["RAK"]))
+    filled = {e["city"] for e in events if e["type"] == "destination" and not e.get("preview")}
+    assert "Addis Ababa" in filled            # survived its one blip
+    assert verifier.calls.count("ADD") == 2   # exactly one retry, not a loop
+
+
+def test_a_probe_that_never_prices_is_still_dropped_after_the_retry(africa_req, monkeypatch):
+    verifier = _FlakyVerifier({"NBO": 600.0}, dead=["ADD"])
+    monkeypatch.setattr(board, "_verifier_provider", lambda: verifier)
+
+    events = _events(africa_req, _Discover(["RAK"]))
+    filled = {e["city"] for e in events if e["type"] == "destination" and not e.get("preview")}
+    assert "Addis Ababa" not in filled
+    assert verifier.calls.count("ADD") == 2   # tried twice, then gave up -- not zero, not forever

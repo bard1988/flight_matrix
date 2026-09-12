@@ -225,3 +225,36 @@ def test_a_provider_miss_clears_the_loading_cue_instead_of_sticking(demo_url, br
         assert page.evaluate("() => state.meta.nights_span.includes(11)")
     finally:
         ctx.close()
+
+
+def test_widening_re_arms_the_cross_check_for_the_new_band(demo_url, browser):
+    """Reported as "it blinks, stops fast, and doesn't look like it filled the new
+    nights". The extend fetch is the fast estimate source (routed through _base_provider
+    for speed -- see the board.fill_one commit), and that source often does not actually
+    cover every night in a widened band; it has whatever fares it happens to have, not
+    necessarily this exact one. Before this fix, `openFilled` already marked the
+    destination "done" from when the card first opened, so the extend's (possibly
+    incomplete) result was final -- nothing ever went back to check it again. Widening
+    must re-arm the destination's cross-check (autoverify), the same one a freshly-opened
+    card gets, so whatever the fast source left empty gets a second, real pass.
+    """
+    ctx = browser.new_context(viewport={"width": 1280, "height": 800})
+    page = ctx.new_page()
+    try:
+        _open_card(page, demo_url)
+        page.wait_for_function(
+            "() => document.querySelectorAll('#ddetail td.loading').length === 0", timeout=30_000)
+
+        autoverify_calls = {"n": 0}
+        page.on("request", lambda r: autoverify_calls.__setitem__("n", autoverify_calls["n"] + 1)
+                 if "/api/autoverify" in r.url else None)
+
+        page.evaluate("() => stepNights('max', 3)")    # 8 -> 11, past the priced band
+        page.wait_for_function("() => state.constraints.max === 11", timeout=3_000)
+        page.wait_for_function("() => !nightsExtending", timeout=30_000)   # the extend settles
+        page.wait_for_timeout(500)   # the re-armed cross-check runs off the render right after
+
+        assert autoverify_calls["n"] > 0, \
+            "widening a destination past its priced band must re-run its cross-check"
+    finally:
+        ctx.close()
