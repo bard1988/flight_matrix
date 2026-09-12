@@ -356,6 +356,46 @@ correctly no-ops on the VM; a proxy integration should not resurrect it.
 
 ## Done features
 
+### Google Flights relay — scale verify() throughput across boxes (2026-09-13)
+
+The Oracle VM's own RAM (1 GB, `FM_FILL_WORKERS` already turned down from 4 to 2) is the
+real ceiling on Google Flights throughput, not IP diversity — a VPN was considered
+(protonvpn was on hand to test with) and ruled out: no free/practical option actually
+targets the bottleneck, and burst concurrency from one already-thin box risks the main
+IP for a gain that RAM caps anyway. Measured live: even a 1-month search window only
+upgrades 2/20 destinations to a real Kiwi total inside the 30s upgrade budget (2mo: 1/20,
+3mo: 0/20) — capping the search period does not fix "mostly estimates" on its own either.
+
+**What shipped instead:** additional Oracle Always-Free VMs (2 AMD micro + up to 4 ARM
+Ampere are free per account), each running `relay/app.py` — a minimal FastAPI service
+that does one live Google Flights lookup per `/verify` call, from that box's own IP.
+`providers.verifier()` now returns a `DistributedVerifier` (`providers/relay_verify.py`)
+that round-robins across the local provider + one `RelayVerifyClient` per
+`FM_GOOGLE_RELAYS` entry, so every call site that already shares this one factory
+(board.py's region-seeding probe and Kiwi-upgrade headline check, filler.py's open-grid
+fill, `/api/verify`) benefits at once. No auth on the relay — access is the OCI VCN
+security list (source restricted to the main VM's IP) plus the relay's own `iptables`
+rule; deploy scripts mirror the main app's one-for-one (`deploy/provision_relay.sh`,
+`redeploy_relay.sh`, `deploy_relay.sh`).
+
+**Gotcha worth remembering:** two VMs in the same OCI VCN talking over their **public**
+IPs hairpins through the Internet Gateway, which OCI does not reliably route — confirmed
+with `tcpdump` (0 packets arrived with a public-IP source; worked immediately once
+switched to the private 10.x address, both for the security-list rule and the app's
+`FM_GOOGLE_RELAYS` URL). Also: OCI subnets can have more than one security list
+attached, and the console's per-instance "Security Rules" shortcut does not always land
+on the one actually bound to the subnet — check the *subnet's own* Security Lists
+section if a rule that looks right still doesn't take effect.
+
+First relay live at `10.0.0.126:8080` (private), wired in via `FM_GOOGLE_RELAYS` in
+production `.env`. Confirmed end-to-end: a live `/api/verify` call's round-robin turn
+landed on the relay and was logged there, from the main VM's private IP.
+
+**Not done yet:** a second relay VM (only one provisioned so far); parallelizing the
+seeding probe pool and the Kiwi upgrade pass with each other (today's `build()` runs them
+sequentially — a natural next lever once a second relay exists to spread the extra
+concurrency across).
+
 ### Mobile field pairing, flexible nights inline, Kiwi wording, Multi scroll (2026-09-12)
 
 - Region-seeding's live-hub probe retries once before writing a destination off (36 of 38
