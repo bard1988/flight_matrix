@@ -356,6 +356,81 @@ correctly no-ops on the VM; a proxy integration should not resurrect it.
 
 ## Done features
 
+### Average-nights-first, uncapped band fill (2026-09-13)
+
+Reframes the "we claim to provide the cheapest fares for the span of the search, so do we
+cap the search period?" question from earlier this week (see the Kiwi-upgrade-pass
+measurement above: even a 1-month window only upgrades 2/20 destinations within its time
+budget). That measurement was about the Kiwi board *fill*; the actual "explosion of
+dates" complaint turned out to be a different axis entirely -- a wide **trip-length**
+band (nights_min..nights_max), not the date period. The Kiwi board fill costs ~1 request
+per return date in the window regardless of how wide the nights band is (`fill_matrix`
+iterates return-date columns, not nights diagonals) -- but the open-grid live Google
+cross-check (`bandCells` in app.js, behind a card open, a Multi grid, or a nights widen)
+prices one cell per valid (depart, return) pair, and a wide nights band multiplies that
+combinatorially. A 5-45 night band over a 90-day window is thousands of cells for one
+destination; the old code just capped the whole thing at a flat 280 and left the rest
+permanently unpriced, silently.
+
+**Decided (the user's framing, verbatim from the ask):** don't cap the search -- sort by
+the band's own average length first (12-14 nights -> 13, 12-13 -> 12, i.e.
+`floor((lo+hi)/2)`), stream results in as they come instead, and warn when the band is
+wide enough that it will visibly take a while.
+
+**What shipped:**
+- `bandCells()` ranks in-range cells by distance from the band's average nights first
+  (ties broken priced-before-empty, then cheapest) -- the length the search actually
+  asked for prices up before its edges do, whichever destinations happen to be cheapest
+  at some other length in the band no longer jumps the queue.
+- The in-range portion is never truncated. `fillOpenDestination`/`runMultiBandFill` now
+  run as many `/api/autoverify` rounds as it takes (200 cells per call at most, well under the
+  endpoint's 400-cell limit) until the band is actually done, not one capped shot.
+- A one-time notice ("Wide trip-length range: pricing N date combinations...") when a
+  destination's own band exceeds `WIDE_BAND_NOTICE_CELLS` (60), shown once per destination
+  per search rather than capping instead.
+- The out-of-range tail (cells the date window happens to also cover, outside the band
+  itself -- nobody asked for those) stays a small one-time bonus (40 cells), asked for
+  only on a destination's first round; without that, a large out-of-range pool (same-day
+  pairs at a widened window's edge, never a real trip) got cycled through 40-at-a-time for
+  round after round long after the actual band was already done.
+
+**Two real bugs surfaced building this, both fixed as part of it, not scope creep:**
+- `filler.verify_cells` silently dropped a target cell from its `pending` list with **no
+  event at all** whenever it was already a fresh cache hit or belonged to a route Google
+  has never priced -- fine for the old one-shot caller, but a caller that reruns until
+  every cell it asked for has come back once (this multi-round fill) never converged: a
+  cell resolved this way looked, from the caller's side, exactly like one that was never
+  even tried. Fixed to yield one `fill_cell` event per target regardless of how it was
+  resolved (`tests/test_filler_verify_cells.py`).
+- `runOpenFillRound` (Single's per-destination round loop) closed over the destination
+  object from whichever render first opened the card. A nights-widen replaces that object
+  wholesale in `state.destinations` rather than mutating it in place (`fillOpenDestination`
+   -> the "destination" extend-stream handler), so a round already in flight kept checking
+  a stale copy whose `.cells` never reflected later `applyCell` updates -- looked, from in
+  there, exactly like the band never finishing. Fixed to re-resolve the destination from
+  `state.destinations` at the start of every round.
+- Related, same root cause class: `openFillRounds` (round budget) is per-destination and
+  was never reset between "engagements" -- reselection churn during the initial board
+  stream (the "cheapest" destination can flip a few times before it settles) could burn
+  through the round budget before the user ever touched anything, so a LATER deliberate
+  re-arm (widening the band) found the budget already spent and silently fetched nothing.
+  Fixed: a fresh pass (first open, or re-armed after a widen) resets its own budget.
+
+**Also found and fixed while testing this (real, not hypothetical):** every Playwright
+test spawns its own `run.py --demo` subprocess with no data isolation of its own -- they
+all shared the repo's real `data/cache.sqlite`. A wide-band test populating thousands of
+verified cells for TLV routes then read back as "already verified" in unrelated test
+files that happened to run afterward in the same `pytest` invocation, purely from file
+collection order. `config.CACHE_DB` is now independently overridable via `FM_CACHE_DB`
+(deliberately not `DATA_DIR`, which also holds static reference data a demo run still
+needs); `tests/test_average_nights_fill.py`'s own fixture points it at a throwaway temp
+file. The other Playwright test files still share the real cache as before -- not fixed
+tonight, but now a known, named issue rather than an invisible source of flakiness.
+
+`tests/test_average_nights_fill.py` covers: first-round cells cluster on the average
+length; the band is never capped (verified against >280 cells sent across multiple
+rounds); the notice appears for a wide band and not for a narrow one.
+
 ### Google Flights relay — scale verify() throughput across boxes (2026-09-13)
 
 The Oracle VM's own RAM (1 GB, `FM_FILL_WORKERS` already turned down from 4 to 2) is the

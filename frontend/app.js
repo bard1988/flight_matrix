@@ -907,9 +907,12 @@ function runMultiBandFill() {
   const cells = [];
   for (const code of codes) {
     openFilled.add(code);
-    multiFillRounds.set(code, (multiFillRounds.get(code) || 0) + 1);
+    const rounds = multiFillRounds.get(code) || 0;
+    multiFillRounds.set(code, rounds + 1);
     const dest = state.destinations.get(code);
-    for (const c of bandCells(dest).slice(0, MULTI_FILL_PER_DEST)) {
+    // Tail (out-of-range) cells are a one-time bonus -- see bandCells' own docs -- so
+    // only the first round for this destination asks for any.
+    for (const c of bandCells(dest, { includeTail: rounds === 0 }).slice(0, MULTI_FILL_PER_DEST)) {
       cells.push(c);
       state.pendingCells.add(cellKey(code, c.depart_date, c.return_date));
     }
@@ -937,7 +940,12 @@ function runMultiBandFill() {
         const msg = JSON.parse(event.data);
         if (msg.type === 'fill_cell') {
           const d = state.destinations.get(msg.destination);
-          if (msg.ok && d) { applyCell(d, msg); recomputeBest(msg.destination); }
+          if (msg.ok && d) {
+            applyCell(d, msg);
+            recomputeBest(msg.destination);
+          } else {
+            failedCells.add(cellKey(msg.destination, msg.depart_date, msg.return_date));
+          }
           state.pendingCells.delete(cellKey(msg.destination, msg.depart_date, msg.return_date));
           scheduleMulti();
         }
@@ -950,14 +958,17 @@ function runMultiBandFill() {
         // needs more than one round to actually finish -- without this, openFilled marked
         // a destination "done" after its first round regardless, and the blink stopped
         // with most of the band still raw estimates. Re-arm whichever destinations still
-        // have unverified cells left and let another round pick them up, capped so a
-        // destination that keeps failing (no Google data for those dates) does not retry
-        // forever.
-        const MAX_ROUNDS = 4;
+        // have unfilled cells left (bandCells excludes failedCells, so this converges to
+        // "nothing left" rather than looping on a date pair Google will never price) and
+        // let another round pick them up. MAX_OPEN_FILL_ROUNDS is pure infinite-loop
+        // insurance here too, not the real stopping condition.
         let more = false;
         for (const code of codes) {
           const dest = state.destinations.get(code);
-          if (dest && bandCells(dest).length && (multiFillRounds.get(code) || 0) < MAX_ROUNDS) {
+          const rounds = multiFillRounds.get(code) || 0;
+          // Tail excluded here too: whether to run another round is about the band
+          // itself, never about a one-time bonus that already had its one shot.
+          if (dest && bandCells(dest, { includeTail: false }).length && rounds < MAX_OPEN_FILL_ROUNDS) {
             openFilled.delete(code);
             more = true;
           }
@@ -2378,49 +2389,83 @@ function stopAutoVerify() {
    whole-board fill would be. Kicked off when a destination becomes the selected one, once
    per destination per search, gated on the same "Auto-refresh" toggle. Moving to another
    destination cancels the one in flight. */
-// When you open a destination the board favours THAT grid: it live-prices its EMPTY cells
-// first (so the striped no-data gaps fill in and the grid ends up complete), then the
-// cheapest estimate cells for verification. Runs independent of the board-wide
-// "Cross-check live" toggle -- opening a grid is the signal to fill it. The cap is a
-// rate-limit sanity bound, not a design choice; a normal band sits well under it.
-const OPEN_FILL_CAP = 160;
+// When you open a destination the board favours THAT grid: it live-prices its cells in
+// the trip-length band, nearest the band's own average length first (that is the trip
+// the search actually asked for -- a 12-14 night search cares about 13 nights, not
+// whatever happens to be cheapest at 5), then works outward; only then the out-of-range
+// tail. Runs independent of the board-wide "Cross-check live" toggle -- opening a grid is
+// the signal to fill it.
 const openFilled = new Set();     // destinations whose band fill has been started this search
 let openFillSource = null;
 let openFillId = null;
 let openFillFor = null;           // destination the active/last fill belongs to
+// A cell that has come back with no price this search: bandCells stops offering it, or a
+// wide band would re-queue the same dead date pair every round forever (nothing marks it
+// "verified" -- there is no price to store) instead of ever finishing the rest of the
+// band. Cleared per search, same as openFilled.
+const failedCells = new Set();
+// Below this many in-range cells, a card's own fill is quick enough that saying anything
+// would just be noise; above it, whoever opened the card is about to wait a while for a
+// wide trip-length band to fully price, and the point of streaming it in instead of
+// capping it is exactly that they get to watch it happen rather than wonder why it's slow.
+const WIDE_BAND_NOTICE_CELLS = 60;
 
 /** Every valid (departure, return) pair in this destination's rendered grid that is not
- *  already a live price, cheapest first. Order: the trip-length band the user is looking
- *  at and ranking on comes first -- its priced estimates (so a headline the user fixates
- *  on gets a real number early), then its empty gaps; only then the out-of-range tail.
- *  The cap keeps the whole visible band and bounds the tail, so a wide window does not
- *  spend the Google budget on cells nobody sees. */
-function bandCells(dest) {
+ *  already a live price (or already tried and failed) this search, in fill order:
+ *  in-range first, nearest the band's average trip length first (so the length the
+ *  search actually asked for prices up before its edges do), priced-before-empty within
+ *  a length, then cheapest; only then the out-of-range tail. The in-range portion is
+ *  never truncated -- a wide trip-length band used to cap this at 280 cells total, which
+ *  meant widening the band just left its far edges permanently unpriced rather than
+ *  merely slower to arrive.
+ *
+ *  `includeTail` (default true) adds a small bonus of cells outside the asked-for band
+ *  that the date window happens to also cover -- nobody asked for those, so it stays
+ *  bounded, and it is only worth asking for once: a caller that reruns this every round
+ *  until the band is done must pass `includeTail: false` on every round after the first,
+ *  or a date grid with a large out-of-range pool (e.g. same-day pairs at the edge of a
+ *  widened window, which are never a real trip) turns into rounds of rank-and-file
+ *  out-of-range cells getting cycled through 40 at a time long after the band itself is
+ *  actually finished -- exactly the "explosion" this function exists to avoid. */
+function bandCells(dest, { includeTail = true } = {}) {
   const meta = state.meta;
   const { departs, returns } = axesFor(dest);
-  const span = meta.nights_span && meta.nights_span.length ? new Set(meta.nights_span) : null;
+  const span = meta.nights_span && meta.nights_span.length ? meta.nights_span : null;
+  const spanSet = span ? new Set(span) : null;
+  const avgNights = span ? Math.floor((span[0] + span[span.length - 1]) / 2) : null;
   const byKey = new Map(dest.cells.map((c) => [c.depart + '|' + c.ret, c]));
+  const OUT_OF_RANGE = 1e6;   // pushes the whole out-of-range tail behind every in-range cell
   const out = [];
   for (const depart of departs) {
     for (const ret of returns) {
       if (ret < depart) continue;
+      if (failedCells.has(cellKey(dest.destination, depart, ret))) continue;
       const nights = Math.round((new Date(ret) - new Date(depart)) / 86400000);
+      const inRange = !spanSet || spanSet.has(nights);
+      if (!inRange && !includeTail) continue;
       const c = byKey.get(depart + '|' + ret);
       if (c && c.verified) continue;
       const value = c ? cellValue(c) : null;
-      const inRange = !span || span.has(nights);
+      const distFromAvg = avgNights == null ? 0 : Math.abs(nights - avgNights);
       out.push({
         depart, ret,
-        // [in-range first] [priced-before-empty within that] [cheapest first]
-        rank: (inRange ? 0 : 2) + (value == null ? 1 : 0),
+        // [in-range, nearest the average first] [priced-before-empty] [cheapest first]
+        rank: (inRange ? 0 : OUT_OF_RANGE) + distFromAvg,
+        pricedFirst: value == null ? 1 : 0,
         sort: value == null ? 0 : value,
       });
     }
   }
-  out.sort((a, b) => a.rank - b.rank || a.sort - b.sort);
-  const inRangeCount = out.reduce((n, o) => n + (o.rank <= 1 ? 1 : 0), 0);
-  const cap = Math.min(out.length, Math.max(OPEN_FILL_CAP, inRangeCount + 40), 280);
-  return out.slice(0, cap).map((c) => ({
+  out.sort((a, b) => a.rank - b.rank || a.pricedFirst - b.pricedFirst || a.sort - b.sort);
+  const tailCap = 40;
+  let tailUsed = 0;
+  const kept = out.filter((o) => {
+    if (o.rank < OUT_OF_RANGE) return true;
+    if (tailUsed >= tailCap) return false;
+    tailUsed += 1;
+    return true;
+  });
+  return kept.map((c) => ({
     destination: dest.destination, depart_date: c.depart, return_date: c.ret,
   }));
 }
@@ -2437,6 +2482,15 @@ function stopOpenFill() {
   }
 }
 
+// One /api/autoverify call stays well under its own 400-cell limit; a wide trip-length
+// band that produces more than this just takes more rounds instead of being cut off.
+const OPEN_FILL_BATCH = 200;
+// Pure infinite-loop insurance, not the real stopping condition -- that is bandCells()
+// coming back empty (everything is either priced or in failedCells). At the batch size
+// above this still covers thousands of cells, far past any band this app can construct.
+const MAX_OPEN_FILL_ROUNDS = 30;
+const openFillRounds = new Map();   // destination -> rounds run so far this search
+
 function fillOpenDestination(dest) {
   // Runs whenever a grid is open (a deliberate focus action) -- not gated on the
   // board-wide "Cross-check live" toggle. Opening a destination IS the signal to favour it.
@@ -2446,11 +2500,45 @@ function fillOpenDestination(dest) {
   stopOpenFill();
   stopAutoVerify();     // the open grid gets priority over the board-wide cross-check
   openFillFor = code;
-  if (openFilled.has(code)) return;      // already done once this search
+  if (openFilled.has(code)) return;      // already ran at least one round this search
   openFilled.add(code);
+  // A fresh pass at this destination (first open, or re-armed after a nights widen) gets
+  // its own round budget. Without this, churn during the initial board stream (the
+  // selection can flip to a new "cheapest" destination a few times before it settles,
+  // each flip interrupting whatever round was running) could burn through
+  // MAX_OPEN_FILL_ROUNDS before the user ever does anything -- so a LATER, deliberate
+  // re-arm (widening past the band) found the budget already spent and never fetched at
+  // all, which looked exactly like "widening stopped re-checking the band".
+  openFillRounds.delete(code);
+  runOpenFillRound(dest, code);
+}
 
-  const cells = bandCells(dest);
-  if (!cells.length) return;
+function runOpenFillRound(dest, code) {
+  if (openFillFor !== code) return;      // superseded by a different selection meanwhile
+  // Re-resolve rather than trust the object a previous round closed over: a destination
+  // can be wholesale REPLACED in state.destinations while a round is out (the nights-widen
+  // extend does exactly this) rather than mutated in place, and bandCells checking a stale
+  // copy's .cells never sees applyCell's updates land on the real one -- looked, from in
+  // here, exactly like the band never finishing.
+  dest = state.destinations.get(code) || dest;
+  const rounds = openFillRounds.get(code) || 0;
+  // The out-of-range tail is a one-time bonus (see bandCells' own docs): asking for it
+  // again on every round would mean a big out-of-range pool -- same-day pairs at a
+  // widened window's edge are never a real trip, but still generate candidates -- gets
+  // cycled through 40 at a time long after the band itself is actually done.
+  const all = bandCells(dest, { includeTail: rounds === 0 });
+  if (!all.length || rounds >= MAX_OPEN_FILL_ROUNDS) return;
+  openFillRounds.set(code, rounds + 1);
+  const cells = all.slice(0, OPEN_FILL_BATCH);
+
+  // A wide trip-length band means a lot of date pairs to price -- said once, on the very
+  // first round, rather than capping the search: idea.md's "average-nights-first" entry.
+  if (rounds === 0 && all.length > WIDE_BAND_NOTICE_CELLS) {
+    $('growing').hidden = false;
+    $('growing').textContent =
+      `Wide trip-length range: pricing ${all.length} date combinations for ${dest.city}, ` +
+      `starting with the closest to your requested length. Showing results as they arrive…`;
+  }
 
   // Mark every cell we are about to price as loading, so the grid pulses them while the
   // fetch is out. Cleared per cell as each result lands, and wholesale when the run ends.
@@ -2490,6 +2578,7 @@ function fillOpenDestination(dest) {
             const c = d.cells.find((x) => x.depart === msg.depart_date && x.ret === msg.return_date);
             if (c) patched = patchGridCell(d, c);
           } else {
+            failedCells.add(cellKey(msg.destination, msg.depart_date, msg.return_date));
             const td = document.querySelector(
               `#ddetail table.matrix td[data-dep="${msg.depart_date}"][data-ret="${msg.return_date}"]`);
             if (td) td.classList.remove('loading');
@@ -2511,10 +2600,13 @@ function fillOpenDestination(dest) {
       };
       const finish = () => {
         source.close();
-        if (openFillSource === source) stopOpenFill();
+        if (openFillSource === source) { openFillSource = null; openFillId = null; }
         clearPending();
         $('growing').hidden = true;
         if (state.selected === code) render();
+        // More of the band left to price (still fresh cells, or this round's batch was
+        // only part of a bigger one) -- keep going instead of leaving it half done.
+        if (openFillFor === code) runOpenFillRound(dest, code);
       };
       source.addEventListener('end', finish);
       source.onerror = finish;
@@ -2586,6 +2678,9 @@ function startSearch() {
   if (multiFillSource) { multiFillSource.close(); multiFillSource = null; }
   openFilled.clear();
   openFillFor = null;
+  openFillRounds.clear();
+  multiFillRounds.clear();
+  failedCells.clear();
   $('growing').hidden = true;   // clear any stale rate-limit / widening notice
   $('note').hidden = true;
   scrollOffsets.clear();
