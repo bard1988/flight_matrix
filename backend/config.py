@@ -15,7 +15,14 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 DATA_DIR = ROOT / "data"
 FRONTEND_DIR = ROOT / "frontend"
-CACHE_DB = DATA_DIR / "cache.sqlite"
+# Overridable independently of DATA_DIR (not the other way -- DATA_DIR also holds static
+# reference data, airports.v3.json and friends, that a demo/test run still needs to read).
+# A Playwright test spawns a whole separate `run.py --demo` subprocess per module, and
+# with no override every one of them shares this repo's real cache.sqlite: a wide-band
+# test populating thousands of verified cells for TLV routes then reads back as "already
+# verified" in an unrelated test file's run minutes later, purely from file order. Point
+# FM_CACHE_DB at a throwaway path to keep a test's own writes out of everyone else's way.
+CACHE_DB = Path(os.environ.get("FM_CACHE_DB") or str(DATA_DIR / "cache.sqlite"))
 
 
 def _load_dotenv() -> None:

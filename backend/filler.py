@@ -75,21 +75,56 @@ def verify_cells(
     dead = cache.unpriceable_destinations(
         request.origin, request.adults, request.children, request.currency
     )
-    pending = [
-        t for t in targets
-        if (t[0].upper(), t[1], t[2]) not in already and t[0].upper() not in dead
-    ]
 
-    yield {"type": "fill_start", "total_cells": len(pending), "workers": workers,
+    def _base(t: tuple[str, str, str]) -> dict[str, Any]:
+        return {
+            "origin": request.origin.upper(), "destination": t[0].upper(),
+            "depart_date": t[1], "return_date": t[2],
+            "adults": request.adults, "children": request.children,
+            "currency": request.currency,
+        }
+
+    # A target that is already a fresh cache hit, or belongs to a route Google has never
+    # once priced, is settled with no network call at all -- but the caller still needs
+    # ONE fill_cell event per requested cell, or a cell nobody actually fetched (because
+    # this call already knew the answer) reads to the caller as one that was never even
+    # tried. The open-grid band fill (bandCells in app.js) reruns until every cell it
+    # asked for has come back once, live call or not; without this, a cell resolved here
+    # got no event, so the caller kept re-requesting it forever, never converging.
+    resolved: list[dict[str, Any]] = []
+    pending: list[tuple[str, str, str]] = []
+    for t in targets:
+        key = (t[0].upper(), t[1], t[2])
+        if key in already:
+            cached = already[key]
+            resolved.append({"ok": True, **_base(t), "total": cached["total"],
+                             "airline": cached.get("airline"), "stops": cached.get("stops_out"),
+                             "duration": cached.get("duration")})
+        elif t[0].upper() in dead:
+            resolved.append({"ok": False, **_base(t),
+                             "error": "no fare Google has ever priced for this route"})
+        else:
+            pending.append(t)
+
+    yield {"type": "fill_start", "total_cells": len(targets), "workers": workers,
            "label": label, "skipped_routes": sorted(dead)}
+
+    filled = failed = 0
+    for event in resolved:
+        if event["ok"]:
+            filled += 1
+        else:
+            failed += 1
+        yield {"type": "fill_cell", "progress": filled + failed, "total_cells": len(targets),
+               "label": label, **event}
+
     if not pending:
-        yield {"type": "fill_done", "filled": 0, "failed": 0, "label": label,
+        yield {"type": "fill_done", "filled": filled, "failed": failed, "label": label,
                "note": "Every one of those cells was already verified."}
         return
 
     provider = _verifier_provider()
     lock = threading.Lock()
-    filled = failed = 0
 
     def one(target: tuple[str, str, str]) -> dict[str, Any]:
         destination, depart, ret = target
@@ -136,7 +171,7 @@ def verify_cells(
             else:
                 failed += 1
             event["progress"] = filled + failed
-            event["total_cells"] = len(pending)
+            event["total_cells"] = len(targets)
             event["label"] = label
             yield event
 
