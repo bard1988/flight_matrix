@@ -198,10 +198,17 @@ def _seed_candidates(
     return found, len(done)   # how many actually answered, not the shortlist size the budget may have cut short
 
 
-def _hub_rank(code: str) -> int:
-    """0 for a large international hub, 1 for a medium airport, 2 for anything else -- used
-    to lead a country-filtered board with its major airports rather than its cheapest."""
-    return {"large": 0, "medium": 1}.get(airports.describe(code).get("type"), 2)
+def _hub_rank(code: str) -> tuple[int, int]:
+    """Sort key that leads a country-filtered board with its major airports rather than its
+    cheapest. Curated hub position first, then the OurAirports size tier.
+
+    The size tier alone cannot order a country's own airports -- it files Istanbul and
+    Izmir in the same "large" bucket -- so on its own this ranked Izmir level with
+    Istanbul and let price decide. `airports.hub_priority` breaks that tie with real hub
+    standing; it returns 99 for anything uncurated, leaving the tier to order those."""
+    info = airports.describe(code)
+    tier = {"large": 0, "medium": 1}.get(info.get("type"), 2)
+    return (airports.hub_priority(code, info.get("country") or ""), tier)
 
 
 def destination_matches(needle: str, code: str, city: str, country: str) -> bool:

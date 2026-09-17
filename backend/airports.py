@@ -53,6 +53,61 @@ def country_name(code: str) -> str:
     return _country_table().get((code or "").upper(), {}).get("name", "")
 
 
+# Curated "each country's real hubs, best first" — the ranking signal OurAirports cannot
+# provide. `type` is a runway/facility category, not a traffic one, so every serious
+# airport in a country lands in the same "large" tier; with scheduled and tier tied, the
+# sort used to fall through to the IATA code and pick whichever hub happened to be
+# alphabetically first (Turkey -> ADB not IST, UAE -> AAN not DXB, Japan -> AOJ not HND).
+# A country absent from the file keeps the old ordering, so partial coverage is safe.
+# Deliberately NOT `_hubs` or `_hub_index`: this module already has a `_hubs()` function
+# and a separate `_hub_index` global backing it (the scheduled-airport list used by the
+# typeahead). Reusing either name resolves to whichever is bound last and silently hands
+# one cache's contents to the other's callers.
+_COUNTRY_HUB_FILE = DATA_DIR / "country_hubs.json"
+_country_hub_index: dict[str, list[str]] | None = None
+
+
+def _hub_table() -> dict[str, list[str]]:
+    global _country_hub_index
+    if _country_hub_index is None:
+        # load() takes `_lock` itself, and it is a plain non-reentrant Lock, so it has to
+        # be called before acquiring it here rather than inside the critical section.
+        db = load()
+        try:
+            raw = json.loads(_COUNTRY_HUB_FILE.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            raw = {}
+        # Drop codes this build of the airport table does not know: a stale or mistyped
+        # entry must not be probed (it can never price) and must not occupy a hub slot
+        # ahead of an airport that exists.
+        table = {
+            country.upper(): [c.upper() for c in codes if c.upper() in db]
+            for country, codes in raw.items()
+            if not country.startswith("_") and isinstance(codes, list)
+        }
+        with _lock:
+            if _country_hub_index is None:
+                _country_hub_index = table
+    return _country_hub_index
+
+
+def hub_priority(code: str, country: str = "") -> int:
+    """Position of `code` in its country's curated hub list, or a large number if absent.
+
+    Lower is a bigger hub. Used as the primary sort key for discovery seeding, ahead of
+    the OurAirports size tier.
+    """
+    code = (code or "").upper()
+    country = (country or describe(code).get("country") or "").upper()
+    hubs = _hub_table().get(country)
+    if not hubs:
+        return 99
+    try:
+        return hubs.index(code)
+    except ValueError:
+        return 99
+
+
 def region_of(code: str) -> tuple[str, str]:
     """(continent, subregion) for an ISO alpha-2 country code, or ('', '') if unknown."""
     entry = _country_table().get((code or "").upper())
@@ -207,7 +262,8 @@ def shortlist(country_codes: "Any", limit: int = 40, hubs_only: bool = True) -> 
     from those, and probing them just wastes calls.
 
     Selection is round-robin BY COUNTRY, each country's own best hub (scheduled service,
-    then OurAirports size) first, before any country gets a second: a flat sort by
+    then its rank in `data/country_hubs.json`, then OurAirports size) first, before any
+    country gets a second: a flat sort by
     (scheduled, size, code) alone put Nairobi and Johannesburg outside a 40-airport African
     shortlist entirely, because OurAirports' size classification -- a runway/facility
     category, not a traffic one -- lands most real national hubs in the same "large" tier
@@ -217,11 +273,17 @@ def shortlist(country_codes: "Any", limit: int = 40, hubs_only: bool = True) -> 
     guarantees every selected country's own top hub is probed before any single country's
     second-best is, so a big region with an uneven airport count per country cannot starve
     smaller countries of a shot at all.
+
+    Within a country, `hub_priority` decides which airport IS the top hub, because size
+    alone cannot: OurAirports files Istanbul and Izmir, Dubai and Al Ain, Tokyo-Haneda and
+    Aomori in the same "large" tier, so the sort fell through to the IATA code and probed
+    whichever was alphabetically first. That spent a whole region's seeding budget on
+    regional airports while the actual hubs were never probed at all.
     """
     want = {(c or "").upper() for c in country_codes}
     if not want:
         return []
-    by_country: dict[str, list[tuple[int, int, str]]] = {}
+    by_country: dict[str, list[tuple[int, int, int, str]]] = {}
     for code, e in load().items():
         country = e.get("country")
         if country not in want:
@@ -229,11 +291,12 @@ def shortlist(country_codes: "Any", limit: int = 40, hubs_only: bool = True) -> 
         tier = _TIER_RANK.get(e.get("type"), 2)
         if hubs_only and tier >= 3:
             continue
-        by_country.setdefault(country, []).append((0 if e.get("scheduled") else 1, tier, code))
+        by_country.setdefault(country, []).append(
+            (0 if e.get("scheduled") else 1, hub_priority(code, country), tier, code))
     for rows in by_country.values():
         rows.sort()
 
-    out: list[tuple[int, int, str]] = []
+    out: list[tuple[int, int, int, str]] = []
     round_idx = 0
     countries = sorted(by_country)
     while len(out) < limit and any(round_idx < len(rows) for rows in by_country.values()):
